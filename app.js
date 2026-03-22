@@ -1,7 +1,7 @@
 const SUPABASE_URL = "https://hbciwqgfccdfnzrhiops.supabase.co";
 const SUPABASE_KEY = "sb_publishable_nmVB1s_PXivfUNyoTaQWuQ_b5G_dYY9"; 
 
-// Список ников БЕЗ символа @
+// Список разрешенных ников
 const ALLOWED_USERS = ['wrap_1654', 'star_lord_od', 'vlad_wraping'];
 
 let allEvents = [], clients = [], storage = [];
@@ -9,17 +9,12 @@ const today = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
 
 async function init() {
     const tg = window.Telegram.WebApp;
-    // Получаем юзера из данных Телеграм
     const user = tg.initDataUnsafe?.user;
     const username = user?.username ? user.username.toLowerCase() : null;
 
-    console.log("Checking access for:", username);
-
-    // ПРОВЕРКА: Если ник есть в списке ALLOWED_USERS
     if (username && ALLOWED_USERS.includes(username)) {
-        // Убираем экран блокировки
+        // УСПЕХ: Показываем приложение
         document.getElementById('access-denied').style.display = 'none';
-        // Показываем контент приложения
         document.getElementById('app-content').style.display = 'block';
         
         await loadData();
@@ -28,10 +23,9 @@ async function init() {
         tg.expand();
         tg.setHeaderColor('#0b0b0f');
     } else {
-        // Если ника нет или зашли из браузера — контент остается скрытым (display: none)
-        // и удаляется из кода для безопасности
+        // ОТКАЗ: Стираем всё лишнее
         document.getElementById('app-content').innerHTML = "";
-        console.log("Access Denied");
+        console.log("Доступ запрещен для:", username);
     }
 }
 
@@ -59,6 +53,7 @@ function renderAll() {
 
 function renderEvents() {
     const el = document.getElementById("events");
+    if(!el) return;
     el.innerHTML = allEvents.map(e => `
         <div class="card">
             <div><b>${e.car_model}</b><br><small style="color:#888">${e.client_name || 'Клиент'}</small></div>
@@ -69,6 +64,7 @@ function renderEvents() {
 
 function renderClients() {
     const el = document.getElementById("clients-list");
+    if(!el) return;
     el.innerHTML = clients.map(c => `
         <div class="card">
             <div><b>${c.name}</b><br><small style="color:#888">${c.phone || ''}</small></div>
@@ -138,6 +134,7 @@ function closeModal(id) { document.getElementById(id).classList.remove("open"); 
 function showPage(page) {
     document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
     document.getElementById("page-" + page).classList.add("active");
+    if(window.Telegram.WebApp.HapticFeedback) window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
 }
 
 init();
