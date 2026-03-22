@@ -93,37 +93,66 @@ function renderStorage() {
     });
 }
 
+// Исправленная функция сохранения заказа
 async function submitOrder() {
     const client = document.getElementById("car-client").value;
     const model = document.getElementById("car-model").value;
     const amt = document.getElementById("order-amount").value;
+    
     if(!client || !model || !amt) return alert("Заполни данные!");
 
-    await fetch(`${SUPABASE_URL}/rest/v1/events`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/events`, {
         method: "POST",
-        headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
+        headers: { 
+            apikey: SUPABASE_KEY, 
+            Authorization: "Bearer " + SUPABASE_KEY, 
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal" // Важно для стабильности
+        },
         body: JSON.stringify({
-            client_name: client, car_model: model, amount: parseInt(amt),
-            services: document.getElementById("services").value, day: today
+            client_name: client,
+            car_model: model,
+            amount: parseInt(amt),
+            services: document.getElementById("services").value,
+            day: today
         })
     });
-    closeModal("modal-order");
-    await init();
+    
+    if (res.ok) {
+        closeModal("modal-order");
+        await init();
+    } else {
+        const err = await res.json();
+        alert("Ошибка базы: " + err.message);
+    }
 }
 
+// Исправленная функция клиента
 async function submitClient() {
     const name = document.getElementById("client-name").value;
     if(!name) return alert("Введите имя!");
-    await fetch(`${SUPABASE_URL}/rest/v1/clients`, {
+
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/clients`, {
         method: "POST",
-        headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
+        headers: { 
+            apikey: SUPABASE_KEY, 
+            Authorization: "Bearer " + SUPABASE_KEY, 
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal"
+        },
         body: JSON.stringify({
-            name: name, phone: document.getElementById("client-phone").value,
+            name: name,
+            phone: document.getElementById("client-phone").value,
             telegram_id: document.getElementById("client-tg").value
         })
     });
-    closeModal("modal-client");
-    await init();
+
+    if (res.ok) {
+        closeModal("modal-client");
+        await init();
+    } else {
+        alert("Ошибка: проверьте колонки в таблице clients");
+    }
 }
 
 async function submitStorage() {
