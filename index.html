@@ -9,12 +9,10 @@
 </head>
 <body>
 
-<div id="access-denied" style="display: none;">
-    <div class="lock-screen">
-        <span class="lock-icon">🚫</span>
-        <h2>Доступ ограничен</h2>
-        <p>Вашего аккаунта нет в списке разрешенных.<br>Обратитесь к @wrap_1654</p>
-    </div>
+<div id="access-denied" style="display: flex; height: 100vh; flex-direction: column; align-items: center; justify-content: center; text-align: center; background: #0b0b0f; color: white;">
+    <span style="font-size: 60px;">🚫</span>
+    <h2 style="margin-top: 20px;">Доступ ограничен</h2>
+    <p style="color: #888; padding: 0 20px;">Приложение доступно только авторизованным сотрудникам через Telegram бота.</p>
 </div>
 
 <div id="app-content" style="display: none;">
@@ -40,57 +38,9 @@
 
     <div class="fab" onclick="openOrderModal()">+</div>
 
-    <div id="modal-order" class="modal">
-        <div class="modal-content">
-            <div class="modal-body">
-                <h3>Новый заказ</h3>
-                <input id="car-client" list="clients-list-options" placeholder="Имя клиента">
-                <datalist id="clients-list-options"></datalist>
-                <input id="car-model" placeholder="Марка и модель авто">
-                <input id="order-amount" type="number" placeholder="Сумма ($)">
-                <textarea id="services" placeholder="Описание услуг..."></textarea>
-                <input type="file" accept="image/*,video/*" onchange="previewMedia(event)">
-                <div id="preview"></div>
-            </div>
-            <div class="modal-footer">
-                <button class="save-btn" onclick="submitOrder()">СОХРАНИТЬ ЗАКАЗ</button>
-                <button class="save-btn" style="background:transparent; color:#888;" onclick="closeModal('modal-order')">Отмена</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="modal-client" class="modal">
-        <div class="modal-content">
-            <div class="modal-body">
-                <h3>Новый клиент</h3>
-                <input id="client-name" placeholder="ФИО">
-                <input id="client-phone" placeholder="Телефон">
-                <input id="client-tg" placeholder="Telegram ID (@username)">
-            </div>
-            <div class="modal-footer">
-                <button class="save-btn" onclick="submitClient()">СОХРАНИТЬ КЛИЕНТА</button>
-                <button class="save-btn" style="background:transparent; color:#888;" onclick="closeModal('modal-client')">Отмена</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="modal-storage" class="modal">
-        <div class="modal-content">
-            <div class="modal-body">
-                <h3>Добавить на склад</h3>
-                <select id="storage-type">
-                    <option value="film">Плёнка</option>
-                    <option value="product">Товар</option>
-                </select>
-                <input id="st-name" placeholder="Название">
-                <input id="st-qty" type="number" step="0.1" placeholder="Количество">
-            </div>
-            <div class="modal-footer">
-                <button class="save-btn" onclick="submitStorage()">ДОБАВИТЬ</button>
-                <button class="save-btn" style="background:transparent; color:#888;" onclick="closeModal('modal-storage')">Отмена</button>
-            </div>
-        </div>
-    </div>
+    <div id="modal-order" class="modal"><div class="modal-content"><div class="modal-body"><h3>Новый заказ</h3><input id="car-client" list="clients-list-options" placeholder="Имя клиента"><datalist id="clients-list-options"></datalist><input id="car-model" placeholder="Марка и модель авто"><input id="order-amount" type="number" placeholder="Сумма ($)"><textarea id="services" placeholder="Описание услуг..."></textarea></div><div class="modal-footer"><button class="save-btn" onclick="submitOrder()">СОХРАНИТЬ ЗАКАЗ</button><button class="save-btn" style="background:transparent; color:#888;" onclick="closeModal('modal-order')">Отмена</button></div></div></div>
+    <div id="modal-client" class="modal"><div class="modal-content"><div class="modal-body"><h3>Новый клиент</h3><input id="client-name" placeholder="ФИО"><input id="client-phone" placeholder="Телефон"><input id="client-tg" placeholder="Telegram ID (@username)"></div><div class="modal-footer"><button class="save-btn" onclick="submitClient()">СОХРАНИТЬ КЛИЕНТА</button><button class="save-btn" style="background:transparent; color:#888;" onclick="closeModal('modal-client')">Отмена</button></div></div></div>
+    <div id="modal-storage" class="modal"><div class="modal-content"><div class="modal-body"><h3>Добавить на склад</h3><select id="storage-type"><option value="film">Плёнка</option><option value="product">Товар</option></select><input id="st-name" placeholder="Название"><input id="st-qty" type="number" step="0.1" placeholder="Количество"></div><div class="modal-footer"><button class="save-btn" onclick="submitStorage()">ДОБАВИТЬ</button><button class="save-btn" style="background:transparent; color:#888;" onclick="closeModal('modal-storage')">Отмена</button></div></div></div>
 
     <div class="bottom-nav">
         <div onclick="showPage('home')">🏠</div>
