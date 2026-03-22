@@ -3,13 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Wrap 1654</title>
+    <title>Wrap 1654 Manager</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
 
-<div id="app-content">
+<div id="access-denied" style="display: none;">
+    <div class="lock-screen">
+        <span class="lock-icon">🚫</span>
+        <h2>Доступ ограничен</h2>
+        <p>Вашего аккаунта нет в списке разрешенных.<br>Обратитесь к @wrap_1654</p>
+    </div>
+</div>
+
+<div id="app-content" style="display: none;">
     <div id="page-home" class="page active">
         <div class="top-logo">Wrap 1654</div>
         <div id="events"></div>
@@ -29,66 +37,66 @@
         <h3 style="padding-left:15px; color:#fefe01;">Товар</h3>
         <div id="product-list"></div>
     </div>
-</div>
 
-<div class="fab" onclick="openOrderModal()">+</div>
+    <div class="fab" onclick="openOrderModal()">+</div>
 
-<div id="modal-order" class="modal">
-    <div class="modal-content">
-        <div class="modal-body">
-            <h3>Новый заказ</h3>
-            <input id="car-client" list="clients-list-options" placeholder="Имя клиента">
-            <datalist id="clients-list-options"></datalist>
-            <input id="car-model" placeholder="Марка и модель авто">
-            <input id="order-amount" type="number" placeholder="Сумма ($)">
-            <textarea id="services" placeholder="Описание услуг..."></textarea>
-            <input type="file" accept="image/*,video/*" onchange="previewMedia(event)">
-            <div id="preview"></div>
-        </div>
-        <div class="modal-footer">
-            <button class="save-btn" onclick="submitOrder()">СОХРАНИТЬ ЗАКАЗ</button>
-            <button class="save-btn" style="background:transparent; color:#888;" onclick="closeModal('modal-order')">Отмена</button>
+    <div id="modal-order" class="modal">
+        <div class="modal-content">
+            <div class="modal-body">
+                <h3>Новый заказ</h3>
+                <input id="car-client" list="clients-list-options" placeholder="Имя клиента">
+                <datalist id="clients-list-options"></datalist>
+                <input id="car-model" placeholder="Марка и модель авто">
+                <input id="order-amount" type="number" placeholder="Сумма ($)">
+                <textarea id="services" placeholder="Описание услуг..."></textarea>
+                <input type="file" accept="image/*,video/*" onchange="previewMedia(event)">
+                <div id="preview"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="save-btn" onclick="submitOrder()">СОХРАНИТЬ ЗАКАЗ</button>
+                <button class="save-btn" style="background:transparent; color:#888;" onclick="closeModal('modal-order')">Отмена</button>
+            </div>
         </div>
     </div>
-</div>
 
-<div id="modal-client" class="modal">
-    <div class="modal-content">
-        <div class="modal-body">
-            <h3>Новый клиент</h3>
-            <input id="client-name" placeholder="ФИО">
-            <input id="client-phone" placeholder="Телефон">
-            <input id="client-tg" placeholder="Telegram ID (@username)">
-        </div>
-        <div class="modal-footer">
-            <button class="save-btn" onclick="submitClient()">СОХРАНИТЬ КЛИЕНТА</button>
-            <button class="save-btn" style="background:transparent; color:#888;" onclick="closeModal('modal-client')">Отмена</button>
+    <div id="modal-client" class="modal">
+        <div class="modal-content">
+            <div class="modal-body">
+                <h3>Новый клиент</h3>
+                <input id="client-name" placeholder="ФИО">
+                <input id="client-phone" placeholder="Телефон">
+                <input id="client-tg" placeholder="Telegram ID (@username)">
+            </div>
+            <div class="modal-footer">
+                <button class="save-btn" onclick="submitClient()">СОХРАНИТЬ КЛИЕНТА</button>
+                <button class="save-btn" style="background:transparent; color:#888;" onclick="closeModal('modal-client')">Отмена</button>
+            </div>
         </div>
     </div>
-</div>
 
-<div id="modal-storage" class="modal">
-    <div class="modal-content">
-        <div class="modal-body">
-            <h3>Добавить на склад</h3>
-            <select id="storage-type">
-                <option value="film">Плёнка</option>
-                <option value="product">Товар</option>
-            </select>
-            <input id="st-name" placeholder="Название">
-            <input id="st-qty" type="number" step="0.1" placeholder="Количество">
-        </div>
-        <div class="modal-footer">
-            <button class="save-btn" onclick="submitStorage()">ДОБАВИТЬ</button>
-            <button class="save-btn" style="background:transparent; color:#888;" onclick="closeModal('modal-storage')">Отмена</button>
+    <div id="modal-storage" class="modal">
+        <div class="modal-content">
+            <div class="modal-body">
+                <h3>Добавить на склад</h3>
+                <select id="storage-type">
+                    <option value="film">Плёнка</option>
+                    <option value="product">Товар</option>
+                </select>
+                <input id="st-name" placeholder="Название">
+                <input id="st-qty" type="number" step="0.1" placeholder="Количество">
+            </div>
+            <div class="modal-footer">
+                <button class="save-btn" onclick="submitStorage()">ДОБАВИТЬ</button>
+                <button class="save-btn" style="background:transparent; color:#888;" onclick="closeModal('modal-storage')">Отмена</button>
+            </div>
         </div>
     </div>
-</div>
 
-<div class="bottom-nav">
-    <div onclick="showPage('home')">🏠</div>
-    <div onclick="showPage('clients')">👤</div>
-    <div onclick="showPage('storage')">📦</div>
+    <div class="bottom-nav">
+        <div onclick="showPage('home')">🏠</div>
+        <div onclick="showPage('clients')">👤</div>
+        <div onclick="showPage('storage')">📦</div>
+    </div>
 </div>
 
 <script src="app.js"></script>

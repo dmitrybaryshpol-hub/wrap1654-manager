@@ -1,18 +1,36 @@
 const SUPABASE_URL = "https://hbciwqgfccdfnzrhiops.supabase.co";
-const SUPABASE_KEY = "sb_publishable_nmVB1s_PXivfUNyoTaQWuQ_b5G_dYY9"; 
+const SUPABASE_KEY = "sb_publishable_nmVB1s_PXivfUNyoTaQWuQ_b5G_dYY9"; // Твой ключ!
+
+// СПИСОК РАЗРЕШЕННЫХ ПОЛЬЗОВАТЕЛЕЙ
+const ALLOWED_USERS = ['wrap_1654', 'star_lord_od', 'vlad_wraping'];
 
 let allEvents = [], clients = [], storage = [];
 const today = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
 
 async function init() {
-    await loadData();
-    renderAll();
-    if(window.Telegram.WebApp) {
-        window.Telegram.WebApp.expand();
-        window.Telegram.WebApp.setHeaderColor('#0b0b0f');
+    const tg = window.Telegram.WebApp;
+    const user = tg.initDataUnsafe?.user;
+    
+    // Приводим ник к нижнему регистру для надежности
+    const username = user?.username?.toLowerCase();
+
+    if (username && ALLOWED_USERS.includes(username)) {
+        // ДОСТУП РАЗРЕШЕН
+        document.getElementById('app-content').style.display = 'block';
+        document.getElementById('access-denied').style.display = 'none';
+        
+        await loadData();
+        renderAll();
+        tg.expand();
+        tg.setHeaderColor('#0b0b0f');
+    } else {
+        // ДОСТУП ЗАКРЫТ
+        document.getElementById('app-content').remove(); // Стираем контент из памяти
+        document.getElementById('access-denied').style.display = 'block';
     }
 }
 
+// [Остальные функции подгрузки и рендера остаются прежними]
 async function loadData() {
     allEvents = await fetchTable("events");
     clients = await fetchTable("clients");
@@ -41,10 +59,7 @@ function renderEvents() {
     allEvents.forEach(e => {
         let d = document.createElement("div");
         d.className = "card";
-        d.innerHTML = `
-            <div><b>${e.car_model}</b><br><small style="color:#888">${e.client_name || 'Клиент'}</small></div>
-            <div style="color:#ff33cc; font-weight:900">$${e.amount}</div>
-        `;
+        d.innerHTML = `<div><b>${e.car_model}</b><br><small style="color:#888">${e.client_name || 'Клиент'}</small></div><div style="color:#ff33cc; font-weight:900">$${e.amount}</div>`;
         el.appendChild(d);
     });
 }
@@ -55,10 +70,7 @@ function renderClients() {
     clients.forEach(c => {
         let d = document.createElement("div");
         d.className = "card";
-        d.innerHTML = `
-            <div><b>${c.name}</b><br><small style="color:#888">${c.phone || ''}</small></div>
-            <div style="color:#fefe01; font-size:12px">${c.telegram_id || ''}</div>
-        `;
+        d.innerHTML = `<div><b>${c.name}</b><br><small style="color:#888">${c.phone || ''}</small></div><div style="color:#fefe01; font-size:12px">${c.telegram_id || ''}</div>`;
         el.appendChild(d);
     });
 }
@@ -91,11 +103,8 @@ async function submitOrder() {
         method: "POST",
         headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({
-            client_name: client,
-            car_model: model,
-            amount: parseInt(amt),
-            services: document.getElementById("services").value,
-            day: today
+            client_name: client, car_model: model, amount: parseInt(amt),
+            services: document.getElementById("services").value, day: today
         })
     });
     closeModal("modal-order");
@@ -105,13 +114,11 @@ async function submitOrder() {
 async function submitClient() {
     const name = document.getElementById("client-name").value;
     if(!name) return alert("Введите имя!");
-
     await fetch(`${SUPABASE_URL}/rest/v1/clients`, {
         method: "POST",
         headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({
-            name: name,
-            phone: document.getElementById("client-phone").value,
+            name: name, phone: document.getElementById("client-phone").value,
             telegram_id: document.getElementById("client-tg").value
         })
     });
@@ -123,15 +130,10 @@ async function submitStorage() {
     const name = document.getElementById("st-name").value;
     const qty = document.getElementById("st-qty").value;
     if(!name || !qty) return alert("Заполни данные!");
-
     await fetch(`${SUPABASE_URL}/rest/v1/storage`, {
         method: "POST",
         headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({
-            name: name,
-            quantity: parseFloat(qty),
-            type: document.getElementById("storage-type").value
-        })
+        body: JSON.stringify({ name: name, quantity: parseFloat(qty), type: document.getElementById("storage-type").value })
     });
     closeModal("modal-storage");
     await init();
@@ -149,14 +151,9 @@ function showPage(page) {
 }
 
 function previewMedia(event) {
-    const file = event.target.files[0];
-    if(!file) return;
     const reader = new FileReader();
-    reader.onload = function() {
-        const out = document.getElementById('preview');
-        out.innerHTML = `<img src="${reader.result}">`;
-    }
-    reader.readAsDataURL(file);
+    reader.onload = () => { document.getElementById('preview').innerHTML = `<img src="${reader.result}">`; }
+    reader.readAsDataURL(event.target.files[0]);
 }
 
 init();
