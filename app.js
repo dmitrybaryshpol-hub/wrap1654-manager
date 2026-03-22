@@ -38,38 +38,31 @@ async function fetchTable(table) {
     } catch (e) { return []; }
 }
 
-function renderEvents() {
-    const el = document.getElementById("events");
-    if(!el) return;
-    el.innerHTML = allEvents.map(e => `
-        <div class="card" onclick="editOrder(${e.id})">
-            <div><b>${e.car_model}</b><br><small style="color:#888">${e.client_name || 'Клиент'}</small></div>
-            <div style="color:#ff33cc; font-weight:900">$${e.amount}</div>
-        </div>
-    `).join('');
-}
-
-// РЕДАКТИРОВАНИЕ
-function editOrder(id) {
-    const order = allEvents.find(e => e.id === id);
-    if (!order) return;
-    
-    currentEditId = id;
-    document.getElementById("car-client").value = order.client_name;
-    document.getElementById("car-model").value = order.car_model;
-    document.getElementById("order-amount").value = order.amount;
-    document.getElementById("services").value = order.services || "";
-    
-    document.getElementById("btn-delete-order").style.display = "block";
-    document.getElementById("order-modal-title").innerText = "Правка заказа";
-    openOrderModal();
-}
-
+// СОХРАНЕНИЕ ЗАКАЗА + АВТОСОЗДАНИЕ КЛИЕНТА
 async function submitOrder() {
+    const clientName = document.getElementById("car-client").value;
+    const carModel = document.getElementById("car-model").value;
+    const amount = parseInt(document.getElementById("order-amount").value);
+
+    if(!clientName || !carModel || isNaN(amount)) return alert("Заполни данные!");
+
+    // 1. Проверяем, есть ли такой клиент в базе
+    const exists = clients.some(c => c.name.toLowerCase() === clientName.toLowerCase());
+    
+    if (!exists) {
+        // Если клиента нет - создаем его
+        await fetch(`${SUPABASE_URL}/rest/v1/clients`, {
+            method: "POST",
+            headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
+            body: JSON.stringify({ name: clientName, phone: "", telegram_id: "" })
+        });
+    }
+
+    // 2. Сохраняем сам заказ
     const data = {
-        client_name: document.getElementById("car-client").value,
-        car_model: document.getElementById("car-model").value,
-        amount: parseInt(document.getElementById("order-amount").value),
+        client_name: clientName,
+        car_model: carModel,
+        amount: amount,
         services: document.getElementById("services").value,
         day: today
     };
@@ -79,55 +72,75 @@ async function submitOrder() {
 
     const res = await fetch(url, {
         method: method,
-        headers: { 
-            "apikey": SUPABASE_KEY, 
-            "Authorization": "Bearer " + SUPABASE_KEY, 
-            "Content-Type": "application/json",
-            "Prefer": "return=minimal"
-        },
+        headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json", "Prefer": "return=minimal" },
         body: JSON.stringify(data)
     });
 
-    if (res.ok) { closeModal("modal-order"); init(); }
+    if (res.ok) { closeModal("modal-order"); await init(); }
 }
 
-// УДАЛЕНИЕ
+// УДАЛЕНИЕ ЗАКАЗА
 async function deleteOrder() {
-    if (!currentEditId || !confirm("Удалить этот заказ навсегда?")) return;
-
+    if (!currentEditId || !confirm("Удалить этот заказ?")) return;
     const res = await fetch(`${SUPABASE_URL}/rest/v1/events?id=eq.${currentEditId}`, {
         method: "DELETE",
         headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
     });
-
-    if (res.ok) { closeModal("modal-order"); init(); }
+    if (res.ok) { closeModal("modal-order"); await init(); }
 }
 
-// Остальные функции (Clients, Storage) оставляем без изменений...
+// РЕДАКТИРОВАНИЕ
+function editOrder(id) {
+    const order = allEvents.find(e => e.id === id);
+    if (!order) return;
+    currentEditId = id;
+    document.getElementById("car-client").value = order.client_name;
+    document.getElementById("car-model").value = order.car_model;
+    document.getElementById("order-amount").value = order.amount;
+    document.getElementById("services").value = order.services || "";
+    document.getElementById("btn-delete-order").style.display = "block";
+    document.getElementById("order-modal-title").innerText = "Правка заказа";
+    openOrderModal();
+}
+
+// ОСТАЛЬНЫЕ ФУНКЦИИ РЕНДЕРА
+function renderEvents() {
+    const el = document.getElementById("events");
+    el.innerHTML = allEvents.map(e => `
+        <div class="card" onclick="editOrder(${e.id})">
+            <div><b>${e.car_model}</b><br><small style="color:#888">${e.client_name || 'Клиент'}</small></div>
+            <div style="color:#ff33cc; font-weight:900">$${e.amount}</div>
+        </div>
+    `).join('');
+}
+
 function renderClients() {
     const el = document.getElementById("clients-list");
-    if(!el) return;
     el.innerHTML = clients.map(c => `<div class="card"><div><b>${c.name}</b><br><small style="color:#888">${c.phone || ''}</small></div></div>`).join('');
 }
+
 function updateClientList() {
     const dl = document.getElementById('clients-list-options');
     if (dl) dl.innerHTML = clients.map(c => `<option value="${c.name}">`).join('');
 }
+
 function renderStorage() {
     const film = document.getElementById("film-list");
     const prod = document.getElementById("product-list");
-    if (!film || !prod) return;
-    film.innerHTML = storage.filter(s => s.type === 'film').map(s => `<div class="card"><span>${s.name}</span><b>${s.quantity}</b></div>`).join('');
-    prod.innerHTML = storage.filter(s => s.type !== 'film').map(s => `<div class="card"><span>${s.name}</span><b>${s.quantity}</b></div>`).join('');
+    film.innerHTML = storage.filter(s => s.type === 'film').map(s => `<div class="card"><span>${s.name}</span><b style="color:#fefe01">${s.quantity}</b></div>`).join('');
+    prod.innerHTML = storage.filter(s => s.type !== 'film').map(s => `<div class="card"><span>${s.name}</span><b style="color:#fefe01">${s.quantity}</b></div>`).join('');
 }
+
 async function submitClient() {
     await fetch(`${SUPABASE_URL}/rest/v1/clients`, { method: "POST", headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ name: document.getElementById("client-name").value, phone: document.getElementById("client-phone").value, telegram_id: document.getElementById("client-tg").value })});
-    closeModal("modal-client"); init();
+    closeModal("modal-client"); await init();
 }
+
 async function submitStorage() {
     await fetch(`${SUPABASE_URL}/rest/v1/storage`, { method: "POST", headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ name: document.getElementById("st-name").value, quantity: parseFloat(document.getElementById("st-qty").value), type: document.getElementById("storage-type").value })});
-    closeModal("modal-storage"); init();
+    closeModal("modal-storage"); await init();
 }
+
 function openOrderModal() { document.getElementById("modal-order").classList.add("open"); }
 function openClientModal() { document.getElementById("modal-client").classList.add("open"); }
 function openStorageModal() { document.getElementById("modal-storage").classList.add("open"); }
@@ -136,16 +149,4 @@ function closeModal(id) {
     currentEditId = null;
     if(id === "modal-order") {
         document.getElementById("btn-delete-order").style.display = "none";
-        document.getElementById("order-modal-title").innerText = "Новый заказ";
-        document.getElementById("car-client").value = "";
-        document.getElementById("car-model").value = "";
-        document.getElementById("order-amount").value = "";
-        document.getElementById("services").value = "";
-    }
-}
-function renderAll() { renderEvents(); renderClients(); renderStorage(); updateClientList(); }
-function showPage(page) {
-    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
-    document.getElementById("page-" + page).classList.add("active");
-}
-init();
+        document.getElementById("order-modal
