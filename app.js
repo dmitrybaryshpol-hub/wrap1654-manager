@@ -1,46 +1,40 @@
 const SUPABASE_URL = "https://hbciwqgfccdfnzrhiops.supabase.co";
 const SUPABASE_KEY = "sb_publishable_nmVB1s_PXivfUNyoTaQWuQ_b5G_dYY9"; 
 
+// Список ников БЕЗ символа @
+const ALLOWED_USERS = ['wrap_1654', 'star_lord_od', 'vlad_wraping'];
+
 let allEvents = [], clients = [], storage = [];
 const today = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
 
-// 1. СПИСОК РАЗРЕШЕННЫХ ПОЛЬЗОВАТЕЛЕЙ (маленькими буквами)
-const ALLOWED_USERS = ['wrap_1654', 'star_lord_od', 'vlad_wraping'];
-
 async function init() {
     const tg = window.Telegram.WebApp;
+    // Получаем юзера из данных Телеграм
     const user = tg.initDataUnsafe?.user;
-    
-    // Приводим ник зашедшего к нижнему регистру для сравнения
-    const username = user?.username?.toLowerCase();
+    const username = user?.username ? user.username.toLowerCase() : null;
 
-    // 2. ПРОВЕРКА ДОСТУПА
+    console.log("Checking access for:", username);
+
+    // ПРОВЕРКА: Если ник есть в списке ALLOWED_USERS
     if (username && ALLOWED_USERS.includes(username)) {
-        // Если ник в списке — показываем контент
-        document.getElementById('app-content').style.display = 'block';
+        // Убираем экран блокировки
         document.getElementById('access-denied').style.display = 'none';
+        // Показываем контент приложения
+        document.getElementById('app-content').style.display = 'block';
         
         await loadData();
         renderAll();
         
-        if (tg) {
-            tg.expand();
-            tg.setHeaderColor('#0b0b0f');
-        }
+        tg.expand();
+        tg.setHeaderColor('#0b0b0f');
     } else {
-        // Если ника нет или зашли из браузера — блокируем
-        document.getElementById('app-content').remove(); // Стираем код приложения из памяти
-        document.getElementById('access-denied').style.display = 'flex';
-        
-        // Стили для экрана блокировки (на случай если не подгрузились)
-        const root = document.getElementById('access-denied');
-        root.style.height = '100vh';
-        root.style.display = 'flex';
-        root.style.flexDirection = 'column';
-        root.style.alignItems = 'center';
-        root.style.justifyContent = 'center';
+        // Если ника нет или зашли из браузера — контент остается скрытым (display: none)
+        // и удаляется из кода для безопасности
+        document.getElementById('app-content').innerHTML = "";
+        console.log("Access Denied");
     }
 }
+
 async function loadData() {
     allEvents = await fetchTable("events");
     clients = await fetchTable("clients");
@@ -50,17 +44,10 @@ async function loadData() {
 async function fetchTable(table) {
     try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*`, {
-            headers: { 
-                "apikey": SUPABASE_KEY, 
-                "Authorization": "Bearer " + SUPABASE_KEY 
-            }
+            headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
         });
-        if (!res.ok) throw new Error(`Ошибка загрузки ${table}`);
         return await res.json();
-    } catch (e) { 
-        console.error(e); 
-        return []; 
-    }
+    } catch (e) { return []; }
 }
 
 function renderAll() {
@@ -104,68 +91,50 @@ function renderStorage() {
 }
 
 async function submitOrder() {
-    const data = {
-        client_name: document.getElementById("car-client").value,
-        car_model: document.getElementById("car-model").value,
-        amount: parseInt(document.getElementById("order-amount").value),
-        services: document.getElementById("services").value,
-        day: today
-    };
-
     const res = await fetch(`${SUPABASE_URL}/rest/v1/events`, {
         method: "POST",
-        headers: { 
-            "apikey": SUPABASE_KEY, 
-            "Authorization": "Bearer " + SUPABASE_KEY, 
-            "Content-Type": "application/json",
-            "Prefer": "return=minimal"
-        },
-        body: JSON.stringify(data)
+        headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json", "Prefer": "return=minimal" },
+        body: JSON.stringify({
+            client_name: document.getElementById("car-client").value,
+            car_model: document.getElementById("car-model").value,
+            amount: parseInt(document.getElementById("order-amount").value),
+            services: document.getElementById("services").value,
+            day: today
+        })
     });
-
-    if (res.ok) { closeModal("modal-order"); init(); } 
-    else { const err = await res.json(); alert("Ошибка заказа: " + err.message); }
+    if (res.ok) { closeModal("modal-order"); init(); }
 }
 
 async function submitClient() {
-    const data = {
-        name: document.getElementById("client-name").value,
-        phone: document.getElementById("client-phone").value,
-        telegram_id: document.getElementById("client-tg").value
-    };
-
     const res = await fetch(`${SUPABASE_URL}/rest/v1/clients`, {
         method: "POST",
         headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify(data)
+        body: JSON.stringify({
+            name: document.getElementById("client-name").value,
+            phone: document.getElementById("client-phone").value,
+            telegram_id: document.getElementById("client-tg").value
+        })
     });
-
-    if (res.ok) { closeModal("modal-client"); init(); } 
-    else { alert("Ошибка при сохранении клиента. Проверьте колонки в Supabase."); }
+    if (res.ok) { closeModal("modal-client"); init(); }
 }
 
 async function submitStorage() {
-    const data = {
-        name: document.getElementById("st-name").value,
-        quantity: parseFloat(document.getElementById("st-qty").value),
-        type: document.getElementById("storage-type").value
-    };
-
     const res = await fetch(`${SUPABASE_URL}/rest/v1/storage`, {
         method: "POST",
         headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify(data)
+        body: JSON.stringify({
+            name: document.getElementById("st-name").value,
+            quantity: parseFloat(document.getElementById("st-qty").value),
+            type: document.getElementById("storage-type").value
+        })
     });
-
-    if (res.ok) { closeModal("modal-storage"); init(); } 
-    else { alert("Ошибка склада."); }
+    if (res.ok) { closeModal("modal-storage"); init(); }
 }
 
 function openOrderModal() { document.getElementById("modal-order").classList.add("open"); }
 function openClientModal() { document.getElementById("modal-client").classList.add("open"); }
 function openStorageModal() { document.getElementById("modal-storage").classList.add("open"); }
 function closeModal(id) { document.getElementById(id).classList.remove("open"); }
-
 function showPage(page) {
     document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
     document.getElementById("page-" + page).classList.add("active");
