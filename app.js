@@ -4,20 +4,43 @@ const SUPABASE_KEY = "sb_publishable_nmVB1s_PXivfUNyoTaQWuQ_b5G_dYY9";
 let allEvents = [], clients = [], storage = [];
 const today = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
 
-// ВРЕМЕННО: Доступ разрешен всем для отладки
+// 1. СПИСОК РАЗРЕШЕННЫХ ПОЛЬЗОВАТЕЛЕЙ (маленькими буквами)
+const ALLOWED_USERS = ['wrap_1654', 'star_lord_od', 'vlad_wraping'];
+
 async function init() {
-    console.log("App Initialization...");
-    document.getElementById('app-content').style.display = 'block';
+    const tg = window.Telegram.WebApp;
+    const user = tg.initDataUnsafe?.user;
     
-    await loadData();
-    renderAll();
-    
-    if (window.Telegram && window.Telegram.WebApp) {
-        window.Telegram.WebApp.expand();
-        window.Telegram.WebApp.setHeaderColor('#0b0b0f');
+    // Приводим ник зашедшего к нижнему регистру для сравнения
+    const username = user?.username?.toLowerCase();
+
+    // 2. ПРОВЕРКА ДОСТУПА
+    if (username && ALLOWED_USERS.includes(username)) {
+        // Если ник в списке — показываем контент
+        document.getElementById('app-content').style.display = 'block';
+        document.getElementById('access-denied').style.display = 'none';
+        
+        await loadData();
+        renderAll();
+        
+        if (tg) {
+            tg.expand();
+            tg.setHeaderColor('#0b0b0f');
+        }
+    } else {
+        // Если ника нет или зашли из браузера — блокируем
+        document.getElementById('app-content').remove(); // Стираем код приложения из памяти
+        document.getElementById('access-denied').style.display = 'flex';
+        
+        // Стили для экрана блокировки (на случай если не подгрузились)
+        const root = document.getElementById('access-denied');
+        root.style.height = '100vh';
+        root.style.display = 'flex';
+        root.style.flexDirection = 'column';
+        root.style.alignItems = 'center';
+        root.style.justifyContent = 'center';
     }
 }
-
 async function loadData() {
     allEvents = await fetchTable("events");
     clients = await fetchTable("clients");
