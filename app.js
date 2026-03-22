@@ -2,33 +2,6 @@ const SUPABASE_URL = "https://hbciwqgfccdfnzrhiops.supabase.co";
 const SUPABASE_KEY = "sb_publishable_nmVB1s_PXivfUNyoTaQWuQ_b5G_dYY9"; // Твой ключ!
 
 // СПИСОК РАЗРЕШЕННЫХ ПОЛЬЗОВАТЕЛЕЙ
-const ALLOWED_USERS = ['wrap_1654', 'star_lord_od', 'vlad_wraping'];
-
-let allEvents = [], clients = [], storage = [];
-const today = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
-
-async function init() {
-    const tg = window.Telegram.WebApp;
-    const user = tg.initDataUnsafe?.user;
-    
-    // Приводим ник к нижнему регистру для надежности
-    const username = user?.username?.toLowerCase();
-
-    if (username && ALLOWED_USERS.includes(username)) {
-        // ДОСТУП РАЗРЕШЕН
-        document.getElementById('app-content').style.display = 'block';
-        document.getElementById('access-denied').style.display = 'none';
-        
-        await loadData();
-        renderAll();
-        tg.expand();
-        tg.setHeaderColor('#0b0b0f');
-    } else {
-        // ДОСТУП ЗАКРЫТ
-        document.getElementById('app-content').remove(); // Стираем контент из памяти
-        document.getElementById('access-denied').style.display = 'block';
-    }
-}
 
 // [Остальные функции подгрузки и рендера остаются прежними]
 async function loadData() {
