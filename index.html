@@ -17,14 +17,17 @@
 
 <div id="app-content" class="hidden">
 
-<div id="page-home" class="page active">
-
 <div class="top-logo">Wrap 1654</div>
 
 <div class="stats">
 <div class="stat-card">
 <b id="money-day">0$</b>
-<small>Сегодня</small>
+<small>Оборот день</small>
+</div>
+
+<div class="stat-card">
+<b id="profit-day">0$</b>
+<small>Прибыль день</small>
 </div>
 
 <div class="stat-card">
@@ -37,10 +40,10 @@
 
 <div id="events"></div>
 
-</div>
-
 <!-- FAB -->
 <div class="fab" onclick="openOrderModal()">+</div>
+
+</div>
 
 <!-- MODAL -->
 <div id="modal-order" class="modal">
@@ -55,6 +58,9 @@
 
 <input id="order-amount" type="number" placeholder="Сумма">
 
+<select id="film-select"></select>
+<input id="film-qty" type="number" placeholder="Метры">
+
 <input type="file" id="media">
 
 </div>
@@ -64,8 +70,6 @@
 </div>
 
 </div>
-</div>
-
 </div>
 
 <script src="app.js"></script>
