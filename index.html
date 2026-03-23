@@ -10,6 +10,7 @@
 <body class="black-bg">
 
 <div id="app-content" class="hidden">
+    
     <div id="page-home" class="page active">
         <div class="top-logo">Wrap 1654</div>
         <div class="stats">
@@ -19,19 +20,20 @@
         </div>
         <div id="calendar-strip"></div>
         <div id="events"></div>
+        <div class="fab" onclick="openModal('modal-order')">+</div>
     </div>
 
     <div id="page-clients" class="page">
-        <div class="top-logo">База клиентов</div>
+        <div class="top-logo">Клиенты</div>
         <div id="clients-list" class="list-container"></div>
+        <div class="fab" onclick="openModal('modal-client')">+</div>
     </div>
 
     <div id="page-storage" class="page">
-        <div class="top-logo">Склад материалов</div>
+        <div class="top-logo">Склад</div>
         <div id="storage-list" class="list-container"></div>
+        <div class="fab" onclick="openModal('modal-storage')">+</div>
     </div>
-
-    <div class="fab" onclick="openOrderModal()">+</div>
 
     <div class="bottom-nav">
         <div class="nav-item" onclick="showPage('home')">🏠</div>
@@ -43,29 +45,53 @@
 <div id="modal-order" class="modal">
     <div class="modal-content">
         <div class="modal-body">
-            <h3>Новая запись</h3>
+            <h3>Новый заказ</h3>
             <input id="car-client" placeholder="Имя клиента">
-            <input id="car-model" placeholder="Марка и модель авто">
+            <input id="car-model" placeholder="Авто">
             <div class="form-row">
                 <div><label>Дата</label><input type="datetime-local" id="date-start"></div>
                 <div><label>Сумма ($)</label><input type="number" id="order-amount"></div>
             </div>
-            <div class="form-row">
-                <div>
-                    <label>Плёнка</label>
-                    <select id="film-select"></select>
-                </div>
-                <div>
-                    <label>Метры</label>
-                    <input type="number" id="film-qty" step="0.1" value="0">
-                </div>
-            </div>
-            <label>Фото работы</label>
+            <select id="film-select"></select>
+            <input id="film-qty" type="number" placeholder="Метры плёнки" step="0.1">
             <input type="file" id="media" accept="image/*">
         </div>
         <div class="modal-footer">
             <button class="save-btn" onclick="submitOrder()">СОХРАНИТЬ</button>
             <button class="save-btn cancel" onclick="closeModal('modal-order')">ОТМЕНА</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-client" class="modal">
+    <div class="modal-content">
+        <div class="modal-body">
+            <h3>Новый клиент</h3>
+            <input id="new-client-name" placeholder="ФИО">
+            <input id="new-client-phone" placeholder="Телефон">
+        </div>
+        <div class="modal-footer">
+            <button class="save-btn" onclick="addClient()">ДОБАВИТЬ</button>
+            <button class="save-btn cancel" onclick="closeModal('modal-client')">ОТМЕНА</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-storage" class="modal">
+    <div class="modal-content">
+        <div class="modal-body">
+            <h3>Добавить на склад</h3>
+            <input id="st-name" placeholder="Название материала">
+            <input id="st-price" type="number" placeholder="Цена за ед.">
+            <input id="st-qty" type="number" placeholder="Количество">
+            <select id="st-type">
+                <option value="film">Плёнка (м)</option>
+                <option value="other">Прочее (шт)</option>
+            </select>
+        </div>
+        <div class="modal-footer">
+            <button class="save-btn" onclick="addStorage()">СОХРАНИТЬ</button>
+            <button class="save-btn cancel" onclick="closeModal('modal-storage')">ОТМЕНА</button>
         </div>
     </div>
 </div>
