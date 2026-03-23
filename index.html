@@ -1,129 +1,95 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Wrap 1654 Pro</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wrap 1654 Pro</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
+
 <body>
 
-<div id="access-denied" style="display: none; height: 100vh; flex-direction: column; align-items: center; justify-content: center; text-align: center; background: #0b0b0f; color: white;">
-    <span style="font-size: 60px;">🚫</span>
-    <h2 style="margin-top: 20px;">Доступ ограничен</h2>
+<div id="app-content">
+
+<!-- ГЛАВНАЯ -->
+<div id="page-home" class="page active">
+    <div class="top-logo">Wrap 1654</div>
+
+    <!-- СТАТА -->
+    <div class="stats">
+        <div class="stat-card">
+            <span>💰</span>
+            <b id="stat-money">0$</b>
+            <small>Сегодня</small>
+        </div>
+        <div class="stat-card">
+            <span>🚗</span>
+            <b id="stat-cars">0</b>
+            <small>Машин</small>
+        </div>
+    </div>
+
+    <div id="calendar-strip" class="calendar-strip"></div>
+
+    <div id="events"></div>
 </div>
 
-<div id="app-content" style="display: none;">
-    <div id="page-home" class="page active">
-        <div class="top-logo">Wrap 1654</div>
-        <div class="calendar-strip" id="calendar-strip"></div>
-        <h3 class="section-title">Записи на день</h3>
-        <div id="events"></div>
-    </div>
+<!-- КЛИЕНТЫ -->
+<div id="page-clients" class="page">
+    <div class="top-logo">Клиенты</div>
+    <button class="add-btn" onclick="openClientModal()">+ Добавить</button>
+    <div id="clients-list"></div>
+</div>
 
-    <div id="page-clients" class="page">
-        <div class="top-logo">Клиенты</div>
-        <button class="add-btn" onclick="openClientModal()">+ Добавить вручную</button>
-        <div id="clients-list"></div>
-    </div>
+<!-- СКЛАД -->
+<div id="page-storage" class="page">
+    <div class="top-logo">Склад</div>
+    <button class="add-btn" onclick="openStorageModal()">+ Добавить</button>
 
-    <div id="page-storage" class="page">
-        <div class="top-logo">Склад</div>
-        <button class="add-btn" onclick="openStorageModal()">+ Добавить материал</button>
-        <h3 class="section-title">Плёнка</h3>
-        <div id="film-list"></div>
-        <h3 class="section-title">Товар</h3>
-        <div id="product-list"></div>
-    </div>
+    <h3 class="section-title">Плёнка</h3>
+    <div id="film-list"></div>
 
-    <div class="fab" onclick="openOrderModal()">+</div>
+    <h3 class="section-title">Товар</h3>
+    <div id="product-list"></div>
+</div>
 
-    <div id="modal-order" class="modal">
-        <div class="modal-content">
-            <div class="modal-body">
-                <h3 id="order-modal-title">Новый заказ</h3>
-                <input id="car-client" list="clients-list-options" placeholder="Имя клиента">
-                <datalist id="clients-list-options"></datalist>
-                <input id="car-model" placeholder="Марка и модель авто">
-                
-                <div class="form-row">
-                    <div><label>Начало</label><input type="datetime-local" id="date-start"></div>
-                    <div><label>Конец</label><input type="datetime-local" id="date-end"></div>
-                </div>
+<!-- FAB -->
+<div class="fab" onclick="openOrderModal()">+</div>
 
-                <div class="form-row">
-                    <div>
-                        <label>Плёнка</label>
-                        <select id="film-select"><option value="">Без плёнки</option></select>
-                    </div>
-                    <div>
-                        <label>Метров</label>
-                        <input type="number" id="film-qty" step="0.1" value="0">
-                    </div>
-                </div>
+<!-- МОДАЛКА -->
+<div id="modal-order" class="modal">
+<div class="modal-content">
 
-                <input id="order-amount" type="number" placeholder="Сумма ($)">
-                <textarea id="services" placeholder="Описание работ..."></textarea>
-                <button id="btn-delete-order" onclick="deleteOrder()" class="del-btn">УДАЛИТЬ ЗАКАЗ</button>
-            </div>
-            <div class="modal-footer">
-                <button class="save-btn" onclick="submitOrder()">СОХРАНИТЬ</button>
-                <button class="save-btn cancel" onclick="closeModal('modal-order')">Отмена</button>
-            </div>
-        </div>
-    </div>
+<div class="modal-body">
+<input id="car-client" placeholder="Клиент">
+<input id="car-model" placeholder="Авто">
 
-    <div id="modal-client" class="modal">
-        <div class="modal-content">
-            <div class="modal-body">
-                <h3>Новый клиент</h3>
-                <input id="client-name" placeholder="ФИО">
-                <input id="client-phone" placeholder="Телефон">
-                <input id="client-tg" placeholder="Telegram ID">
-            </div>
-            <div class="modal-footer">
-                <button class="save-btn" onclick="submitClient()">СОХРАНИТЬ</button>
-                <button class="save-btn cancel" onclick="closeModal('modal-client')">Отмена</button>
-            </div>
-        </div>
-    </div>
+<select id="status">
+<option value="new">Новый</option>
+<option value="in_progress">В работе</option>
+<option value="done">Готово</option>
+</select>
 
-    <div id="modal-storage" class="modal">
-        <div class="modal-content">
-            <div class="modal-body">
-                <h3>Добавить на склад</h3>
-                <select id="storage-type">
-                    <option value="film">Плёнка</option>
-                    <option value="product">Товар</option>
-                </select>
-                <input id="st-name" placeholder="Название">
-                <input id="st-qty" type="number" step="0.1" placeholder="Количество">
-            </div>
-            <div class="modal-footer">
-                <button class="save-btn" onclick="submitStorage()">ДОБАВИТЬ</button>
-                <button class="save-btn cancel" onclick="closeModal('modal-storage')">Отмена</button>
-            </div>
-        </div>
-    </div>
+<input id="date-start" type="datetime-local">
+<input id="order-amount" type="number" placeholder="Сумма">
+<textarea id="services"></textarea>
+</div>
 
-    <div id="modal-client-history" class="modal">
-        <div class="modal-content">
-            <div class="modal-body">
-                <h3 id="history-name">История</h3>
-                <div id="history-list"></div>
-            </div>
-            <div class="modal-footer">
-                <button class="save-btn" onclick="closeModal('modal-client-history')">Закрыть</button>
-            </div>
-        </div>
-    </div>
+<div class="modal-footer">
+<button class="save-btn" onclick="submitOrder()">СОХРАНИТЬ</button>
+</div>
 
-    <div class="bottom-nav">
-        <div onclick="showPage('home')">🏠</div>
-        <div onclick="showPage('clients')">👤</div>
-        <div onclick="showPage('storage')">📦</div>
-    </div>
+</div>
+</div>
+
+<!-- НАВИГАЦИЯ -->
+<div class="bottom-nav">
+<div onclick="showPage('home')">🏠</div>
+<div onclick="showPage('clients')">👤</div>
+<div onclick="showPage('storage')">📦</div>
+</div>
+
 </div>
 
 <script src="app.js"></script>
