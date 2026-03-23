@@ -40,22 +40,31 @@ async function fetchTable(table) {
 
 // СОХРАНЕНИЕ ЗАКАЗА + АВТОСОЗДАНИЕ КЛИЕНТА
 async function submitOrder() {
-    const clientName = document.getElementById("car-client").value;
-    const carModel = document.getElementById("car-model").value;
+    const clientName = document.getElementById("car-client").value.trim();
+    const carModel = document.getElementById("car-model").value.trim();
     const amount = parseInt(document.getElementById("order-amount").value);
 
     if(!clientName || !carModel || isNaN(amount)) return alert("Заполни данные!");
 
-    // 1. Проверяем, есть ли такой клиент в базе
-    const exists = clients.some(c => c.name.toLowerCase() === clientName.toLowerCase());
+    // 1. Проверяем, есть ли такой клиент в базе (игнорируя пробелы и регистр)
+    const exists = clients.some(c => c.name.toLowerCase().trim() === clientName.toLowerCase());
     
     if (!exists) {
-        // Если клиента нет - создаем его
-        await fetch(`${SUPABASE_URL}/rest/v1/clients`, {
+        // Если клиента нет - создаем его и ЖДЕМ завершения (await)
+        const createRes = await fetch(`${SUPABASE_URL}/rest/v1/clients`, {
             method: "POST",
-            headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
+            headers: { 
+                "apikey": SUPABASE_KEY, 
+                "Authorization": "Bearer " + SUPABASE_KEY, 
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal" 
+            },
             body: JSON.stringify({ name: clientName, phone: "", telegram_id: "" })
         });
+        
+        if (!createRes.ok) {
+            console.error("Ошибка при автосоздании клиента");
+        }
     }
 
     // 2. Сохраняем сам заказ
@@ -66,6 +75,28 @@ async function submitOrder() {
         services: document.getElementById("services").value,
         day: today
     };
+
+    const method = currentEditId ? "PATCH" : "POST";
+    const url = currentEditId ? `${SUPABASE_URL}/rest/v1/events?id=eq.${currentEditId}` : `${SUPABASE_URL}/rest/v1/events`;
+
+    const res = await fetch(url, {
+        method: method,
+        headers: { 
+            "apikey": SUPABASE_KEY, 
+            "Authorization": "Bearer " + SUPABASE_KEY, 
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal" 
+        },
+        body: JSON.stringify(data)
+    });
+
+    if (res.ok) { 
+        closeModal("modal-order"); 
+        // ВАЖНО: перегружаем данные, чтобы клиент точно появился в списке
+        await loadData(); 
+        renderAll(); 
+    }
+}
 
     const method = currentEditId ? "PATCH" : "POST";
     const url = currentEditId ? `${SUPABASE_URL}/rest/v1/events?id=eq.${currentEditId}` : `${SUPABASE_URL}/rest/v1/events`;
