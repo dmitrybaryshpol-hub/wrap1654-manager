@@ -1,75 +1,54 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Wrap 1654 Manager</title>
-
-<link rel="stylesheet" href="style.css">
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wrap 1654 Manager</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 
 <body>
 
-<div id="access-denied" class="center hidden">
-<h2>Нет доступа</h2>
-</div>
+<div id="access-denied">Нет доступа</div>
 
-<div id="app-content" class="hidden">
+<div id="app-content">
 
-<div class="top-logo">Wrap 1654</div>
+    <!-- ГЛАВНАЯ -->
+    <div id="page-home" class="page active">
+        <div class="top-logo">Wrap 1654</div>
+        <div id="events"></div>
+    </div>
 
-<div class="stats">
-<div class="stat-card">
-<b id="money-day">0$</b>
-<small>Оборот день</small>
-</div>
+    <!-- КЛИЕНТЫ -->
+    <div id="page-clients" class="page">
+        <div class="top-logo">Клиенты</div>
+        <button class="add-btn" onclick="openClientModal()">+ Добавить клиента</button>
+        <div id="clients-list"></div>
+    </div>
 
-<div class="stat-card">
-<b id="profit-day">0$</b>
-<small>Прибыль день</small>
-</div>
+    <!-- СКЛАД -->
+    <div id="page-storage" class="page">
+        <div class="top-logo">Склад</div>
+        <button class="add-btn" onclick="openStorageModal()">+ Добавить</button>
 
-<div class="stat-card">
-<b id="money-week">0$</b>
-<small>Неделя</small>
-</div>
-</div>
+        <h3 class="section-title">Плёнка</h3>
+        <div id="film-list"></div>
 
-<div id="calendar-strip"></div>
+        <h3 class="section-title">Товар</h3>
+        <div id="product-list"></div>
+    </div>
 
-<div id="events"></div>
+    <!-- FAB -->
+    <div class="fab" onclick="openOrderModal()">+</div>
 
-<!-- FAB -->
-<div class="fab" onclick="openOrderModal()">+</div>
+    <!-- НАВИГАЦИЯ -->
+    <div class="bottom-nav">
+        <div class="nav-item active" onclick="showPage('home', this)">🏠</div>
+        <div class="nav-item" onclick="showPage('clients', this)">👤</div>
+        <div class="nav-item" onclick="showPage('storage', this)">📦</div>
+    </div>
 
-</div>
-
-<!-- MODAL -->
-<div id="modal-order" class="modal">
-<div class="modal-content">
-
-<div class="modal-body">
-
-<input id="car-client" placeholder="Клиент">
-<input id="car-model" placeholder="Авто">
-
-<input id="date-start" type="datetime-local">
-
-<input id="order-amount" type="number" placeholder="Сумма">
-
-<select id="film-select"></select>
-<input id="film-qty" type="number" placeholder="Метры">
-
-<input type="file" id="media">
-
-</div>
-
-<div class="modal-footer">
-<button onclick="submitOrder()" class="save-btn">СОХРАНИТЬ</button>
-</div>
-
-</div>
 </div>
 
 <script src="app.js"></script>
