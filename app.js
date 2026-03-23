@@ -7,22 +7,25 @@ let allEvents = [], storage = [], selectedDate = new Date().toISOString().split(
 async function init() {
     const user = tg.initDataUnsafe?.user;
     
-    // Если открыли в браузере (не ТГ) — показываем контент для теста
+    // Если открыли в браузере (не ТГ) — показываем для разработки
     if (!user) {
         await startApp();
         return;
     }
 
-    // Если в ТГ — проверяем ID в таблице users
+    // Проверка в базе
     const res = await fetch(`${SUPABASE_URL}/rest/v1/users?telegram_id=eq.${user.id}`, {
         headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY }
     });
     const data = await res.json();
 
+    // Если пользователя НЕТ в базе — просто ничего не делаем (экран останется черным)
     if (data && data.length > 0) {
         await startApp();
     } else {
-        document.getElementById("access-denied").classList.remove("hidden");
+        console.log("Доступ запрещен для ID:", user.id);
+        // Можно оставить экран абсолютно пустым
+        document.body.innerHTML = ""; 
     }
 }
 
@@ -33,15 +36,25 @@ async function startApp() {
     renderCalendar();
     renderEvents();
     renderFilms();
+    renderStorage();
+    renderClients();
 }
 
 async function loadData() {
-    const [eRes, sRes] = await Promise.all([
+    const [eRes, sRes, cRes] = await Promise.all([
         fetch(`${SUPABASE_URL}/rest/v1/events?select=*`, { headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY } }),
-        fetch(`${SUPABASE_URL}/rest/v1/storage?select=*`, { headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY } })
+        fetch(`${SUPABASE_URL}/rest/v1/storage?select=*`, { headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY } }),
+        fetch(`${SUPABASE_URL}/rest/v1/clients?select=*`, { headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY } })
     ]);
     allEvents = await eRes.json();
     storage = await sRes.json();
+    clients = await cRes.json();
+}
+
+// Переключение страниц
+function showPage(pageId) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + pageId).classList.add('active');
 }
 
 function renderCalendar() {
@@ -63,25 +76,35 @@ function renderEvents() {
     const el = document.getElementById("events");
     const filtered = allEvents.filter(e => e.start_date && e.start_date.startsWith(selectedDate));
     
-    // Считаем статистику
-    const dayTotal = filtered.reduce((s, e) => s + (e.amount || 0), 0);
-    const profitTotal = filtered.reduce((s, e) => s + (e.profit || 0), 0);
+    document.getElementById("money-day").innerText = filtered.reduce((s, e) => s + (e.amount || 0), 0) + "$";
+    document.getElementById("profit-day").innerText = filtered.reduce((s, e) => s + (e.profit || 0), 0) + "$";
     
-    document.getElementById("money-day").innerText = dayTotal + "$";
-    document.getElementById("profit-day").innerText = profitTotal + "$";
-    
-    el.innerHTML = filtered.length ? filtered.map(e => `
+    el.innerHTML = filtered.map(e => `
         <div class="card">
-            <div><b>${e.car_model || 'Без авто'}</b><br><small>${e.client_name || ''}</small></div>
-            <div style="text-align:right"><b>$${e.amount || 0}</b><br><small style="color:${e.profit >= 0 ? '#00cc66' : '#ff4444'}">${e.profit || 0}$</small></div>
+            <div><b>${e.car_model || 'Авто'}</b><br><small>${e.client_name}</small></div>
+            <div style="text-align:right"><b>$${e.amount}</b></div>
         </div>
-    `).join('') : '<p style="text-align:center; opacity:0.2; margin-top:50px;">Записей нет</p>';
+    `).join('') || '<p style="text-align:center; opacity:0.2; padding-top:30px;">Нет записей</p>';
 }
 
 function renderFilms() {
-    const select = document.getElementById("film-select");
-    select.innerHTML = '<option value="">Без плёнки</option>' + 
+    document.getElementById("film-select").innerHTML = '<option value="">Без плёнки</option>' + 
         storage.filter(s => s.type === "film").map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+}
+
+function renderStorage() {
+    const el = document.getElementById("storage-list");
+    el.innerHTML = storage.map(s => `
+        <div class="card">
+            <span>${s.name}</span>
+            <b>${s.quantity} ${s.type === 'film' ? 'м.' : 'шт.'}</b>
+        </div>
+    `).join('');
+}
+
+function renderClients() {
+    const el = document.getElementById("clients-list");
+    el.innerHTML = clients.map(c => `<div class="card"><b>${c.name}</b><span>${c.phone || ''}</span></div>`).join('');
 }
 
 async function submitOrder() {
@@ -105,13 +128,13 @@ async function submitOrder() {
         film_amount: filmQty
     };
 
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/events`, {
+    await fetch(`${SUPABASE_URL}/rest/v1/events`, {
         method: "POST",
         headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
         body: JSON.stringify(data)
     });
-
-    if (res.ok) { closeModal("modal-order"); init(); }
+    closeModal("modal-order");
+    init();
 }
 
 function openOrderModal() { document.getElementById("modal-order").classList.add("open"); }
