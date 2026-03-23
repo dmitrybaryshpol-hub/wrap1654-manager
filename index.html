@@ -3,36 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Wrap 1654 Manager</title>
+    <title>Wrap 1654 Pro</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
 
-<div id="access-denied" style="display: none; height: 100vh; flex-direction: column; align-items: center; justify-content: center; text-align: center; background: #0b0b0f; color: white; position: fixed; top: 0; left: 0; width: 100%; z-index: 9999;">
-    <span style="font-size: 60px;">🚫</span>
-    <h2 style="margin-top: 20px;">Доступ ограничен</h2>
-    <p style="color: #888; padding: 0 40px;">Приложение доступно только авторизованным сотрудникам.</p>
+<div id="access-denied">
+    <span>🚫</span>
+    <h2>Доступ ограничен</h2>
 </div>
 
 <div id="app-content" style="display: none;">
     <div id="page-home" class="page active">
         <div class="top-logo">Wrap 1654</div>
+        <div class="calendar-strip" id="calendar-strip"></div>
+        <h3 class="section-title">Записи на день</h3>
         <div id="events"></div>
     </div>
 
     <div id="page-clients" class="page">
         <div class="top-logo">Клиенты</div>
-        <button class="add-btn" onclick="openClientModal()">+ Добавить клиента</button>
+        <button class="add-btn" onclick="openClientModal()">+ Добавить вручную</button>
         <div id="clients-list"></div>
     </div>
 
     <div id="page-storage" class="page">
         <div class="top-logo">Склад</div>
-        <button class="add-btn" onclick="openStorageModal()">+ Добавить на склад</button>
-        <h3 style="padding-left:15px; color:#ff33cc;">Плёнка</h3>
+        <button class="add-btn" onclick="openStorageModal()">+ Добавить материал</button>
         <div id="film-list"></div>
-        <h3 style="padding-left:15px; color:#fefe01;">Товар</h3>
         <div id="product-list"></div>
     </div>
 
@@ -45,20 +44,45 @@
                 <input id="car-client" list="clients-list-options" placeholder="Имя клиента">
                 <datalist id="clients-list-options"></datalist>
                 <input id="car-model" placeholder="Марка и модель авто">
-                <input id="order-amount" type="number" placeholder="Сумма ($)">
-                <textarea id="services" placeholder="Описание услуг..."></textarea>
                 
-                <button id="btn-delete-order" onclick="deleteOrder()" style="display:none; width: 100%; padding: 12px; background: transparent; border: 1px solid #ff4444; color: #ff4444; border-radius: 12px; margin-top: 10px; font-weight: bold;">УДАЛИТЬ ЗАКАЗ</button>
+                <div class="form-row">
+                    <div><label>Начало</label><input type="datetime-local" id="date-start"></div>
+                    <div><label>Конец</label><input type="datetime-local" id="date-end"></div>
+                </div>
+
+                <div class="form-row">
+                    <div>
+                        <label>Плёнка</label>
+                        <select id="film-select"><option value="">Без плёнки</option></select>
+                    </div>
+                    <div>
+                        <label>Метров</label>
+                        <input type="number" id="film-qty" step="0.1" value="0">
+                    </div>
+                </div>
+
+                <input id="order-amount" type="number" placeholder="Сумма ($)">
+                <textarea id="services" placeholder="Описание работ..."></textarea>
+                <button id="btn-delete-order" onclick="deleteOrder()" class="del-btn">УДАЛИТЬ ЗАКАЗ</button>
             </div>
             <div class="modal-footer">
                 <button class="save-btn" onclick="submitOrder()">СОХРАНИТЬ</button>
-                <button class="save-btn" style="background:transparent; color:#888; margin-top:10px;" onclick="closeModal('modal-order')">Отмена</button>
+                <button class="save-btn cancel" onclick="closeModal('modal-order')">Отмена</button>
             </div>
         </div>
     </div>
 
-    <div id="modal-client" class="modal"><div class="modal-content"><div class="modal-body"><h3>Новый клиент</h3><input id="client-name" placeholder="ФИО"><input id="client-phone" placeholder="Телефон"><input id="client-tg" placeholder="Telegram ID"></div><div class="modal-footer"><button class="save-btn" onclick="submitClient()">СОХРАНИТЬ</button></div></div></div>
-    <div id="modal-storage" class="modal"><div class="modal-content"><div class="modal-body"><h3>Склад</h3><select id="storage-type"><option value="film">Плёнка</option><option value="product">Товар</option></select><input id="st-name" placeholder="Название"><input id="st-qty" type="number" step="0.1" placeholder="Кол-во"></div><div class="modal-footer"><button class="save-btn" onclick="submitStorage()">ДОБАВИТЬ</button></div></div></div>
+    <div id="modal-client-history" class="modal">
+        <div class="modal-content">
+            <div class="modal-body">
+                <h3 id="history-name">История</h3>
+                <div id="history-list"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="save-btn" onclick="closeModal('modal-client-history')">Закрыть</button>
+            </div>
+        </div>
+    </div>
 
     <div class="bottom-nav">
         <div onclick="showPage('home')">🏠</div>
