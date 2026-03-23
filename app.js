@@ -1,23 +1,23 @@
 const SUPABASE_URL = "https://hbciwqgfccdfnzrhiops.supabase.co";
 const SUPABASE_KEY = "sb_publishable_nmVB1s_PXivfUNyoTaQWuQ_b5G_dYY9"; 
-
 const ALLOWED_USERS = ['wrap_1654', 'star_lord_od', 'vlad_wraping'];
 
 let allEvents = [], clients = [], storage = [], currentEditId = null;
-const today = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
+let selectedDate = new Date().toISOString().split('T')[0];
 
 async function init() {
     const tg = window.Telegram.WebApp;
     const user = tg.initDataUnsafe?.user;
-    const username = user?.username ? user.username.toLowerCase() : null;
+    const username = user?.username?.toLowerCase();
 
-    // Проверка доступа: если ник в списке ИЛИ если это не Telegram (для отладки)
-    if ((username && ALLOWED_USERS.includes(username)) || !tg.initDataUnsafe.query_id) {
+    // Мягкая проверка (если не из ТГ, но в списке - пускаем)
+    if (username && ALLOWED_USERS.includes(username) || window.location.hostname === "localhost") {
         document.getElementById('access-denied').style.display = 'none';
         document.getElementById('app-content').style.display = 'block';
         await loadData();
+        renderCalendar();
         renderAll();
-        if(tg.expand) tg.expand();
+        tg.expand();
     } else {
         document.getElementById('access-denied').style.display = 'flex';
     }
@@ -30,118 +30,149 @@ async function loadData() {
 }
 
 async function fetchTable(table) {
-    try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*&order=id.desc`, {
-            headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
-        });
-        return await res.json();
-    } catch (e) { return []; }
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*&order=id.desc`, {
+        headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
+    });
+    return await res.json();
 }
 
+// КАЛЕНДАРЬ
+function renderCalendar() {
+    const strip = document.getElementById('calendar-strip');
+    strip.innerHTML = "";
+    const days = ['вс','пн','вт','ср','чт','пт','сб'];
+    
+    for (let i = -2; i < 10; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() + i);
+        const iso = d.toISOString().split('T')[0];
+        const card = document.createElement('div');
+        card.className = `day-card ${iso === selectedDate ? 'active' : ''}`;
+        card.onclick = () => { selectedDate = iso; renderCalendar(); renderEvents(); };
+        card.innerHTML = `<span>${days[d.getDay()]}</span><span>${d.getDate()}</span>`;
+        strip.appendChild(card);
+    }
+}
+
+// СОХРАНЕНИЕ ЗАКАЗА + АВТО-СПИСАНИЕ
 async function submitOrder() {
-    const clientName = document.getElementById("car-client").value.trim();
-    const carModel = document.getElementById("car-model").value.trim();
-    const amount = parseInt(document.getElementById("order-amount").value);
+    const clientName = document.getElementById("car-client").value;
+    const filmName = document.getElementById("film-select").value;
+    const filmQty = parseFloat(document.getElementById("film-qty").value);
 
-    if(!clientName || !carModel || isNaN(amount)) return alert("Заполни данные!");
-
-    // 1. Автосоздание клиента
-    const exists = clients.some(c => c.name.toLowerCase().trim() === clientName.toLowerCase());
-    if (!exists) {
+    // 1. Авто-создание клиента
+    if (!clients.some(c => c.name === clientName)) {
         await fetch(`${SUPABASE_URL}/rest/v1/clients`, {
             method: "POST",
-            headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer "+SUPABASE_KEY, "Content-Type": "application/json", "Prefer": "return=minimal" },
-            body: JSON.stringify({ name: clientName, phone: "", telegram_id: "" })
+            headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
+            body: JSON.stringify({ name: clientName })
         });
     }
 
-    // 2. Сохранение заказа
+    // 2. Списание плёнки (только если это новый заказ)
+    if (filmName && filmQty > 0 && !currentEditId) {
+        const item = storage.find(s => s.name === filmName);
+        if (item) {
+            await fetch(`${SUPABASE_URL}/rest/v1/storage?id=eq.${item.id}`, {
+                method: "PATCH",
+                headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
+                body: JSON.stringify({ quantity: item.quantity - filmQty })
+            });
+        }
+    }
+
+    // 3. Сохранение заказа
     const data = {
         client_name: clientName,
-        car_model: carModel,
-        amount: amount,
-        services: document.getElementById("services").value,
-        day: today // Отправляем как число 0-6
+        car_model: document.getElementById("car-model").value,
+        amount: parseInt(document.getElementById("order-amount").value),
+        start_date: document.getElementById("date-start").value,
+        end_date: document.getElementById("date-end").value,
+        film_used: filmName,
+        film_amount: filmQty,
+        services: document.getElementById("services").value
     };
 
     const method = currentEditId ? "PATCH" : "POST";
     const url = currentEditId ? `${SUPABASE_URL}/rest/v1/events?id=eq.${currentEditId}` : `${SUPABASE_URL}/rest/v1/events`;
 
-    const res = await fetch(url, {
+    await fetch(url, {
         method: method,
-        headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer "+SUPABASE_KEY, "Content-Type": "application/json", "Prefer": "return=minimal" },
+        headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
         body: JSON.stringify(data)
     });
 
-    if (res.ok) { 
-        closeModal("modal-order"); 
-        await loadData(); 
-        renderAll(); 
-    } else {
-        const err = await res.json();
-        alert("Ошибка: " + err.message);
-    }
+    closeModal("modal-order");
+    await init();
 }
 
-async function deleteOrder() {
-    if (!currentEditId || !confirm("Удалить заказ?")) return;
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/events?id=eq.${currentEditId}`, {
-        method: "DELETE",
-        headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
-    });
-    if (res.ok) { closeModal("modal-order"); await loadData(); renderAll(); }
+function renderEvents() {
+    const el = document.getElementById("events");
+    // Фильтруем заказы, которые попадают на выбранную дату
+    const filtered = allEvents.filter(e => e.start_date && e.start_date.startsWith(selectedDate));
+    
+    el.innerHTML = filtered.length ? filtered.map(e => `
+        <div class="card" onclick="editOrder(${e.id})">
+            <div><b>${e.car_model}</b><br><small>${e.client_name}</small></div>
+            <div style="text-align:right">
+                <div style="color:#ff33cc; font-weight:900">$${e.amount}</div>
+                <small style="font-size:10px; color:#555">${e.start_date.split('T')[1].slice(0,5)}</small>
+            </div>
+        </div>
+    `).join('') : '<p style="text-align:center; opacity:0.3; margin-top:20px;">Нет записей на этот день</p>';
+}
+
+function renderClients() {
+    document.getElementById("clients-list").innerHTML = clients.map(c => `
+        <div class="card" onclick="showHistory('${c.name}')">
+            <b>${c.name}</b>
+            <span>→</span>
+        </div>
+    `).join('');
+    document.getElementById('clients-list-options').innerHTML = clients.map(c => `<option value="${c.name}">`).join('');
+}
+
+function showHistory(name) {
+    const history = allEvents.filter(e => e.client_name === name);
+    document.getElementById("history-name").innerText = name;
+    document.getElementById("history-list").innerHTML = history.map(h => `
+        <div class="history-item">
+            ${h.start_date ? h.start_date.split('T')[0] : ''} — <b>${h.car_model}</b> ($${h.amount})
+        </div>
+    `).join('') || "Нет истории заказов";
+    document.getElementById("modal-client-history").classList.add("open");
+}
+
+function renderStorage() {
+    const films = storage.filter(s => s.type === 'film');
+    document.getElementById("film-list").innerHTML = films.map(s => `<div class="card"><span>${s.name}</span><b>${s.quantity} м.</b></div>`).join('');
+    document.getElementById("film-select").innerHTML = '<option value="">Без плёнки</option>' + films.map(s => `<option value="${s.name}">${s.name} (ост. ${s.quantity}м)</option>`).join('');
 }
 
 function editOrder(id) {
-    const order = allEvents.find(e => e.id === id);
-    if (!order) return;
+    const e = allEvents.find(x => x.id === id);
     currentEditId = id;
-    document.getElementById("car-client").value = order.client_name;
-    document.getElementById("car-model").value = order.car_model;
-    document.getElementById("order-amount").value = order.amount;
-    document.getElementById("services").value = order.services || "";
+    document.getElementById("car-client").value = e.client_name;
+    document.getElementById("car-model").value = e.car_model;
+    document.getElementById("order-amount").value = e.amount;
+    document.getElementById("date-start").value = e.start_date ? e.start_date.slice(0,16) : "";
+    document.getElementById("date-end").value = e.end_date ? e.end_date.slice(0,16) : "";
+    document.getElementById("film-select").value = e.film_used || "";
+    document.getElementById("film-qty").value = e.film_amount || 0;
+    document.getElementById("services").value = e.services || "";
     document.getElementById("btn-delete-order").style.display = "block";
-    document.getElementById("order-modal-title").innerText = "Правка заказа";
     openOrderModal();
 }
 
-function renderAll() {
-    const evEl = document.getElementById("events");
-    evEl.innerHTML = allEvents.map(e => `
-        <div class="card" onclick="editOrder(${e.id})">
-            <div><b>${e.car_model}</b><br><small>${e.client_name}</small></div>
-            <div style="color:#ff33cc; font-weight:900">$${e.amount}</div>
-        </div>
-    `).join('');
-
-    const clEl = document.getElementById("clients-list");
-    clEl.innerHTML = clients.map(c => `<div class="card"><b>${c.name}</b></div>`).join('');
-
-    const film = document.getElementById("film-list");
-    const prod = document.getElementById("product-list");
-    film.innerHTML = storage.filter(s => s.type === 'film').map(s => `<div class="card"><span>${s.name}</span><b>${s.quantity}</b></div>`).join('');
-    prod.innerHTML = storage.filter(s => s.type !== 'film').map(s => `<div class="card"><span>${s.name}</span><b>${s.quantity}</b></div>`).join('');
-    
-    const dl = document.getElementById('clients-list-options');
-    dl.innerHTML = clients.map(c => `<option value="${c.name}">`).join('');
+async function deleteOrder() {
+    if (!confirm("Удалить?")) return;
+    await fetch(`${SUPABASE_URL}/rest/v1/events?id=eq.${currentEditId}`, { method: "DELETE", headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY } });
+    closeModal("modal-order"); await init();
 }
 
-// Функции управления модалками
 function openOrderModal() { document.getElementById("modal-order").classList.add("open"); }
-function openClientModal() { document.getElementById("modal-client").classList.add("open"); }
-function openStorageModal() { document.getElementById("modal-storage").classList.add("open"); }
-function closeModal(id) { 
-    document.getElementById(id).classList.remove("open"); 
-    currentEditId = null;
-    if(id === "modal-order") {
-        document.getElementById("btn-delete-order").style.display = "none";
-        document.getElementById("order-modal-title").innerText = "Новый заказ";
-        document.querySelectorAll("#modal-order input, #modal-order textarea").forEach(i => i.value = "");
-    }
-}
-function showPage(page) {
-    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
-    document.getElementById("page-" + page).classList.add("active");
-}
+function closeModal(id) { document.getElementById(id).classList.remove("open"); currentEditId = null; }
+function renderAll() { renderEvents(); renderClients(); renderStorage(); }
+function showPage(p) { document.querySelectorAll('.page').forEach(x=>x.classList.remove('active')); document.getElementById('page-'+p).classList.add('active'); }
 
 init();
