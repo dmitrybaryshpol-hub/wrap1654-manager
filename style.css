@@ -44,3 +44,16 @@ label { font-size: 11px; color: #555; margin: 0 0 5px 5px; display: block; }
 .form-row div { flex: 1; }
 .save-btn { width: 100%; padding: 16px; background: #ff33cc; border: none; border-radius: 14px; color: white; font-weight: bold; font-size: 16px; }
 .save-btn.cancel { background: transparent; color: #555; margin-top: 5px; }
+
+/* Дополнительные стили для списков */
+.list-container { padding-top: 10px; }
+.card span { opacity: 0.6; font-size: 14px; }
+
+/* Центрирование текста в пустых списках */
+p { width: 100%; color: #555; font-size: 14px; }
+
+/* Чтобы кнопка + была видна на всех страницах */
+.page .fab { display: flex; }
+
+/* Плавный переход для модалок */
+.modal-content { transition: transform 0.3s ease-out; }
