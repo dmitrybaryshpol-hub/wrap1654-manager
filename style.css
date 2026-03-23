@@ -14,6 +14,23 @@ align-items:center;
 justify-content:center;
 }
 
+.page {
+    display: none;
+    padding-bottom: 140px; /* было 100 */
+}
+
+.bottom-nav div {
+    color: #888;
+    font-size: 22px;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.bottom-nav div:hover {
+    color: #ff33cc;
+    transform: scale(1.1);
+}
+
 .top-logo{
 padding:20px;
 font-size:22px;
@@ -68,18 +85,33 @@ border-radius:10px;
 margin-top:5px;
 }
 
-.fab{
-position:fixed;
-bottom:80px;
-right:20px;
-width:60px;
-height:60px;
-background:#ff33cc;
-border-radius:50%;
-display:flex;
-align-items:center;
-justify-content:center;
-font-size:30px;
+.bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #141419;
+    display: flex;
+    justify-content: space-around;
+    padding: 12px 0 25px;
+    border-top: 1px solid #1a1a20;
+    z-index: 999; /* ВАЖНО */
+}
+
+.fab {
+    position: fixed;
+    bottom: 90px; /* было 80 */
+    right: 20px;
+    width: 60px;
+    height: 60px;
+    background: #ff33cc;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    box-shadow: 0 5px 20px rgba(255,51,204,0.3);
+    z-index: 100; /* ниже чем меню */
 }
 
 .modal{
