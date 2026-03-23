@@ -35,3 +35,14 @@ body { margin: 0; background: #0b0b0f; color: white; font-family: sans-serif; }
 .modal-body { padding: 20px; }
 input, select, textarea { width: 100%; background: #1a1a20; border: 1px solid #2a2a30; border-radius: 12px; color: white; padding: 12px; margin-bottom: 10px; box-sizing: border-box; }
 .save-btn { width: 100%; padding: 15px; background: #ff33cc; border: none; border-radius: 12px; color: white; font-weight: bold; }
+.add-btn {
+    background: #1a1a20;
+    color: #ff33cc;
+    border: 1px solid #ff33cc;
+    padding: 10px 20px;
+    border-radius: 12px;
+    margin: 10px 15px;
+    width: calc(100% - 30px);
+    font-weight: bold;
+    cursor: pointer;
+}
