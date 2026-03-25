@@ -8,11 +8,42 @@ const SUPABASE_KEY = "sb_publishable_nmVB1s_PXivfUNyoTaQWuQ_b5G_dYY9";
   Пример:
   const ALLOWED_TELEGRAM_IDS = [123456789, 987654321, 555555555];
 */
+const tg = window.Telegram.WebApp;
+
 const ALLOWED_TELEGRAM_IDS = [
   778403209,
   321760638,
   539387886
 ];
+
+function showDenied() {
+  document.getElementById("app-content").classList.add("hidden");
+  document.getElementById("access-denied").classList.remove("hidden");
+}
+
+async function init() {
+  const user = tg.initDataUnsafe?.user;
+  const telegramId = user?.id;
+
+  console.log("Telegram user:", user);
+  console.log("Current telegram id:", telegramId);
+  console.log("Allowed IDs:", ALLOWED_TELEGRAM_IDS);
+
+  if (!telegramId || !ALLOWED_TELEGRAM_IDS.includes(telegramId)) {
+    showDenied();
+    return;
+  }
+
+  document.getElementById("access-denied").classList.add("hidden");
+  document.getElementById("app-content").classList.remove("hidden");
+
+  tg.expand();
+
+  await loadData();
+  renderCalendar();
+  renderAll();
+}
+
 
 let allEvents = [];
 let clients = [];
