@@ -9,9 +9,9 @@ const SUPABASE_KEY = "sb_publishable_nmVB1s_PXivfUNyoTaQWuQ_b5G_dYY9";
   const ALLOWED_TELEGRAM_IDS = [123456789, 987654321, 555555555];
 */
 const ALLOWED_TELEGRAM_IDS = [
-  111111111,
-  222222222,
-  333333333
+  778403209,
+  321760638,
+  539387886
 ];
 
 let allEvents = [];
