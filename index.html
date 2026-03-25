@@ -2,11 +2,8 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-  />
-  <title>Wrap 1654 Pro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Wrap 1654 Manager</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
@@ -15,12 +12,11 @@
     <div class="denied-box">
       <div class="denied-icon">🚫</div>
       <h2>Нет доступа</h2>
-      <p>Открой приложение через Telegram-аккаунт с разрешённым доступом.</p>
+      <p>Открой приложение через разрешённый Telegram-аккаунт.</p>
     </div>
   </div>
 
   <div id="app-content" class="hidden">
-    <!-- HOME -->
     <section id="page-home" class="page active">
       <header class="topbar">
         <div class="brand">Wrap 1654</div>
@@ -55,7 +51,6 @@
       </section>
     </section>
 
-    <!-- CLIENTS -->
     <section id="page-clients" class="page">
       <header class="topbar">
         <div class="brand">Клиенты</div>
@@ -71,7 +66,6 @@
       </section>
     </section>
 
-    <!-- STORAGE -->
     <section id="page-storage" class="page">
       <header class="topbar">
         <div class="brand">Склад</div>
@@ -83,24 +77,18 @@
       </div>
 
       <section class="section-block">
-        <div class="section-head">
-          <h3>Плёнка</h3>
-        </div>
+        <div class="section-head"><h3>Плёнка</h3></div>
         <div id="film-list"></div>
       </section>
 
       <section class="section-block">
-        <div class="section-head">
-          <h3>Товар</h3>
-        </div>
+        <div class="section-head"><h3>Товар</h3></div>
         <div id="product-list"></div>
       </section>
     </section>
 
-    <!-- FAB -->
-    <button class="fab" onclick="openOrderModal()" aria-label="Добавить заказ">+</button>
+    <button class="fab" onclick="openOrderModal()">+</button>
 
-    <!-- BOTTOM NAV -->
     <nav class="bottom-nav">
       <button class="nav-item active" onclick="showPage('home', this)">
         <span class="nav-icon">🏠</span>
@@ -117,11 +105,9 @@
     </nav>
   </div>
 
-  <!-- ORDER MODAL -->
   <div id="modal-order" class="modal">
     <div class="modal-sheet">
       <div class="sheet-handle"></div>
-
       <div class="modal-body">
         <div class="modal-title-row">
           <h3 id="order-modal-title">Новый заказ</h3>
@@ -192,20 +178,15 @@
     </div>
   </div>
 
-  <!-- CLIENT MODAL -->
   <div id="modal-client" class="modal">
     <div class="modal-sheet">
       <div class="sheet-handle"></div>
-
       <div class="modal-body">
         <h3>Новый клиент</h3>
-
         <label class="field-label">Имя</label>
         <input id="client-name" placeholder="ФИО / имя" />
-
         <label class="field-label">Телефон</label>
         <input id="client-phone" placeholder="Телефон" />
-
         <label class="field-label">Telegram ID / username</label>
         <input id="client-tg" placeholder="Необязательно" />
       </div>
@@ -217,11 +198,9 @@
     </div>
   </div>
 
-  <!-- STORAGE MODAL -->
   <div id="modal-storage" class="modal">
     <div class="modal-sheet">
       <div class="sheet-handle"></div>
-
       <div class="modal-body">
         <h3>Добавить на склад</h3>
 
@@ -253,16 +232,13 @@
     </div>
   </div>
 
-  <!-- CLIENT HISTORY MODAL -->
   <div id="modal-client-history" class="modal">
     <div class="modal-sheet">
       <div class="sheet-handle"></div>
-
       <div class="modal-body">
         <h3 id="history-name">История клиента</h3>
         <div id="history-list"></div>
       </div>
-
       <div class="modal-footer">
         <button class="primary-btn" onclick="closeModal('modal-client-history')">Закрыть</button>
       </div>
