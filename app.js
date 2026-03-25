@@ -1,14 +1,7 @@
 const tg = window.Telegram.WebApp;
 
 const SUPABASE_URL = "https://hbciwqgfccdfnzrhiops.supabase.co";
-const SUPABASE_KEY = "sb_publishable_nmVB1s_PXivfUNyoTaQWuQ_b5G_dYY9";
-
-/*
-  ВСТАВЬ СЮДА 3 РЕАЛЬНЫХ TELEGRAM ID
-  Пример:
-  const ALLOWED_TELEGRAM_IDS = [123456789, 987654321, 555555555];
-*/
-const tg = window.Telegram.WebApp;
+const SUPABASE_KEY = "ВСТАВЬ_СЮДА_СВОЙ_PUBLISHABLE_KEY";
 
 const ALLOWED_TELEGRAM_IDS = [
   778403209,
@@ -16,42 +9,13 @@ const ALLOWED_TELEGRAM_IDS = [
   539387886
 ];
 
-function showDenied() {
-  document.getElementById("app-content").classList.add("hidden");
-  document.getElementById("access-denied").classList.remove("hidden");
-}
-
-async function init() {
-  const user = tg.initDataUnsafe?.user;
-  const telegramId = user?.id;
-
-  console.log("Telegram user:", user);
-  console.log("Current telegram id:", telegramId);
-  console.log("Allowed IDs:", ALLOWED_TELEGRAM_IDS);
-
-  if (!telegramId || !ALLOWED_TELEGRAM_IDS.includes(telegramId)) {
-    showDenied();
-    return;
-  }
-
-  document.getElementById("access-denied").classList.add("hidden");
-  document.getElementById("app-content").classList.remove("hidden");
-
-  tg.expand();
-
-  await loadData();
-  renderCalendar();
-  renderAll();
-}
-
-
 let allEvents = [];
 let clients = [];
 let storage = [];
 let currentEditId = null;
 let selectedDate = new Date().toISOString().split("T")[0];
 
-function getHeaders(extra = {}) {
+function headers(extra = {}) {
   return {
     apikey: SUPABASE_KEY,
     Authorization: "Bearer " + SUPABASE_KEY,
@@ -59,51 +23,51 @@ function getHeaders(extra = {}) {
   };
 }
 
-function safeAlert(message) {
-  if (tg?.showAlert) tg.showAlert(message);
-  else alert(message);
-}
-
-function haptic(type = "light") {
-  try {
-    tg?.HapticFeedback?.impactOccurred(type);
-  } catch (_) {}
-}
-
-async function init() {
-  if (!tg?.initDataUnsafe?.user?.id) {
-    showDenied();
-    return;
-  }
-
-  const telegramId = Number(tg.initDataUnsafe.user.id);
-  if (!ALLOWED_TELEGRAM_IDS.includes(telegramId)) {
-    showDenied();
-    return;
-  }
-
-  document.getElementById("access-denied").classList.add("hidden");
-  document.getElementById("app-content").classList.remove("hidden");
-
-  try {
-    tg.expand();
-    tg.setHeaderColor?.("#0b0b0f");
-    tg.setBackgroundColor?.("#0b0b0f");
-  } catch (_) {}
-
-  await loadData();
-  renderCalendar();
-  renderAll();
-}
-
 function showDenied() {
   document.getElementById("app-content").classList.add("hidden");
   document.getElementById("access-denied").classList.remove("hidden");
 }
 
+function showApp() {
+  document.getElementById("access-denied").classList.add("hidden");
+  document.getElementById("app-content").classList.remove("hidden");
+}
+
+function msg(text) {
+  if (tg?.showAlert) tg.showAlert(text);
+  else alert(text);
+}
+
+async function init() {
+  try {
+    const user = tg?.initDataUnsafe?.user;
+    const telegramId = user?.id;
+
+    if (!telegramId || !ALLOWED_TELEGRAM_IDS.includes(telegramId)) {
+      showDenied();
+      return;
+    }
+
+    showApp();
+
+    try {
+      tg.expand();
+      tg.setHeaderColor?.("#0b0b0f");
+      tg.setBackgroundColor?.("#0b0b0f");
+    } catch (_) {}
+
+    await loadData();
+    renderCalendar();
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    showDenied();
+  }
+}
+
 async function fetchTable(table) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*&order=id.desc`, {
-    headers: getHeaders()
+    headers: headers()
   });
   if (!res.ok) return [];
   return await res.json();
@@ -128,78 +92,68 @@ function renderAll() {
 
 function renderCalendar() {
   const strip = document.getElementById("calendar-strip");
-  if (!strip) return;
-
   strip.innerHTML = "";
-  const dayNames = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+
+  const days = ["вс","пн","вт","ср","чт","пт","сб"];
 
   for (let i = -2; i < 12; i++) {
     const d = new Date();
     d.setDate(d.getDate() + i);
 
     const iso = d.toISOString().split("T")[0];
+
     const card = document.createElement("button");
     card.className = `day-card ${iso === selectedDate ? "active" : ""}`;
-    card.type = "button";
     card.onclick = () => {
       selectedDate = iso;
       renderCalendar();
       renderEvents();
       updateStats();
-      haptic("light");
     };
 
     card.innerHTML = `
-      <span class="day-name">${dayNames[d.getDay()]}</span>
+      <span class="day-name">${days[d.getDay()]}</span>
       <span class="day-num">${d.getDate()}</span>
     `;
+
     strip.appendChild(card);
   }
 }
 
-function getStatusInfo(status) {
-  switch (status) {
-    case "in_progress":
-      return { label: "В работе", cls: "status-in_progress" };
-    case "done":
-      return { label: "Готово", cls: "status-done" };
-    default:
-      return { label: "Новый", cls: "status-new" };
-  }
-}
-
-function getSelectedDayEvents() {
-  return allEvents.filter(e => {
-    if (!e.start_date) return false;
-    return String(e.start_date).startsWith(selectedDate);
-  });
+function selectedEvents() {
+  return allEvents.filter(e => e.start_date && String(e.start_date).startsWith(selectedDate));
 }
 
 function updateStats() {
-  const filtered = getSelectedDayEvents();
-
-  const dayTotal = filtered.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-  const profitDay = filtered.reduce((s, e) => s + (Number(e.profit) || 0), 0);
+  const filtered = selectedEvents();
+  const dayTotal = filtered.reduce((s,e) => s + (Number(e.amount) || 0), 0);
+  const profitDay = filtered.reduce((s,e) => s + (Number(e.profit) || 0), 0);
 
   const weekAgo = new Date();
   weekAgo.setDate(weekAgo.getDate() - 7);
 
   const weekTotal = allEvents
     .filter(e => e.start_date && new Date(e.start_date) > weekAgo)
-    .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    .reduce((s,e) => s + (Number(e.amount) || 0), 0);
 
   document.getElementById("money-day").innerText = `$${dayTotal}`;
   document.getElementById("profit-day").innerText = `$${profitDay}`;
   document.getElementById("money-week").innerText = `$${weekTotal}`;
 
-  const cnt = filtered.length;
+  const count = filtered.length;
   document.getElementById("events-count").innerText =
-    cnt === 1 ? "1 заказ" : `${cnt} заказ${cnt >= 2 && cnt <= 4 ? "а" : "ов"}`;
+    count === 1 ? "1 заказ" : `${count} заказ${count >= 2 && count <= 4 ? "а" : "ов"}`;
+}
+
+function statusInfo(status) {
+  if (status === "in_progress") return ["В работе", "status-in_progress"];
+  if (status === "done") return ["Готово", "status-done"];
+  return ["Новый", "status-new"];
 }
 
 function renderEvents() {
   const container = document.getElementById("events");
-  const filtered = getSelectedDayEvents();
+  const filtered = selectedEvents();
 
   if (!filtered.length) {
     container.innerHTML = `<div class="empty-state">На выбранный день записей нет</div>`;
@@ -207,22 +161,18 @@ function renderEvents() {
   }
 
   container.innerHTML = filtered.map(e => {
-    const st = getStatusInfo(e.status);
+    const [label, cls] = statusInfo(e.status);
+    const time = e.start_date ? String(e.start_date).split("T")[1]?.slice(0,5) || "" : "";
     const amount = Number(e.amount) || 0;
     const profit = Number(e.profit) || 0;
-    const time = e.start_date ? String(e.start_date).split("T")[1]?.slice(0, 5) || "" : "";
-
-    const mediaHtml = e.media_url
-      ? `<img class="media-thumb" src="${e.media_url}" alt="media" />`
-      : "";
 
     return `
       <div class="card order-card" onclick="editOrder(${e.id})">
         <div class="order-left">
           <b>${escapeHtml(e.car_model || "Без авто")}</b><br>
           <small>${escapeHtml(e.client_name || "Клиент")}</small><br>
-          <span class="status-badge ${st.cls}">${st.label}</span>
-          ${mediaHtml}
+          <span class="status-badge ${cls}">${label}</span>
+          ${e.media_url ? `<img class="media-thumb" src="${e.media_url}" alt="media">` : ""}
         </div>
 
         <div class="order-right">
@@ -236,15 +186,15 @@ function renderEvents() {
 }
 
 function renderClients() {
-  const list = document.getElementById("clients-list");
+  const el = document.getElementById("clients-list");
 
   if (!clients.length) {
-    list.innerHTML = `<div class="empty-state">Клиентов пока нет</div>`;
+    el.innerHTML = `<div class="empty-state">Клиентов пока нет</div>`;
     return;
   }
 
-  list.innerHTML = clients.map(c => `
-    <div class="card client-card" onclick="showHistory('${escapeJsString(c.name || "")}')">
+  el.innerHTML = clients.map(c => `
+    <div class="card client-card" onclick="showHistory('${escapeJs(c.name || "")}')">
       <div>
         <b>${escapeHtml(c.name || "Без имени")}</b><br>
         <small>${escapeHtml(c.phone || "")}</small>
@@ -258,35 +208,32 @@ function renderStorage() {
   const films = storage.filter(s => s.type === "film");
   const prods = storage.filter(s => s.type !== "film");
 
-  const filmList = document.getElementById("film-list");
-  const productList = document.getElementById("product-list");
-
-  filmList.innerHTML = films.length
-    ? films.map(item => `
-        <div class="card storage-card">
-          <div class="storage-left">
-            <b>${escapeHtml(item.name || "Плёнка")}</b>
-          </div>
-          <div class="storage-right">
-            <div class="storage-qty">${Number(item.quantity || 0)} м</div>
-            <div class="storage-price">$${Number(item.price_per_unit || 0)}/м</div>
-          </div>
+  document.getElementById("film-list").innerHTML = films.length
+    ? films.map(s => `
+      <div class="card storage-card">
+        <div>
+          <b>${escapeHtml(s.name || "Плёнка")}</b>
         </div>
-      `).join("")
+        <div>
+          <div class="storage-qty">${Number(s.quantity || 0)} м</div>
+          <div class="storage-price">$${Number(s.price_per_unit || 0)}/м</div>
+        </div>
+      </div>
+    `).join("")
     : `<div class="empty-state">Плёнки пока нет</div>`;
 
-  productList.innerHTML = prods.length
-    ? prods.map(item => `
-        <div class="card storage-card">
-          <div class="storage-left">
-            <b>${escapeHtml(item.name || "Товар")}</b>
-          </div>
-          <div class="storage-right">
-            <div class="storage-qty">${Number(item.quantity || 0)} шт</div>
-            <div class="storage-price">$${Number(item.price_per_unit || 0)}/шт</div>
-          </div>
+  document.getElementById("product-list").innerHTML = prods.length
+    ? prods.map(s => `
+      <div class="card storage-card">
+        <div>
+          <b>${escapeHtml(s.name || "Товар")}</b>
         </div>
-      `).join("")
+        <div>
+          <div class="storage-qty">${Number(s.quantity || 0)} шт</div>
+          <div class="storage-price">$${Number(s.price_per_unit || 0)}/шт</div>
+        </div>
+      </div>
+    `).join("")
     : `<div class="empty-state">Товаров пока нет</div>`;
 }
 
@@ -295,12 +242,12 @@ function renderFilmsSelect() {
   const films = storage.filter(s => s.type === "film");
 
   select.innerHTML = `<option value="">Без плёнки</option>` +
-    films.map(f => `<option value="${escapeHtmlAttr(f.name || "")}">${escapeHtml(f.name || "")}</option>`).join("");
+    films.map(f => `<option value="${escapeAttr(f.name || "")}">${escapeHtml(f.name || "")}</option>`).join("");
 }
 
 function updateClientsDatalist() {
   const dl = document.getElementById("clients-list-options");
-  dl.innerHTML = clients.map(c => `<option value="${escapeHtmlAttr(c.name || "")}"></option>`).join("");
+  dl.innerHTML = clients.map(c => `<option value="${escapeAttr(c.name || "")}"></option>`).join("");
 }
 
 function showPage(page, el) {
@@ -309,39 +256,30 @@ function showPage(page, el) {
 
   document.querySelectorAll(".nav-item").forEach(i => i.classList.remove("active"));
   if (el) el.classList.add("active");
-
-  haptic("light");
 }
 
 function openOrderModal() {
   resetOrderForm();
   document.getElementById("modal-order").classList.add("open");
-  haptic("medium");
 }
 
 function openClientModal() {
   document.getElementById("modal-client").classList.add("open");
-  haptic("medium");
 }
 
 function openStorageModal() {
   document.getElementById("modal-storage").classList.add("open");
-  haptic("medium");
 }
 
 function closeModal(id) {
   document.getElementById(id).classList.remove("open");
 
-  if (id === "modal-order") {
-    resetOrderForm();
-  }
-
+  if (id === "modal-order") resetOrderForm();
   if (id === "modal-client") {
     document.getElementById("client-name").value = "";
     document.getElementById("client-phone").value = "";
     document.getElementById("client-tg").value = "";
   }
-
   if (id === "modal-storage") {
     document.getElementById("storage-type").value = "film";
     document.getElementById("st-name").value = "";
@@ -352,7 +290,6 @@ function closeModal(id) {
 
 function resetOrderForm() {
   currentEditId = null;
-
   document.getElementById("order-modal-title").innerText = "Новый заказ";
   document.getElementById("btn-delete-order").classList.add("hidden");
 
@@ -373,7 +310,6 @@ function previewMedia(event) {
   const file = event.target.files?.[0];
   const preview = document.getElementById("preview");
   preview.innerHTML = "";
-
   if (!file) return;
 
   const reader = new FileReader();
@@ -392,16 +328,14 @@ async function uploadFile(file) {
 
   const res = await fetch(`${SUPABASE_URL}/storage/v1/object/cars/${fileName}`, {
     method: "POST",
-    headers: getHeaders({
+    headers: headers({
       "Content-Type": file.type,
       "x-upsert": "false"
     }),
     body: file
   });
 
-  if (!res.ok) {
-    throw new Error("Не удалось загрузить файл");
-  }
+  if (!res.ok) throw new Error("Ошибка загрузки файла");
 
   return `${SUPABASE_URL}/storage/v1/object/public/cars/${fileName}`;
 }
@@ -417,48 +351,37 @@ async function submitOrder() {
   const filmQty = parseFloat(document.getElementById("film-qty").value) || 0;
   const services = document.getElementById("services").value.trim();
 
-  if (!clientName) return safeAlert("Введите имя клиента");
-  if (!carModel) return safeAlert("Введите авто");
-  if (!startDate) return safeAlert("Укажи дату начала");
-
-  let mediaUrl = null;
-  const file = document.getElementById("media").files?.[0];
+  if (!clientName) return msg("Введите имя клиента");
+  if (!carModel) return msg("Введите авто");
+  if (!startDate) return msg("Укажи дату начала");
 
   try {
-    if (file) {
-      mediaUrl = await uploadFile(file);
-    }
+    let mediaUrl = null;
+    const file = document.getElementById("media").files?.[0];
+    if (file) mediaUrl = await uploadFile(file);
 
-    // автосоздание клиента
     if (!clients.some(c => String(c.name).toLowerCase() === clientName.toLowerCase())) {
       await fetch(`${SUPABASE_URL}/rest/v1/clients`, {
         method: "POST",
-        headers: getHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
-          name: clientName
-        })
+        headers: headers({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ name: clientName })
       });
     }
 
-    // себестоимость
     let cost = 0;
-    const selectedFilm = storage.find(s => s.type === "film" && s.name === filmName);
-    if (selectedFilm && filmQty > 0) {
-      cost = (Number(selectedFilm.price_per_unit) || 0) * filmQty;
+    const film = storage.find(s => s.type === "film" && s.name === filmName);
+    if (film && filmQty > 0) {
+      cost = (Number(film.price_per_unit) || 0) * filmQty;
     }
 
     const profit = amount - cost;
 
-    // списание плёнки только при создании нового заказа
-    if (!currentEditId && selectedFilm && filmQty > 0) {
-      const newQty = (Number(selectedFilm.quantity) || 0) - filmQty;
-
-      await fetch(`${SUPABASE_URL}/rest/v1/storage?id=eq.${selectedFilm.id}`, {
+    if (!currentEditId && film && filmQty > 0) {
+      const newQty = (Number(film.quantity) || 0) - filmQty;
+      await fetch(`${SUPABASE_URL}/rest/v1/storage?id=eq.${film.id}`, {
         method: "PATCH",
-        headers: getHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
-          quantity: newQty
-        })
+        headers: headers({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ quantity: newQty })
       });
     }
 
@@ -486,21 +409,18 @@ async function submitOrder() {
 
     const res = await fetch(url, {
       method,
-      headers: getHeaders({ "Content-Type": "application/json" }),
+      headers: headers({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload)
     });
 
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(errText || "Ошибка сохранения заказа");
-    }
+    if (!res.ok) throw new Error("Не удалось сохранить заказ");
 
     closeModal("modal-order");
     await loadData();
     renderAll();
-    haptic("medium");
-  } catch (err) {
-    safeAlert(err.message || "Не удалось сохранить заказ");
+  } catch (e) {
+    console.error(e);
+    msg("Ошибка сохранения заказа");
   }
 }
 
@@ -509,47 +429,41 @@ function editOrder(id) {
   if (!e) return;
 
   currentEditId = id;
-
-  document.getElementById("order-modal-title").innerText = "Редактирование заказа";
+  document.getElementById("order-modal-title").innerText = "Правка заказа";
   document.getElementById("btn-delete-order").classList.remove("hidden");
 
   document.getElementById("car-client").value = e.client_name || "";
   document.getElementById("car-model").value = e.car_model || "";
-  document.getElementById("date-start").value = e.start_date ? String(e.start_date).slice(0, 16) : "";
-  document.getElementById("date-end").value = e.end_date ? String(e.end_date).slice(0, 16) : "";
+  document.getElementById("date-start").value = e.start_date ? String(e.start_date).slice(0,16) : "";
+  document.getElementById("date-end").value = e.end_date ? String(e.end_date).slice(0,16) : "";
   document.getElementById("status").value = e.status || "new";
   document.getElementById("order-amount").value = e.amount || "";
   document.getElementById("film-select").value = e.film_used || "";
   document.getElementById("film-qty").value = e.film_amount || 0;
   document.getElementById("services").value = e.services || "";
-
-  const preview = document.getElementById("preview");
-  preview.innerHTML = e.media_url ? `<img src="${e.media_url}" alt="preview" />` : "";
+  document.getElementById("preview").innerHTML = e.media_url ? `<img src="${e.media_url}" alt="preview">` : "";
 
   document.getElementById("modal-order").classList.add("open");
-  haptic("medium");
 }
 
 async function deleteOrder() {
   if (!currentEditId) return;
-
-  const ok = confirm("Удалить заказ?");
-  if (!ok) return;
+  if (!confirm("Удалить заказ?")) return;
 
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/events?id=eq.${currentEditId}`, {
       method: "DELETE",
-      headers: getHeaders()
+      headers: headers()
     });
 
-    if (!res.ok) throw new Error("Не удалось удалить заказ");
+    if (!res.ok) throw new Error("Не удалось удалить");
 
     closeModal("modal-order");
     await loadData();
     renderAll();
-    haptic("medium");
-  } catch (err) {
-    safeAlert(err.message || "Ошибка удаления");
+  } catch (e) {
+    console.error(e);
+    msg("Ошибка удаления заказа");
   }
 }
 
@@ -558,12 +472,12 @@ async function submitClient() {
   const phone = document.getElementById("client-phone").value.trim();
   const telegramId = document.getElementById("client-tg").value.trim();
 
-  if (!name) return safeAlert("Введите имя клиента");
+  if (!name) return msg("Введите имя клиента");
 
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/clients`, {
       method: "POST",
-      headers: getHeaders({ "Content-Type": "application/json" }),
+      headers: headers({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         name,
         phone,
@@ -576,9 +490,9 @@ async function submitClient() {
     closeModal("modal-client");
     await loadData();
     renderAll();
-    haptic("medium");
-  } catch (err) {
-    safeAlert(err.message || "Ошибка сохранения клиента");
+  } catch (e) {
+    console.error(e);
+    msg("Ошибка сохранения клиента");
   }
 }
 
@@ -588,12 +502,12 @@ async function submitStorage() {
   const quantity = parseFloat(document.getElementById("st-qty").value) || 0;
   const pricePerUnit = parseFloat(document.getElementById("st-price").value) || 0;
 
-  if (!name) return safeAlert("Введите название материала");
+  if (!name) return msg("Введите название материала");
 
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/storage`, {
       method: "POST",
-      headers: getHeaders({ "Content-Type": "application/json" }),
+      headers: headers({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         type,
         name,
@@ -607,9 +521,9 @@ async function submitStorage() {
     closeModal("modal-storage");
     await loadData();
     renderAll();
-    haptic("medium");
-  } catch (err) {
-    safeAlert(err.message || "Ошибка добавления материала");
+  } catch (e) {
+    console.error(e);
+    msg("Ошибка добавления материала");
   }
 }
 
@@ -617,19 +531,17 @@ function showHistory(name) {
   const history = allEvents.filter(e => e.client_name === name);
 
   document.getElementById("history-name").innerText = name;
-
   document.getElementById("history-list").innerHTML = history.length
     ? history.map(h => `
-        <div class="history-item">
-          <small>${h.start_date ? String(h.start_date).split("T")[0] : "Без даты"}</small><br>
-          <b>${escapeHtml(h.car_model || "Без авто")}</b><br>
-          <small>$${Number(h.amount || 0)} | прибыль: ${Number(h.profit || 0)}$</small>
-        </div>
-      `).join("")
+      <div class="history-item">
+        <small>${h.start_date ? String(h.start_date).split("T")[0] : "Без даты"}</small><br>
+        <b>${escapeHtml(h.car_model || "Без авто")}</b><br>
+        <small>$${Number(h.amount || 0)} | прибыль: ${Number(h.profit || 0)}$</small>
+      </div>
+    `).join("")
     : `<div class="empty-state">Истории пока нет</div>`;
 
   document.getElementById("modal-client-history").classList.add("open");
-  haptic("medium");
 }
 
 function escapeHtml(str) {
@@ -641,11 +553,11 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
-function escapeHtmlAttr(str) {
+function escapeAttr(str) {
   return escapeHtml(str).replaceAll("`", "");
 }
 
-function escapeJsString(str) {
+function escapeJs(str) {
   return String(str).replaceAll("\\", "\\\\").replaceAll("'", "\\'");
 }
 
