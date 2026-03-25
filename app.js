@@ -1,7 +1,7 @@
 const tg = window.Telegram.WebApp;
 
 const SUPABASE_URL = "https://hbciwqgfccdfnzrhiops.supabase.co";
-const SUPABASE_KEY = "ВСТАВЬ_СЮДА_СВОЙ_PUBLISHABLE_KEY";
+const SUPABASE_KEY = "sb_publishable_nmVB1s_PXivfUNyoTaQWuQ_b5G_dYY9";
 
 const ALLOWED_TELEGRAM_IDS = [
   778403209,
