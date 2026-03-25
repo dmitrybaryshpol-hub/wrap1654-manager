@@ -23,9 +23,23 @@ function headers(extra = {}) {
   };
 }
 
-function showDenied() {
+function showDenied(extraText = "") {
   document.getElementById("app-content").classList.add("hidden");
   document.getElementById("access-denied").classList.remove("hidden");
+
+  if (extraText) {
+    const box = document.querySelector(".denied-box");
+    if (box && !document.getElementById("debug-access")) {
+      const p = document.createElement("p");
+      p.id = "debug-access";
+      p.style.marginTop = "14px";
+      p.style.fontSize = "12px";
+      p.style.color = "#8a8a95";
+      p.style.whiteSpace = "pre-line";
+      p.textContent = extraText;
+      box.appendChild(p);
+    }
+  }
 }
 
 function showApp() {
@@ -43,8 +57,17 @@ async function init() {
     const user = tg?.initDataUnsafe?.user;
     const telegramId = user?.id;
 
-    if (!telegramId || !ALLOWED_TELEGRAM_IDS.includes(telegramId)) {
-      showDenied();
+    console.log("Telegram user:", user);
+    console.log("Telegram ID:", telegramId);
+    console.log("Allowed IDs:", ALLOWED_TELEGRAM_IDS);
+
+    if (!telegramId) {
+      showDenied("Не найден Telegram user.id\nОткрой приложение именно внутри Telegram.");
+      return;
+    }
+
+    if (!ALLOWED_TELEGRAM_IDS.includes(telegramId)) {
+      showDenied(`Текущий Telegram ID: ${telegramId}\nНет в списке разрешённых.`);
       return;
     }
 
@@ -61,7 +84,7 @@ async function init() {
     renderAll();
   } catch (e) {
     console.error(e);
-    showDenied();
+    showDenied("Ошибка инициализации.\nПроверь консоль и свежесть деплоя.");
   }
 }
 
