@@ -1,7 +1,7 @@
 const tg = window.Telegram?.WebApp;
 
 const SUPABASE_URL = "https://hbciwqgfccdfnzrhiops.supabase.co";
-const SUPABASE_KEY = "sb_publishable_nmVB1s_PXivfUNyoTaQWuQ_b5G_dYY9";
+const SUPABASE_KEY = "ВСТАВЬ_СЮДА_PUBLISHABLE_ИЛИ_ANON_KEY";
 
 let allEvents = [];
 let clients = [];
@@ -151,6 +151,8 @@ function renderAll() {
 
 function renderCalendar() {
   const strip = document.getElementById("calendar-strip");
+  if (!strip) return;
+
   strip.innerHTML = "";
 
   const days = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
@@ -195,13 +197,20 @@ function updateStats() {
     .filter(e => e.start_date && new Date(e.start_date) > weekAgo)
     .reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
-  document.getElementById("money-day").innerText = `$${dayTotal}`;
-  document.getElementById("profit-day").innerText = `$${profitDay}`;
-  document.getElementById("money-week").innerText = `$${weekTotal}`;
+  const moneyDay = document.getElementById("money-day");
+  const profitDayEl = document.getElementById("profit-day");
+  const moneyWeek = document.getElementById("money-week");
+  const eventsCount = document.getElementById("events-count");
+
+  if (moneyDay) moneyDay.innerText = `$${dayTotal}`;
+  if (profitDayEl) profitDayEl.innerText = `$${profitDay}`;
+  if (moneyWeek) moneyWeek.innerText = `$${weekTotal}`;
 
   const count = filtered.length;
-  document.getElementById("events-count").innerText =
-    count === 1 ? "1 заказ" : `${count} заказ${count >= 2 && count <= 4 ? "а" : "ов"}`;
+  if (eventsCount) {
+    eventsCount.innerText =
+      count === 1 ? "1 заказ" : `${count} заказ${count >= 2 && count <= 4 ? "а" : "ов"}`;
+  }
 }
 
 function statusInfo(status) {
@@ -212,6 +221,8 @@ function statusInfo(status) {
 
 function renderEvents() {
   const container = document.getElementById("events");
+  if (!container) return;
+
   const filtered = selectedEvents();
 
   if (!filtered.length) {
@@ -246,6 +257,7 @@ function renderEvents() {
 
 function renderClients() {
   const el = document.getElementById("clients-list");
+  if (!el) return;
 
   if (!clients.length) {
     el.innerHTML = `<div class="empty-state">Клиентов пока нет</div>`;
@@ -264,10 +276,14 @@ function renderClients() {
 }
 
 function renderStorage() {
+  const filmList = document.getElementById("film-list");
+  const productList = document.getElementById("product-list");
+  if (!filmList || !productList) return;
+
   const films = storage.filter(s => s.type === "film");
   const prods = storage.filter(s => s.type !== "film");
 
-  document.getElementById("film-list").innerHTML = films.length
+  filmList.innerHTML = films.length
     ? films.map(s => `
       <div class="card storage-card">
         <div>
@@ -281,7 +297,7 @@ function renderStorage() {
     `).join("")
     : `<div class="empty-state">Плёнки пока нет</div>`;
 
-  document.getElementById("product-list").innerHTML = prods.length
+  productList.innerHTML = prods.length
     ? prods.map(s => `
       <div class="card storage-card">
         <div>
@@ -298,6 +314,8 @@ function renderStorage() {
 
 function renderFilmsSelect() {
   const select = document.getElementById("film-select");
+  if (!select) return;
+
   const films = storage.filter(s => s.type === "film");
 
   select.innerHTML = `<option value="">Без плёнки</option>` +
@@ -306,12 +324,14 @@ function renderFilmsSelect() {
 
 function updateClientsDatalist() {
   const dl = document.getElementById("clients-list-options");
+  if (!dl) return;
+
   dl.innerHTML = clients.map(c => `<option value="${escapeAttr(c.name || "")}"></option>`).join("");
 }
 
 function showPage(page, el) {
   document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
-  document.getElementById("page-" + page).classList.add("active");
+  document.getElementById("page-" + page)?.classList.add("active");
 
   document.querySelectorAll(".nav-item").forEach(i => i.classList.remove("active"));
   if (el) el.classList.add("active");
@@ -319,55 +339,80 @@ function showPage(page, el) {
 
 function openOrderModal() {
   resetOrderForm();
-  document.getElementById("modal-order").classList.add("open");
+  document.getElementById("modal-order")?.classList.add("open");
 }
 
 function openClientModal() {
-  document.getElementById("modal-client").classList.add("open");
+  document.getElementById("modal-client")?.classList.add("open");
 }
 
 function openStorageModal() {
-  document.getElementById("modal-storage").classList.add("open");
+  document.getElementById("modal-storage")?.classList.add("open");
 }
 
 function closeModal(id) {
-  document.getElementById(id).classList.remove("open");
+  document.getElementById(id)?.classList.remove("open");
 
   if (id === "modal-order") resetOrderForm();
+
   if (id === "modal-client") {
-    document.getElementById("client-name").value = "";
-    document.getElementById("client-phone").value = "";
-    document.getElementById("client-tg").value = "";
+    const name = document.getElementById("client-name");
+    const phone = document.getElementById("client-phone");
+    const tgInput = document.getElementById("client-tg");
+    if (name) name.value = "";
+    if (phone) phone.value = "";
+    if (tgInput) tgInput.value = "";
   }
+
   if (id === "modal-storage") {
-    document.getElementById("storage-type").value = "film";
-    document.getElementById("st-name").value = "";
-    document.getElementById("st-qty").value = "";
-    document.getElementById("st-price").value = "";
+    const type = document.getElementById("storage-type");
+    const stName = document.getElementById("st-name");
+    const stQty = document.getElementById("st-qty");
+    const stPrice = document.getElementById("st-price");
+    if (type) type.value = "film";
+    if (stName) stName.value = "";
+    if (stQty) stQty.value = "";
+    if (stPrice) stPrice.value = "";
   }
 }
 
 function resetOrderForm() {
   currentEditId = null;
-  document.getElementById("order-modal-title").innerText = "Новый заказ";
-  document.getElementById("btn-delete-order").classList.add("hidden");
 
-  document.getElementById("car-client").value = "";
-  document.getElementById("car-model").value = "";
-  document.getElementById("date-start").value = "";
-  document.getElementById("date-end").value = "";
-  document.getElementById("status").value = "new";
-  document.getElementById("order-amount").value = "";
-  document.getElementById("film-select").value = "";
-  document.getElementById("film-qty").value = "0";
-  document.getElementById("services").value = "";
-  document.getElementById("media").value = "";
-  document.getElementById("preview").innerHTML = "";
+  const title = document.getElementById("order-modal-title");
+  const delBtn = document.getElementById("btn-delete-order");
+  const carClient = document.getElementById("car-client");
+  const carModel = document.getElementById("car-model");
+  const dateStart = document.getElementById("date-start");
+  const dateEnd = document.getElementById("date-end");
+  const status = document.getElementById("status");
+  const amount = document.getElementById("order-amount");
+  const filmSelect = document.getElementById("film-select");
+  const filmQty = document.getElementById("film-qty");
+  const services = document.getElementById("services");
+  const media = document.getElementById("media");
+  const preview = document.getElementById("preview");
+
+  if (title) title.innerText = "Новый заказ";
+  if (delBtn) delBtn.classList.add("hidden");
+  if (carClient) carClient.value = "";
+  if (carModel) carModel.value = "";
+  if (dateStart) dateStart.value = "";
+  if (dateEnd) dateEnd.value = "";
+  if (status) status.value = "new";
+  if (amount) amount.value = "";
+  if (filmSelect) filmSelect.value = "";
+  if (filmQty) filmQty.value = "0";
+  if (services) services.value = "";
+  if (media) media.value = "";
+  if (preview) preview.innerHTML = "";
 }
 
 function previewMedia(event) {
   const file = event.target.files?.[0];
   const preview = document.getElementById("preview");
+  if (!preview) return;
+
   preview.innerHTML = "";
   if (!file) return;
 
@@ -400,15 +445,15 @@ async function uploadFile(file) {
 }
 
 async function submitOrder() {
-  const clientName = document.getElementById("car-client").value.trim();
-  const carModel = document.getElementById("car-model").value.trim();
-  const amount = parseInt(document.getElementById("order-amount").value, 10) || 0;
-  const startDate = document.getElementById("date-start").value || null;
-  const endDate = document.getElementById("date-end").value || null;
-  const status = document.getElementById("status").value;
-  const filmName = document.getElementById("film-select").value;
-  const filmQty = parseFloat(document.getElementById("film-qty").value) || 0;
-  const services = document.getElementById("services").value.trim();
+  const clientName = document.getElementById("car-client")?.value.trim() || "";
+  const carModel = document.getElementById("car-model")?.value.trim() || "";
+  const amount = parseInt(document.getElementById("order-amount")?.value, 10) || 0;
+  const startDate = document.getElementById("date-start")?.value || null;
+  const endDate = document.getElementById("date-end")?.value || null;
+  const status = document.getElementById("status")?.value || "new";
+  const filmName = document.getElementById("film-select")?.value || "";
+  const filmQty = parseFloat(document.getElementById("film-qty")?.value) || 0;
+  const services = document.getElementById("services")?.value.trim() || "";
 
   if (!clientName) return msg("Введите имя клиента");
   if (!carModel) return msg("Введите авто");
@@ -416,7 +461,7 @@ async function submitOrder() {
 
   try {
     let mediaUrl = null;
-    const file = document.getElementById("media").files?.[0];
+    const file = document.getElementById("media")?.files?.[0];
     if (file) mediaUrl = await uploadFile(file);
 
     if (!clients.some(c => String(c.name).toLowerCase() === clientName.toLowerCase())) {
@@ -488,21 +533,34 @@ function editOrder(id) {
   if (!e) return;
 
   currentEditId = id;
-  document.getElementById("order-modal-title").innerText = "Правка заказа";
-  document.getElementById("btn-delete-order").classList.remove("hidden");
 
-  document.getElementById("car-client").value = e.client_name || "";
-  document.getElementById("car-model").value = e.car_model || "";
-  document.getElementById("date-start").value = e.start_date ? String(e.start_date).slice(0, 16) : "";
-  document.getElementById("date-end").value = e.end_date ? String(e.end_date).slice(0, 16) : "";
-  document.getElementById("status").value = e.status || "new";
-  document.getElementById("order-amount").value = e.amount || "";
-  document.getElementById("film-select").value = e.film_used || "";
-  document.getElementById("film-qty").value = e.film_amount || 0;
-  document.getElementById("services").value = e.services || "";
-  document.getElementById("preview").innerHTML = e.media_url ? `<img src="${e.media_url}" alt="preview">` : "";
+  const title = document.getElementById("order-modal-title");
+  const delBtn = document.getElementById("btn-delete-order");
+  const carClient = document.getElementById("car-client");
+  const carModel = document.getElementById("car-model");
+  const dateStart = document.getElementById("date-start");
+  const dateEnd = document.getElementById("date-end");
+  const status = document.getElementById("status");
+  const amount = document.getElementById("order-amount");
+  const filmSelect = document.getElementById("film-select");
+  const filmQty = document.getElementById("film-qty");
+  const services = document.getElementById("services");
+  const preview = document.getElementById("preview");
 
-  document.getElementById("modal-order").classList.add("open");
+  if (title) title.innerText = "Правка заказа";
+  if (delBtn) delBtn.classList.remove("hidden");
+  if (carClient) carClient.value = e.client_name || "";
+  if (carModel) carModel.value = e.car_model || "";
+  if (dateStart) dateStart.value = e.start_date ? String(e.start_date).slice(0, 16) : "";
+  if (dateEnd) dateEnd.value = e.end_date ? String(e.end_date).slice(0, 16) : "";
+  if (status) status.value = e.status || "new";
+  if (amount) amount.value = e.amount || "";
+  if (filmSelect) filmSelect.value = e.film_used || "";
+  if (filmQty) filmQty.value = e.film_amount || 0;
+  if (services) services.value = e.services || "";
+  if (preview) preview.innerHTML = e.media_url ? `<img src="${e.media_url}" alt="preview">` : "";
+
+  document.getElementById("modal-order")?.classList.add("open");
 }
 
 async function deleteOrder() {
@@ -527,9 +585,9 @@ async function deleteOrder() {
 }
 
 async function submitClient() {
-  const name = document.getElementById("client-name").value.trim();
-  const phone = document.getElementById("client-phone").value.trim();
-  const telegramId = document.getElementById("client-tg").value.trim();
+  const name = document.getElementById("client-name")?.value.trim() || "";
+  const phone = document.getElementById("client-phone")?.value.trim() || "";
+  const telegramId = document.getElementById("client-tg")?.value.trim() || "";
 
   if (!name) return msg("Введите имя клиента");
 
@@ -556,10 +614,10 @@ async function submitClient() {
 }
 
 async function submitStorage() {
-  const type = document.getElementById("storage-type").value;
-  const name = document.getElementById("st-name").value.trim();
-  const quantity = parseFloat(document.getElementById("st-qty").value) || 0;
-  const pricePerUnit = parseFloat(document.getElementById("st-price").value) || 0;
+  const type = document.getElementById("storage-type")?.value || "film";
+  const name = document.getElementById("st-name")?.value.trim() || "";
+  const quantity = parseFloat(document.getElementById("st-qty")?.value) || 0;
+  const pricePerUnit = parseFloat(document.getElementById("st-price")?.value) || 0;
 
   if (!name) return msg("Введите название материала");
 
@@ -589,18 +647,24 @@ async function submitStorage() {
 function showHistory(name) {
   const history = allEvents.filter(e => e.client_name === name);
 
-  document.getElementById("history-name").innerText = name;
-  document.getElementById("history-list").innerHTML = history.length
-    ? history.map(h => `
-      <div class="history-item">
-        <small>${h.start_date ? String(h.start_date).split("T")[0] : "Без даты"}</small><br>
-        <b>${escapeHtml(h.car_model || "Без авто")}</b><br>
-        <small>$${Number(h.amount || 0)} | прибыль: ${Number(h.profit || 0)}$</small>
-      </div>
-    `).join("")
-    : `<div class="empty-state">Истории пока нет</div>`;
+  const historyName = document.getElementById("history-name");
+  const historyList = document.getElementById("history-list");
 
-  document.getElementById("modal-client-history").classList.add("open");
+  if (historyName) historyName.innerText = name;
+
+  if (historyList) {
+    historyList.innerHTML = history.length
+      ? history.map(h => `
+        <div class="history-item">
+          <small>${h.start_date ? String(h.start_date).split("T")[0] : "Без даты"}</small><br>
+          <b>${escapeHtml(h.car_model || "Без авто")}</b><br>
+          <small>$${Number(h.amount || 0)} | прибыль: ${Number(h.profit || 0)}$</small>
+        </div>
+      `).join("")
+      : `<div class="empty-state">Истории пока нет</div>`;
+  }
+
+  document.getElementById("modal-client-history")?.classList.add("open");
 }
 
 function escapeHtml(str) {
