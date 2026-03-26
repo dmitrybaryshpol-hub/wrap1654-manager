@@ -2,7 +2,7 @@
 // SUPABASE CONFIG
 // =========================
 const SUPABASE_URL = 'https://hbcivwqfcdofnzrhiops.supabase.co';
-const SUPABASE_ANON_KEY = 'ВСТАВЬ_СЮДА_СВОЙ_ANON_KEY';
+const SUPABASE_ANON_KEY = 'sb_secret_Cg0vPCkFknD8QQgEPExRJg_GSORa-dQ';
 
 // =========================
 // INIT SUPABASE
