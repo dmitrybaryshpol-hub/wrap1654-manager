@@ -72,7 +72,7 @@ async function checkTelegramAccess() {
     throw new Error("Не найден Telegram initData. Открой приложение именно внутри Telegram.");
   }
 
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/telegram-auth`, {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/smart-handler`, {
     method: "POST",
     headers: headers({
       "Content-Type": "application/json"
