@@ -10,6 +10,9 @@ let currentEditId = null;
 let selectedDate = new Date().toISOString().split("T")[0];
 let currentTelegramUser = null;
 
+console.log("Function URL:", `${SUPABASE_URL}/functions/v1/smart-handler`);
+console.log("Telegram initData exists:", !!tg.initData);
+
 function headers(extra = {}) {
   return {
     apikey: SUPABASE_KEY,
