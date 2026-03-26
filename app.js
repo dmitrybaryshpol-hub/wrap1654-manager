@@ -61,42 +61,33 @@ async function checkTelegramAccess() {
     throw new Error("Приложение должно быть открыто внутри Telegram.");
   }
 
-  try {
-    tg.ready();
-    tg.expand();
-    tg.setHeaderColor?.("#0b0b0f");
-    tg.setBackgroundColor?.("#0b0b0f");
-  } catch (_) {}
+  tg.ready();
+  tg.expand();
 
   if (!tg.initData || typeof tg.initData !== "string" || !tg.initData.trim()) {
-    throw new Error("Не найден Telegram initData. Открой приложение именно внутри Telegram.");
+    throw new Error("Не найден Telegram initData.");
   }
 
   const res = await fetch(`${SUPABASE_URL}/functions/v1/smart-handler`, {
     method: "POST",
-    headers: headers({
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: "Bearer " + SUPABASE_KEY,
       "Content-Type": "application/json"
-    }),
+    },
     body: JSON.stringify({
       initData: tg.initData
     })
   });
 
-  let result = null;
+  const result = await res.json();
 
-  try {
-    result = await res.json();
-  } catch (_) {
-    throw new Error("Функция авторизации вернула некорректный ответ.");
-  }
-
-  if (!res.ok || !result?.ok) {
+  if (!res.ok || !result.ok) {
     throw new Error(result?.error || "Доступ запрещён.");
   }
 
   return result;
 }
-
 async function init() {
   try {
     const authResult = await checkTelegramAccess();
