@@ -1,7 +1,7 @@
 const tg = window.Telegram?.WebApp;
 
 const SUPABASE_URL = "https://hbciwqgfccdfnzrhiops.supabase.co";
-const SUPABASE_KEY = "sb_publishable_nmVB1s_PXivfUNyoTaQWuQ_b5G_dYY9";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhiY2l3cWdmY2NkZm56cmhpb3BzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDEyODI5MCwiZXhwIjoyMDg5NzA0MjkwfQ.yGBv3KzGo1E9t8Zy5jfZGzH-50dXtxqnVZtpj4LB9hk";
 
 let allEvents = [];
 let clients = [];
