@@ -617,7 +617,8 @@ async function submitStorage() {
   const type = document.getElementById("storage-type")?.value || "film";
   const name = document.getElementById("st-name")?.value.trim() || "";
   const qty = parseFloat(document.getElementById("st-qty")?.value) || 0;
-  const pricePerUnit = parseFloat(document.getElementById("st-price")?.value) || 0;
+  const price_in = Number(document.getElementById("price_in").value);
+  const price_out = Number(document.getElementById("price_out").value);
 
   if (!name) return msg("Введите название материала");
 
