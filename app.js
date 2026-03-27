@@ -1,7 +1,7 @@
 const tg = window.Telegram?.WebApp;
 
 const SUPABASE_URL = "https://hbciwqgfccdfnzrhiops.supabase.co";
-const SUPABASE_KEY = "sb_publishable_nmVB1s_PXivfUNyoTaQWuQ_b5G_dYY9";
+const SUPABASE_KEY = "ВСТАВЬ_СЮДА_СВОЙ_PUBLISHABLE_ИЛИ_ANON_KEY";
 
 let allEvents = [];
 let clients = [];
@@ -10,8 +10,6 @@ let currentEditId = null;
 let selectedDate = new Date().toISOString().split("T")[0];
 let currentTelegramUser = null;
 
-console.log("Function URL:", `${SUPABASE_URL}/functions/v1/smart-handler`);
-console.log("Telegram initData exists:", !!tg?.initData);
 function headers(extra = {}) {
   return {
     apikey: SUPABASE_KEY,
@@ -63,36 +61,42 @@ async function checkTelegramAccess() {
     throw new Error("Приложение должно быть открыто внутри Telegram.");
   }
 
-  tg.ready();
-  tg.expand();
+  try {
+    tg.ready();
+    tg.expand();
+    tg.setHeaderColor?.("#0b0b0f");
+    tg.setBackgroundColor?.("#0b0b0f");
+  } catch (_) {}
 
   if (!tg.initData || typeof tg.initData !== "string" || !tg.initData.trim()) {
-    throw new Error("Не найден Telegram initData.");
+    throw new Error("Не найден Telegram initData. Открой приложение именно внутри Telegram.");
   }
 
   const res = await fetch(`${SUPABASE_URL}/functions/v1/smart-handler`, {
     method: "POST",
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: "Bearer " + SUPABASE_KEY,
+    headers: headers({
       "Content-Type": "application/json"
-    },
+    }),
     body: JSON.stringify({
-  name,
-  quantity,
-  price,
-  telegram_id: currentTelegramUser.telegram_id
-})
+      initData: tg.initData
+    })
   });
 
-  const result = await res.json();
+  let result = null;
 
-  if (!res.ok || !result.ok) {
+  try {
+    result = await res.json();
+  } catch (_) {
+    throw new Error("Функция авторизации вернула некорректный ответ.");
+  }
+
+  if (!res.ok || !result?.ok) {
     throw new Error(result?.error || "Доступ запрещён.");
   }
 
   return result;
 }
+
 async function init() {
   try {
     const authResult = await checkTelegramAccess();
@@ -110,7 +114,7 @@ async function init() {
     renderAll();
   } catch (e) {
     console.error("Ошибка инициализации:", e);
-    showDenied(e?.message || "Ошибка инициализации.\nПроверь Edge Function и свежесть деплоя.");
+    showDenied(`Ошибка запуска:\n${e?.message || "unknown error"}`);
   }
 }
 
@@ -150,7 +154,6 @@ function renderCalendar() {
   if (!strip) return;
 
   strip.innerHTML = "";
-
   const days = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
 
   for (let i = -2; i < 12; i++) {
@@ -464,7 +467,7 @@ async function submitOrder() {
       await fetch(`${SUPABASE_URL}/rest/v1/clients`, {
         method: "POST",
         headers: headers({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ name: clientName })
+        body: JSON.stringify({ name: clientName, telegram_id: Number(currentTelegramUser.telegram_id) })
       });
     }
 
@@ -481,7 +484,7 @@ async function submitOrder() {
       await fetch(`${SUPABASE_URL}/rest/v1/storage?id=eq.${film.id}`, {
         method: "PATCH",
         headers: headers({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ quantity: newQty })
+        body: JSON.stringify({ quantity: newQty, telegram_id: Number(currentTelegramUser.telegram_id) })
       });
     }
 
@@ -499,7 +502,8 @@ async function submitOrder() {
       film_used: filmName || null,
       film_amount: filmQty || 0,
       services,
-      media_url: mediaUrl || oldEvent?.media_url || null
+      media_url: mediaUrl || oldEvent?.media_url || null,
+      telegram_id: Number(currentTelegramUser.telegram_id)
     };
 
     const method = currentEditId ? "PATCH" : "POST";
@@ -594,7 +598,7 @@ async function submitClient() {
       body: JSON.stringify({
         name,
         phone,
-        telegram_id: telegramId || null
+        telegram_id: telegramId ? Number(telegramId) : Number(currentTelegramUser.telegram_id)
       })
     });
 
@@ -612,9 +616,9 @@ async function submitClient() {
 async function submitStorage() {
   const type = document.getElementById("storage-type")?.value || "film";
   const name = document.getElementById("st-name")?.value.trim() || "";
-  const quantity = parseFloat(document.getElementById("st-qty")?.value) || 0;
+  const qty = parseFloat(document.getElementById("st-qty")?.value) || 0;
   const pricePerUnit = parseFloat(document.getElementById("st-price")?.value) || 0;
-  
+
   if (!name) return msg("Введите название материала");
 
   if (!currentTelegramUser?.telegram_id) {
@@ -659,6 +663,7 @@ async function submitStorage() {
     msg(`Ошибка добавления материала:\n${e.message}`);
   }
 }
+
 function showHistory(name) {
   const history = allEvents.filter(e => e.client_name === name);
 
