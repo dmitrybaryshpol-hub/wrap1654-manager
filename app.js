@@ -778,4 +778,7 @@ function escapeJs(str) {
   return String(str).replaceAll("\\", "\\\\").replaceAll("'", "\\'");
 }
 
+window.editStorage = editStorage;
+window.deleteStorage = deleteStorage;
+  
 init();
