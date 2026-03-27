@@ -614,7 +614,7 @@ async function submitStorage() {
   const name = document.getElementById("st-name")?.value.trim() || "";
   const quantity = parseFloat(document.getElementById("st-qty")?.value) || 0;
   const pricePerUnit = parseFloat(document.getElementById("st-price")?.value) || 0;
-
+  
   if (!name) return msg("Введите название материала");
 
   if (!currentTelegramUser?.telegram_id) {
