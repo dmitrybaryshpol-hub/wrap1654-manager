@@ -97,6 +97,7 @@ async function checkTelegramAccess() {
 
   return result;
 }
+
 async function init() {
   try {
     const authResult = await checkTelegramAccess();
@@ -312,20 +313,6 @@ function renderStorage() {
     `).join("")
     : `<div class="empty-state">Товаров пока нет</div>`;
 }
-  productList.innerHTML = prods.length
-    ? prods.map(s => `
-      <div class="card storage-card">
-        <div>
-          <b>${escapeHtml(s.name || "Товар")}</b>
-        </div>
-        <div>
-          <div class="storage-qty">${Number(s.quantity || 0)} шт</div>
-          <div class="storage-price">$${Number(s.price_per_unit || 0)}/шт</div>
-        </div>
-      </div>
-    `).join("")
-    : `<div class="empty-state">Товаров пока нет</div>`;
-}
 
 function renderFilmsSelect() {
   const select = document.getElementById("film-select");
@@ -393,6 +380,7 @@ function closeModal(id) {
     if (stPriceOut) stPriceOut.value = "";
   }
 }
+
 function resetOrderForm() {
   currentEditId = null;
 
@@ -489,11 +477,12 @@ async function submitOrder() {
       });
     }
 
-   let cost = 0;
-const film = storage.find(s => s.type === "film" && s.name === filmName);
-if (film && filmQty > 0) {
-  cost = (Number(film.price_in) || 0) * filmQty;
-}
+    let cost = 0;
+    const film = storage.find(s => s.type === "film" && s.name === filmName);
+    if (film && filmQty > 0) {
+      cost = (Number(film.price_in) || 0) * filmQty;
+    }
+
     const profit = amount - cost;
 
     if (!currentEditId && film && filmQty > 0) {
@@ -675,6 +664,7 @@ async function submitStorage() {
     msg(`Ошибка добавления материала:\n${e.message}`);
   }
 }
+
 function showHistory(name) {
   const history = allEvents.filter(e => e.client_name === name);
 
