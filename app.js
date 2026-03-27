@@ -1,7 +1,7 @@
 const tg = window.Telegram?.WebApp;
 
 const SUPABASE_URL = "https://hbciwqgfccdfnzrhiops.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhiY2l3cWdmY2NkZm56cmhpb3BzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDEyODI5MCwiZXhwIjoyMDg5NzA0MjkwfQ.yGBv3KzGo1E9t8Zy5jfZGzH-50dXtxqnVZtpj4LB9hk";
+const SUPABASE_KEY = "sb_publishable_nmVB1s_PXivfUNyoTaQWuQ_b5G_dYY9";
 
 let allEvents = [];
 let clients = [];
@@ -78,6 +78,7 @@ async function checkTelegramAccess() {
       "Content-Type": "application/json"
     }),
     body: JSON.stringify({
+      action: "auth_check",
       initData: tg.initData
     })
   });
@@ -96,7 +97,6 @@ async function checkTelegramAccess() {
 
   return result;
 }
-
 async function init() {
   try {
     const authResult = await checkTelegramAccess();
@@ -621,37 +621,30 @@ async function submitStorage() {
 
   if (!name) return msg("Введите название материала");
 
-  if (!currentTelegramUser?.telegram_id) {
-    console.error("currentTelegramUser:", currentTelegramUser);
-    return msg("Не найден telegram_id текущего пользователя");
+  if (!tg?.initData) {
+    return msg("Не найден Telegram initData");
   }
 
-  const payload = {
-  type,
-  name,
-  quantity: qty,
-  price_per_unit: pricePerUnit,
-  telegram_id: Number(currentTelegramUser.telegram_id)
-};
-  
-  console.log("submitStorage payload:", payload);
-
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/storage`, {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/smart-handler`, {
       method: "POST",
       headers: headers({
-        "Content-Type": "application/json",
-        "Prefer": "return=representation"
+        "Content-Type": "application/json"
       }),
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        action: "insert_storage",
+        initData: tg.initData,
+        type,
+        name,
+        quantity: qty,
+        price_per_unit: pricePerUnit
+      })
     });
 
-    const text = await res.text();
-    console.log("submitStorage response status:", res.status);
-    console.log("submitStorage response body:", text);
+    const result = await res.json();
 
-    if (!res.ok) {
-      throw new Error(text || `HTTP ${res.status}`);
+    if (!res.ok || !result?.ok) {
+      throw new Error(result?.error || "Не удалось добавить материал");
     }
 
     closeModal("modal-storage");
