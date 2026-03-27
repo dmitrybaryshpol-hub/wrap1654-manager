@@ -637,7 +637,8 @@ async function submitStorage() {
         type,
         name,
         quantity: qty,
-        price_per_unit: pricePerUnit
+        price_in: pricePerUnit
+        price_out
       })
     });
 
