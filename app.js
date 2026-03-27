@@ -78,8 +78,11 @@ async function checkTelegramAccess() {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      initData: tg.initData
-    })
+  name,
+  quantity,
+  price,
+  telegram_id: currentTelegramUser.telegram_id
+})
   });
 
   const result = await res.json();
@@ -614,29 +617,48 @@ async function submitStorage() {
 
   if (!name) return msg("Введите название материала");
 
+  if (!currentTelegramUser?.telegram_id) {
+    console.error("currentTelegramUser:", currentTelegramUser);
+    return msg("Не найден telegram_id текущего пользователя");
+  }
+
+  const payload = {
+    type,
+    name,
+    quantity,
+    price_per_unit: pricePerUnit,
+    telegram_id: Number(currentTelegramUser.telegram_id)
+  };
+
+  console.log("submitStorage payload:", payload);
+
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/storage`, {
       method: "POST",
-      headers: headers({ "Content-Type": "application/json" }),
-      body: JSON.stringify({
-        type,
-        name,
-        quantity,
-        price_per_unit: pricePerUnit
-      })
+      headers: headers({
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+      }),
+      body: JSON.stringify(payload)
     });
 
-    if (!res.ok) throw new Error("Не удалось добавить материал");
+    const text = await res.text();
+    console.log("submitStorage response status:", res.status);
+    console.log("submitStorage response body:", text);
+
+    if (!res.ok) {
+      throw new Error(text || `HTTP ${res.status}`);
+    }
 
     closeModal("modal-storage");
     await loadData();
     renderAll();
+    msg("Материал добавлен");
   } catch (e) {
-    console.error(e);
-    msg("Ошибка добавления материала");
+    console.error("submitStorage error:", e);
+    msg(`Ошибка добавления материала:\n${e.message}`);
   }
 }
-
 function showHistory(name) {
   const history = allEvents.filter(e => e.client_name === name);
 
