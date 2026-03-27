@@ -627,13 +627,13 @@ async function submitStorage() {
   }
 
   const payload = {
-    type,
-    name,
-    quantity,
-    price_per_unit: pricePerUnit,
-    telegram_id: Number(currentTelegramUser.telegram_id)
-  };
-
+  type,
+  name,
+  quantity: qty,
+  price_per_unit: pricePerUnit,
+  telegram_id: Number(currentTelegramUser.telegram_id)
+};
+  
   console.log("submitStorage payload:", payload);
 
   try {
