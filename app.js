@@ -17,6 +17,12 @@ function headers(extra = {}) {
     ...extra
   };
 }
+function functionHeaders(extra = {}) {
+  return {
+    apikey: SUPABASE_KEY,
+    ...extra
+  };
+}
 
 function showDenied(extraText = "") {
   const appContent = document.getElementById("app-content");
@@ -72,16 +78,16 @@ async function checkTelegramAccess() {
     throw new Error("Не найден Telegram initData. Открой приложение именно внутри Telegram.");
   }
 
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/smart-handler`, {
-    method: "POST",
-    headers: headers({
-      "Content-Type": "application/json"
-    }),
-    body: JSON.stringify({
-      action: "auth_check",
-      initData: tg.initData
-    })
-  });
+const res = await fetch(`${SUPABASE_URL}/functions/v1/smart-handler`, {
+  method: "POST",
+  headers: functionHeaders({
+    "Content-Type": "application/json"
+  }),
+  body: JSON.stringify({
+    action: "auth_check",
+    initData: tg.initData
+  })
+});
 
   let result = null;
 
@@ -634,21 +640,20 @@ async function submitStorage() {
 
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/smart-handler`, {
-      method: "POST",
-      headers: headers({
-        "Content-Type": "application/json"
-      }),
-      body: JSON.stringify({
-        action: "insert_storage",
-        initData: tg.initData,
-        type,
-        name,
-        quantity: qty,
-        price_in: priceIn,
-        price_out: priceOut
-      })
-    });
-
+  method: "POST",
+  headers: functionHeaders({
+    "Content-Type": "application/json"
+  }),
+  body: JSON.stringify({
+    action: "insert_storage",
+    initData: tg.initData,
+    type,
+    name,
+    quantity: qty,
+    price_in: priceIn,
+    price_out: priceOut
+  })
+});
     const result = await res.json();
 
     if (!res.ok || !result?.ok) {
