@@ -7,6 +7,7 @@ let allEvents = [];
 let clients = [];
 let storage = [];
 let currentEditId = null;
+let currentStorageEditId = null;
 let selectedDate = new Date().toISOString().split("T")[0];
 let currentTelegramUser = null;
 
@@ -282,6 +283,7 @@ function renderClients() {
 }
 
 function renderStorage() {
+  function renderStorage() {
   const filmList = document.getElementById("film-list");
   const productList = document.getElementById("product-list");
   if (!filmList || !productList) return;
@@ -289,37 +291,31 @@ function renderStorage() {
   const films = storage.filter(s => s.type === "film");
   const prods = storage.filter(s => s.type !== "film");
 
-  filmList.innerHTML = films.length
-    ? films.map(s => `
-      <div class="card storage-card">
-        <div>
-          <b>${escapeHtml(s.name || "Плёнка")}</b>
-        </div>
-        <div>
-          <div class="storage-qty">${Number(s.quantity || 0)} м</div>
-          <div class="storage-price">Вход: $${Number(s.price_in || 0)}/м</div>
-          <div class="storage-price">Розница: $${Number(s.price_out || 0)}/м</div>
-        </div>
+  const renderCard = (s, unit) => `
+    <div class="card storage-card">
+      <div>
+        <b>${escapeHtml(s.name || unit === "м" ? "Плёнка" : "Товар")}</b>
       </div>
-    `).join("")
+      <div>
+        <div class="storage-qty">${Number(s.quantity || 0)} ${unit}</div>
+        <div class="storage-price">Вход: $${Number(s.price_in || 0)}/${unit}</div>
+        <div class="storage-price">Розница: $${Number(s.price_out || 0)}/${unit}</div>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <button type="button" onclick="editStorage(${Number(s.id)})">Редактировать</button>
+        <button type="button" onclick="deleteStorage(${Number(s.id)})">Удалить</button>
+      </div>
+    </div>
+  `;
+
+  filmList.innerHTML = films.length
+    ? films.map(s => renderCard(s, "м")).join("")
     : `<div class="empty-state">Плёнки пока нет</div>`;
 
   productList.innerHTML = prods.length
-    ? prods.map(s => `
-      <div class="card storage-card">
-        <div>
-          <b>${escapeHtml(s.name || "Товар")}</b>
-        </div>
-        <div>
-          <div class="storage-qty">${Number(s.quantity || 0)} шт</div>
-          <div class="storage-price">Вход: $${Number(s.price_in || 0)}/шт</div>
-          <div class="storage-price">Розница: $${Number(s.price_out || 0)}/шт</div>
-        </div>
-      </div>
-    `).join("")
+    ? prods.map(s => renderCard(s, "шт")).join("")
     : `<div class="empty-state">Товаров пока нет</div>`;
 }
-
 function renderFilmsSelect() {
   const select = document.getElementById("film-select");
   if (!select) return;
@@ -355,9 +351,13 @@ function openClientModal() {
 }
 
 function openStorageModal() {
+  currentStorageEditId = null;
+
+  const btn = document.getElementById("btn-save-storage");
+  if (btn) btn.innerText = "Добавить";
+
   document.getElementById("modal-storage")?.classList.add("open");
 }
-
 function closeModal(id) {
   document.getElementById(id)?.classList.remove("open");
 
@@ -373,20 +373,80 @@ function closeModal(id) {
   }
 
   if (id === "modal-storage") {
-    const type = document.getElementById("storage-type");
-    const stName = document.getElementById("st-name");
-    const stQty = document.getElementById("st-qty");
-    const stPriceIn = document.getElementById("st-price-in");
-    const stPriceOut = document.getElementById("st-price-out");
+  currentStorageEditId = null;
 
-    if (type) type.value = "film";
-    if (stName) stName.value = "";
-    if (stQty) stQty.value = "";
-    if (stPriceIn) stPriceIn.value = "";
-    if (stPriceOut) stPriceOut.value = "";
-  }
+  const type = document.getElementById("storage-type");
+  const stName = document.getElementById("st-name");
+  const stQty = document.getElementById("st-qty");
+  const stPriceIn = document.getElementById("st-price-in");
+  const stPriceOut = document.getElementById("st-price-out");
+  const btn = document.getElementById("btn-save-storage");
+
+  if (type) type.value = "film";
+  if (stName) stName.value = "";
+  if (stQty) stQty.value = "";
+  if (stPriceIn) stPriceIn.value = "";
+  if (stPriceOut) stPriceOut.value = "";
+  if (btn) btn.innerText = "Добавить";
+}
+}
+  function editStorage(id) {
+  const item = storage.find(s => Number(s.id) === Number(id));
+  if (!item) return;
+
+  currentStorageEditId = Number(id);
+
+  const type = document.getElementById("storage-type");
+  const stName = document.getElementById("st-name");
+  const stQty = document.getElementById("st-qty");
+  const stPriceIn = document.getElementById("st-price-in");
+  const stPriceOut = document.getElementById("st-price-out");
+  const btn = document.getElementById("btn-save-storage");
+
+  if (type) type.value = item.type || "film";
+  if (stName) stName.value = item.name || "";
+  if (stQty) stQty.value = Number(item.quantity || 0);
+  if (stPriceIn) stPriceIn.value = Number(item.price_in || 0);
+  if (stPriceOut) stPriceOut.value = Number(item.price_out || 0);
+  if (btn) btn.innerText = "Сохранить";
+
+  document.getElementById("modal-storage")?.classList.add("open");
 }
 
+  async function deleteStorage(id) {
+  if (!confirm("Удалить материал со склада?")) return;
+
+  if (!tg?.initData) {
+    return msg("Не найден Telegram initData");
+  }
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/smart-handler`, {
+      method: "POST",
+      headers: functionHeaders({
+        "Content-Type": "application/json"
+      }),
+      body: JSON.stringify({
+        action: "delete_storage",
+        initData: tg.initData,
+        id
+      })
+    });
+
+    const result = await res.json();
+
+    if (!res.ok || !result?.ok) {
+      throw new Error(result?.error || "Не удалось удалить материал");
+    }
+
+    await loadData();
+    renderAll();
+    msg("Материал удалён");
+  } catch (e) {
+    console.error("deleteStorage error:", e);
+    msg(`Ошибка удаления материала:\n${e.message}`);
+  }
+}
 function resetOrderForm() {
   currentEditId = null;
 
@@ -639,37 +699,45 @@ async function submitStorage() {
   }
 
   try {
+    const action = currentStorageEditId ? "update_storage" : "insert_storage";
+
+    const payload = {
+      action,
+      initData: tg.initData,
+      type,
+      name,
+      quantity: qty,
+      price_in: priceIn,
+      price_out: priceOut
+    };
+
+    if (currentStorageEditId) {
+      payload.id = currentStorageEditId;
+    }
+
     const res = await fetch(`${SUPABASE_URL}/functions/v1/smart-handler`, {
-  method: "POST",
-  headers: functionHeaders({
-    "Content-Type": "application/json"
-  }),
-  body: JSON.stringify({
-    action: "insert_storage",
-    initData: tg.initData,
-    type,
-    name,
-    quantity: qty,
-    price_in: priceIn,
-    price_out: priceOut
-  })
-});
+      method: "POST",
+      headers: functionHeaders({
+        "Content-Type": "application/json"
+      }),
+      body: JSON.stringify(payload)
+    });
+
     const result = await res.json();
 
     if (!res.ok || !result?.ok) {
-      throw new Error(result?.error || "Не удалось добавить материал");
+      throw new Error(result?.error || "Не удалось сохранить материал");
     }
 
     closeModal("modal-storage");
     await loadData();
     renderAll();
-    msg("Материал добавлен");
+    msg(currentStorageEditId ? "Материал обновлён" : "Материал добавлен");
   } catch (e) {
     console.error("submitStorage error:", e);
-    msg(`Ошибка добавления материала:\n${e.message}`);
+    msg(`Ошибка сохранения материала:\n${e.message}`);
   }
 }
-
 function showHistory(name) {
   const history = allEvents.filter(e => e.client_name === name);
 
