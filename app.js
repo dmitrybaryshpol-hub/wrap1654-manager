@@ -1,7 +1,7 @@
 const tg = window.Telegram?.WebApp;
 
 const SUPABASE_URL = "https://hbciwqgfccdfnzrhiops.supabase.co";
-const SUPABASE_KEY = "ВСТАВЬ_СЮДА_СВОЙ_PUBLISHABLE_ИЛИ_ANON_KEY";
+const SUPABASE_KEY = "sb_publishable_nmVB1s_PXivfUNyoTaQWuQ_b5G_dYY9";
 
 let allEvents = [];
 let clients = [];
