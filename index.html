@@ -216,42 +216,43 @@
 
   <!-- МОДАЛКА СКЛАДА -->
   <div id="modal-storage" class="modal">
-    <div class="modal-sheet">
-      <div class="sheet-handle"></div>
+  <div class="modal-sheet">
+    <div class="sheet-handle"></div>
 
-      <div class="modal-body">
-        <div class="modal-title-row">
-          <h3>Склад</h3>
-        </div>
-
-        <label class="field-label">Тип</label>
-        <select id="storage-type">
-          <option value="film">Плёнка</option>
-          <option value="product">Товар</option>
-        </select>
-
-        <label class="field-label">Название материала</label>
-        <input id="st-name" type="text" placeholder="Название материала" />
-
-        <label class="field-label">Количество</label>
-        <input id="st-qty" type="number" step="0.01" placeholder="Количество" />
-
-        <label class="field-label">Цена вход</label>
-        <input id="st-price-in" type="number" step="0.01" placeholder="Цена вход" />
-
-        <label class="field-label">Цена розница</label>
-        <input id="st-price-out" type="number" step="0.01" placeholder="Цена розница" />
+    <div class="modal-body">
+      <div class="modal-title-row">
+        <h3>Склад</h3>
       </div>
 
-      <div class="modal-footer">
-        <button id="btn-save-storage" class="primary-btn" onclick="submitStorage()">
-          ДОБАВИТЬ
-        </button>
-        <button class="secondary-btn" onclick="closeModal('modal-storage')">Отмена</button>
-      </div>
+      <label class="field-label">Тип</label>
+      <select id="storage-type">
+        <option value="film">Плёнка</option>
+        <option value="product">Товар</option>
+      </select>
+
+      <label class="field-label">Название материала</label>
+      <input id="st-name" type="text" placeholder="Название материала" />
+
+      <label class="field-label">Количество</label>
+      <input id="st-qty" type="number" step="0.01" placeholder="Количество" />
+
+      <label class="field-label">Цена вход</label>
+      <input id="st-price-in" type="number" step="0.01" placeholder="Цена вход" />
+
+      <label class="field-label">Цена розница</label>
+      <input id="st-price-out" type="number" step="0.01" placeholder="Цена розница" />
+    </div>
+
+    <div class="modal-footer">
+      <button id="btn-save-storage" class="primary-btn" onclick="submitStorage()">
+        ДОБАВИТЬ
+      </button>
+      <button class="secondary-btn" onclick="closeModal('modal-storage')">
+        Отмена
+      </button>
     </div>
   </div>
-
+</div>
   <!-- МОДАЛКА ИСТОРИИ КЛИЕНТА -->
   <div id="modal-client-history" class="modal">
     <div class="modal-sheet">
