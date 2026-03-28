@@ -190,15 +190,9 @@
         <label class="field-label">Telegram ID / username</label>
         <input id="client-tg" placeholder="Необязательно" />
       </div>
-
-      <div class="modal-footer">
-        <button class="primary-btn" onclick="submitClient()">СОХРАНИТЬ</button>
-        <button class="secondary-btn" onclick="closeModal('modal-client')">Отмена</button>
-      </div>
-    </div>
   </div>
 
-  <div id="modal-storage" class="modal open">
+  <div id="modal-storage" class="modal">
   <div class="modal-box">
     <div class="modal-header">
       <h3>Склад</h3>
@@ -212,34 +206,21 @@
       </select>
 
       <input id="st-name" type="text" placeholder="Название материала" />
-
       <input id="st-qty" type="number" step="0.01" placeholder="Количество" />
-
       <input id="st-price-in" type="number" step="0.01" placeholder="Цена вход" />
-
       <input id="st-price-out" type="number" step="0.01" placeholder="Цена розница" />
     </div>
 
     <div class="modal-actions">
-      <button
-        id="btn-save-storage"
-        type="button"
-        onclick="submitStorage()"
-      >
+      <button id="btn-save-storage" type="button" onclick="submitStorage()">
         Добавить
       </button>
-
-      <button
-        type="button"
-        class="secondary-btn"
-        onclick="closeModal('modal-storage')"
-      >
+      <button type="button" class="secondary-btn" onclick="closeModal('modal-storage')">
         Отмена
       </button>
     </div>
   </div>
-</div>
-  
+</div>  
       <div class="modal-footer">
         <button class="primary-btn" onclick="submitStorage()">ДОБАВИТЬ</button>
         <button class="secondary-btn" onclick="closeModal('modal-storage')">Отмена</button>
