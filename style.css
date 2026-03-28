@@ -500,3 +500,46 @@ textarea{
 .storage-btn:active {
   transform: scale(0.96);
 }
+
+.storage-card .storage-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.storage-card .storage-actions .storage-btn {
+  flex: 1;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: #111318 !important;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  outline: none;
+  box-shadow: none;
+  transition: all 0.15s ease;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.storage-card .storage-actions .storage-btn.edit {
+  border: 1px solid #2d313a !important;
+  color: #e7eaf0 !important;
+}
+
+.storage-card .storage-actions .storage-btn.edit:active {
+  background: #171a20 !important;
+  transform: scale(0.98);
+}
+
+.storage-card .storage-actions .storage-btn.delete {
+  border: 1px solid #4a2a2f !important;
+  color: #ff6b6b !important;
+}
+
+.storage-card .storage-actions .storage-btn.delete:active {
+  background: #1a1113 !important;
+  transform: scale(0.98);
+}
