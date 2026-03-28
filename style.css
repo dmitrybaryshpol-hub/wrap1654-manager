@@ -456,3 +456,47 @@ textarea{
 @media (max-width:380px){
   .stats-grid{grid-template-columns:1fr}
 }
+
+.storage-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.storage-btn {
+  flex: 1;
+  height: 36px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  transition: all 0.15s ease;
+}
+
+/* РЕДАКТИРОВАТЬ */
+.storage-btn.edit {
+  border: 1px solid #2a2a32;
+  color: #cfcfd6;
+}
+
+.storage-btn.edit:hover {
+  border-color: #3a3a45;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* УДАЛИТЬ */
+.storage-btn.delete {
+  border: 1px solid #3a1f24;
+  color: #ff5c5c;
+}
+
+.storage-btn.delete:hover {
+  border-color: #ff5c5c;
+  background: rgba(255, 92, 92, 0.08);
+}
+
+.storage-btn:active {
+  transform: scale(0.96);
+}
