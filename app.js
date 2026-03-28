@@ -18,6 +18,7 @@ function headers(extra = {}) {
     ...extra
   };
 }
+
 function functionHeaders(extra = {}) {
   return {
     apikey: SUPABASE_KEY,
@@ -79,16 +80,16 @@ async function checkTelegramAccess() {
     throw new Error("Не найден Telegram initData. Открой приложение именно внутри Telegram.");
   }
 
-const res = await fetch(`${SUPABASE_URL}/functions/v1/smart-handler`, {
-  method: "POST",
-  headers: functionHeaders({
-    "Content-Type": "application/json"
-  }),
-  body: JSON.stringify({
-    action: "auth_check",
-    initData: tg.initData
-  })
-});
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/smart-handler`, {
+    method: "POST",
+    headers: functionHeaders({
+      "Content-Type": "application/json"
+    }),
+    body: JSON.stringify({
+      action: "auth_check",
+      initData: tg.initData
+    })
+  });
 
   let result = null;
 
@@ -189,7 +190,9 @@ function renderCalendar() {
 }
 
 function selectedEvents() {
-  return allEvents.filter(e => e.start_date && String(e.start_date).startsWith(selectedDate));
+  return allEvents.filter(
+    e => e.start_date && String(e.start_date).startsWith(selectedDate)
+  );
 }
 
 function updateStats() {
@@ -244,7 +247,7 @@ function renderEvents() {
     const profit = Number(e.profit) || 0;
 
     return `
-      <div class="card order-card" onclick="editOrder(${e.id})">
+      <div class="card order-card" onclick="editOrder(${Number(e.id)})">
         <div class="order-left">
           <b>${escapeHtml(e.car_model || "Без авто")}</b><br>
           <small>${escapeHtml(e.client_name || "Клиент")}</small><br>
@@ -283,7 +286,6 @@ function renderClients() {
 }
 
 function renderStorage() {
-  function renderStorage() {
   const filmList = document.getElementById("film-list");
   const productList = document.getElementById("product-list");
   if (!filmList || !productList) return;
@@ -294,7 +296,7 @@ function renderStorage() {
   const renderCard = (s, unit) => `
     <div class="card storage-card">
       <div>
-        <b>${escapeHtml(s.name || unit === "м" ? "Плёнка" : "Товар")}</b>
+        <b>${escapeHtml(s.name || (unit === "м" ? "Плёнка" : "Товар"))}</b>
       </div>
       <div>
         <div class="storage-qty">${Number(s.quantity || 0)} ${unit}</div>
@@ -316,13 +318,15 @@ function renderStorage() {
     ? prods.map(s => renderCard(s, "шт")).join("")
     : `<div class="empty-state">Товаров пока нет</div>`;
 }
+
 function renderFilmsSelect() {
   const select = document.getElementById("film-select");
   if (!select) return;
 
   const films = storage.filter(s => s.type === "film");
 
-  select.innerHTML = `<option value="">Без плёнки</option>` +
+  select.innerHTML =
+    `<option value="">Без плёнки</option>` +
     films.map(f => `<option value="${escapeAttr(f.name || "")}">${escapeHtml(f.name || "")}</option>`).join("");
 }
 
@@ -330,7 +334,9 @@ function updateClientsDatalist() {
   const dl = document.getElementById("clients-list-options");
   if (!dl) return;
 
-  dl.innerHTML = clients.map(c => `<option value="${escapeAttr(c.name || "")}"></option>`).join("");
+  dl.innerHTML = clients
+    .map(c => `<option value="${escapeAttr(c.name || "")}"></option>`)
+    .join("");
 }
 
 function showPage(page, el) {
@@ -356,8 +362,21 @@ function openStorageModal() {
   const btn = document.getElementById("btn-save-storage");
   if (btn) btn.innerText = "Добавить";
 
+  const type = document.getElementById("storage-type");
+  const stName = document.getElementById("st-name");
+  const stQty = document.getElementById("st-qty");
+  const stPriceIn = document.getElementById("st-price-in");
+  const stPriceOut = document.getElementById("st-price-out");
+
+  if (type) type.value = "film";
+  if (stName) stName.value = "";
+  if (stQty) stQty.value = "";
+  if (stPriceIn) stPriceIn.value = "";
+  if (stPriceOut) stPriceOut.value = "";
+
   document.getElementById("modal-storage")?.classList.add("open");
 }
+
 function closeModal(id) {
   document.getElementById(id)?.classList.remove("open");
 
@@ -373,24 +392,25 @@ function closeModal(id) {
   }
 
   if (id === "modal-storage") {
-  currentStorageEditId = null;
+    currentStorageEditId = null;
 
-  const type = document.getElementById("storage-type");
-  const stName = document.getElementById("st-name");
-  const stQty = document.getElementById("st-qty");
-  const stPriceIn = document.getElementById("st-price-in");
-  const stPriceOut = document.getElementById("st-price-out");
-  const btn = document.getElementById("btn-save-storage");
+    const type = document.getElementById("storage-type");
+    const stName = document.getElementById("st-name");
+    const stQty = document.getElementById("st-qty");
+    const stPriceIn = document.getElementById("st-price-in");
+    const stPriceOut = document.getElementById("st-price-out");
+    const btn = document.getElementById("btn-save-storage");
 
-  if (type) type.value = "film";
-  if (stName) stName.value = "";
-  if (stQty) stQty.value = "";
-  if (stPriceIn) stPriceIn.value = "";
-  if (stPriceOut) stPriceOut.value = "";
-  if (btn) btn.innerText = "Добавить";
+    if (type) type.value = "film";
+    if (stName) stName.value = "";
+    if (stQty) stQty.value = "";
+    if (stPriceIn) stPriceIn.value = "";
+    if (stPriceOut) stPriceOut.value = "";
+    if (btn) btn.innerText = "Добавить";
+  }
 }
-}
-  function editStorage(id) {
+
+function editStorage(id) {
   const item = storage.find(s => Number(s.id) === Number(id));
   if (!item) return;
 
@@ -413,7 +433,7 @@ function closeModal(id) {
   document.getElementById("modal-storage")?.classList.add("open");
 }
 
-  async function deleteStorage(id) {
+async function deleteStorage(id) {
   if (!confirm("Удалить материал со склада?")) return;
 
   if (!tg?.initData) {
@@ -447,6 +467,7 @@ function closeModal(id) {
     msg(`Ошибка удаления материала:\n${e.message}`);
   }
 }
+
 function resetOrderForm() {
   currentEditId = null;
 
@@ -539,7 +560,10 @@ async function submitOrder() {
       await fetch(`${SUPABASE_URL}/rest/v1/clients`, {
         method: "POST",
         headers: headers({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ name: clientName, telegram_id: Number(currentTelegramUser.telegram_id) })
+        body: JSON.stringify({
+          name: clientName,
+          telegram_id: Number(currentTelegramUser.telegram_id)
+        })
       });
     }
 
@@ -556,7 +580,10 @@ async function submitOrder() {
       await fetch(`${SUPABASE_URL}/rest/v1/storage?id=eq.${film.id}`, {
         method: "PATCH",
         headers: headers({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ quantity: newQty, telegram_id: Number(currentTelegramUser.telegram_id) })
+        body: JSON.stringify({
+          quantity: newQty,
+          telegram_id: Number(currentTelegramUser.telegram_id)
+        })
       });
     }
 
@@ -601,10 +628,10 @@ async function submitOrder() {
 }
 
 function editOrder(id) {
-  const e = allEvents.find(x => x.id === id);
+  const e = allEvents.find(x => Number(x.id) === Number(id));
   if (!e) return;
 
-  currentEditId = id;
+  currentEditId = Number(id);
 
   const title = document.getElementById("order-modal-title");
   const delBtn = document.getElementById("btn-delete-order");
@@ -670,7 +697,9 @@ async function submitClient() {
       body: JSON.stringify({
         name,
         phone,
-        telegram_id: telegramId ? Number(telegramId) : Number(currentTelegramUser.telegram_id)
+        telegram_id: telegramId
+          ? Number(telegramId)
+          : Number(currentTelegramUser.telegram_id)
       })
     });
 
@@ -729,15 +758,18 @@ async function submitStorage() {
       throw new Error(result?.error || "Не удалось сохранить материал");
     }
 
+    const wasEdit = Boolean(currentStorageEditId);
+
     closeModal("modal-storage");
     await loadData();
     renderAll();
-    msg(currentStorageEditId ? "Материал обновлён" : "Материал добавлен");
+    msg(wasEdit ? "Материал обновлён" : "Материал добавлен");
   } catch (e) {
     console.error("submitStorage error:", e);
     msg(`Ошибка сохранения материала:\n${e.message}`);
   }
 }
+
 function showHistory(name) {
   const history = allEvents.filter(e => e.client_name === name);
 
@@ -775,10 +807,28 @@ function escapeAttr(str) {
 }
 
 function escapeJs(str) {
-  return String(str).replaceAll("\\", "\\\\").replaceAll("'", "\\'");
+  return String(str)
+    .replaceAll("\\", "\\\\")
+    .replaceAll("'", "\\'");
 }
 
+window.addEventListener("error", (e) => {
+  console.error("JS ERROR:", e.message, e.filename, e.lineno);
+});
+
+window.showPage = showPage;
+window.openOrderModal = openOrderModal;
+window.openClientModal = openClientModal;
+window.openStorageModal = openStorageModal;
+window.closeModal = closeModal;
+window.previewMedia = previewMedia;
+window.submitOrder = submitOrder;
+window.editOrder = editOrder;
+window.deleteOrder = deleteOrder;
+window.submitClient = submitClient;
+window.submitStorage = submitStorage;
+window.showHistory = showHistory;
 window.editStorage = editStorage;
 window.deleteStorage = deleteStorage;
-  
+
 init();
