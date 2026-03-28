@@ -303,11 +303,14 @@ function renderStorage() {
         <div class="storage-price">Вход: $${Number(s.price_in || 0)}/${unit}</div>
         <div class="storage-price">Розница: $${Number(s.price_out || 0)}/${unit}</div>
       </div>
-      <div style="display:flex; gap:8px; margin-top:10px;">
-        <button type="button" onclick="editStorage(${Number(s.id)})">Редактировать</button>
-        <button type="button" onclick="deleteStorage(${Number(s.id)})">Удалить</button>
-      </div>
-    </div>
+      <div class="storage-actions">
+  <button class="storage-btn edit" onclick="editStorage(${Number(s.id)})">
+    Редактировать
+  </button>
+  <button class="storage-btn delete" onclick="deleteStorage(${Number(s.id)})">
+    Удалить
+  </button>
+</div>    </div>
   `;
 
   filmList.innerHTML = films.length
