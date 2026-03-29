@@ -398,31 +398,32 @@ function closeModal(id) {
     const name = document.getElementById("client-name");
     const phone = document.getElementById("client-phone");
     const tgInput = document.getElementById("client-tg");
+
     if (name) name.value = "";
     if (phone) phone.value = "";
     if (tgInput) tgInput.value = "";
   }
 
   if (id === "modal-storage") {
-  currentStorageEditId = null;
+    currentStorageEditId = null;
 
-  const type = document.getElementById("storage-type");
-  const stName = document.getElementById("st-name");
-  const stQty = document.getElementById("st-qty");
-  const stPriceIn = document.getElementById("st-price-in");
-  const stPriceOut = document.getElementById("st-price-out");
-  const stCurrency = document.getElementById("st-currency");
-  const btn = document.getElementById("btn-save-storage");
+    const type = document.getElementById("storage-type");
+    const stName = document.getElementById("st-name");
+    const stQty = document.getElementById("st-qty");
+    const stPriceIn = document.getElementById("st-price-in");
+    const stPriceOut = document.getElementById("st-price-out");
+    const stCurrency = document.getElementById("st-currency");
+    const btn = document.getElementById("btn-save-storage");
 
-  if (type) type.value = "film";
-  if (stName) stName.value = "";
-  if (stQty) stQty.value = "";
-  if (stPriceIn) stPriceIn.value = "";
-  if (stPriceOut) stPriceOut.value = "";
-  if (stCurrency) stCurrency.value = "USD";
-  if (btn) btn.innerText = "Добавить";
+    if (type) type.value = "film";
+    if (stName) stName.value = "";
+    if (stQty) stQty.value = "";
+    if (stPriceIn) stPriceIn.value = "";
+    if (stPriceOut) stPriceOut.value = "";
+    if (stCurrency) stCurrency.value = "USD";
+    if (btn) btn.innerText = "Добавить";
+  }
 }
-
 function editStorage(id) {
   const item = storage.find(s => Number(s.id) === Number(id));
   if (!item) return;
@@ -848,4 +849,11 @@ window.showHistory = showHistory;
 window.editStorage = editStorage;
 window.deleteStorage = deleteStorage;
 
+window.addEventListener("error", (e) => {
+  alert("JS ERROR: " + e.message + " | line: " + e.lineno);
+  console.error(e);
+});
+
 init();
+
+  
