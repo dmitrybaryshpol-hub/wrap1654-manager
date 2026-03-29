@@ -298,25 +298,23 @@ function renderStorage() {
 
     return `
       <div class="card storage-card">
-        <div>
-          <b>${escapeHtml(s.name || (unit === "м" ? "Плёнка" : "Товар"))}</b>
-        </div>
+        <div class="storage-top">
+          <b class="storage-name">${escapeHtml(s.name || (unit === "м" ? "Плёнка" : "Товар"))}</b>
 
-        <div class="storage-right">
           <div class="storage-meta">
             <div class="storage-qty">${Number(s.quantity || 0)} ${unit}</div>
             <div class="storage-price">Вход: ${currency}${Number(s.price_in || 0)}/${unit}</div>
             <div class="storage-price">Розница: ${currency}${Number(s.price_out || 0)}/${unit}</div>
           </div>
+        </div>
 
-          <div class="storage-actions">
-            <button type="button" class="storage-btn edit" onclick="editStorage(${Number(s.id)})">
-              Редактировать
-            </button>
-            <button type="button" class="storage-btn delete" onclick="deleteStorage(${Number(s.id)})">
-              Удалить
-            </button>
-          </div>
+        <div class="storage-actions">
+          <button class="storage-btn edit" onclick="editStorage(${Number(s.id)})">
+            Редактировать
+          </button>
+          <button class="storage-btn delete" onclick="deleteStorage(${Number(s.id)})">
+            Удалить
+          </button>
         </div>
       </div>
     `;
