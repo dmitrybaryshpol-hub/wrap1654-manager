@@ -293,27 +293,34 @@ function renderStorage() {
   const films = storage.filter(s => s.type === "film");
   const prods = storage.filter(s => s.type !== "film");
 
-  const renderCard = (s, unit) => `
-    <div class="card storage-card">
-      <div>
-        <b>${escapeHtml(s.name || (unit === "м" ? "Плёнка" : "Товар"))}</b>
+  const renderCard = (s, unit) => {
+    const currency = s.currency === "UAH" ? "₴" : "$";
+
+    return `
+      <div class="card storage-card">
+        <div>
+          <b>${escapeHtml(s.name || (unit === "м" ? "Плёнка" : "Товар"))}</b>
+        </div>
+
+        <div class="storage-right">
+          <div class="storage-meta">
+            <div class="storage-qty">${Number(s.quantity || 0)} ${unit}</div>
+            <div class="storage-price">Вход: ${currency}${Number(s.price_in || 0)}/${unit}</div>
+            <div class="storage-price">Розница: ${currency}${Number(s.price_out || 0)}/${unit}</div>
+          </div>
+
+          <div class="storage-actions">
+            <button type="button" class="storage-btn edit" onclick="editStorage(${Number(s.id)})">
+              Редактировать
+            </button>
+            <button type="button" class="storage-btn delete" onclick="deleteStorage(${Number(s.id)})">
+              Удалить
+            </button>
+          </div>
+        </div>
       </div>
-      <div>
-        <div class="storage-qty">${Number(s.quantity || 0)} ${unit}</div>
-        <div class="storage-price">Вход: $${Number(s.price_in || 0)}/${unit}</div>
-        <div class="storage-price">Розница: $${Number(s.price_out || 0)}/${unit}</div>
-      </div>
-      <div class="storage-actions">
-       <div class="storage-actions">
-  <button type="button" class="storage-btn edit" onclick="editStorage(${Number(s.id)})">
-    Редактировать
-  </button>
-  <button type="button" class="storage-btn delete" onclick="deleteStorage(${Number(s.id)})">
-    Удалить
-  </button>
-</div>   
-</div>
-  `;
+    `;
+  };
 
   filmList.innerHTML = films.length
     ? films.map(s => renderCard(s, "м")).join("")
@@ -323,7 +330,6 @@ function renderStorage() {
     ? prods.map(s => renderCard(s, "шт")).join("")
     : `<div class="empty-state">Товаров пока нет</div>`;
 }
-
 function renderFilmsSelect() {
   const select = document.getElementById("film-select");
   if (!select) return;
@@ -365,19 +371,20 @@ function openStorageModal() {
   currentStorageEditId = null;
 
   const btn = document.getElementById("btn-save-storage");
-  if (btn) btn.innerText = "Добавить";
-
   const type = document.getElementById("storage-type");
   const stName = document.getElementById("st-name");
   const stQty = document.getElementById("st-qty");
   const stPriceIn = document.getElementById("st-price-in");
   const stPriceOut = document.getElementById("st-price-out");
+  const stCurrency = document.getElementById("st-currency");
 
+  if (btn) btn.innerText = "Добавить";
   if (type) type.value = "film";
   if (stName) stName.value = "";
   if (stQty) stQty.value = "";
   if (stPriceIn) stPriceIn.value = "";
   if (stPriceOut) stPriceOut.value = "";
+  if (stCurrency) stCurrency.value = "USD";
 
   document.getElementById("modal-storage")?.classList.add("open");
 }
@@ -397,22 +404,23 @@ function closeModal(id) {
   }
 
   if (id === "modal-storage") {
-    currentStorageEditId = null;
+  currentStorageEditId = null;
 
-    const type = document.getElementById("storage-type");
-    const stName = document.getElementById("st-name");
-    const stQty = document.getElementById("st-qty");
-    const stPriceIn = document.getElementById("st-price-in");
-    const stPriceOut = document.getElementById("st-price-out");
-    const btn = document.getElementById("btn-save-storage");
+  const type = document.getElementById("storage-type");
+  const stName = document.getElementById("st-name");
+  const stQty = document.getElementById("st-qty");
+  const stPriceIn = document.getElementById("st-price-in");
+  const stPriceOut = document.getElementById("st-price-out");
+  const stCurrency = document.getElementById("st-currency");
+  const btn = document.getElementById("btn-save-storage");
 
-    if (type) type.value = "film";
-    if (stName) stName.value = "";
-    if (stQty) stQty.value = "";
-    if (stPriceIn) stPriceIn.value = "";
-    if (stPriceOut) stPriceOut.value = "";
-    if (btn) btn.innerText = "Добавить";
-  }
+  if (type) type.value = "film";
+  if (stName) stName.value = "";
+  if (stQty) stQty.value = "";
+  if (stPriceIn) stPriceIn.value = "";
+  if (stPriceOut) stPriceOut.value = "";
+  if (stCurrency) stCurrency.value = "USD";
+  if (btn) btn.innerText = "Добавить";
 }
 
 function editStorage(id) {
@@ -426,6 +434,7 @@ function editStorage(id) {
   const stQty = document.getElementById("st-qty");
   const stPriceIn = document.getElementById("st-price-in");
   const stPriceOut = document.getElementById("st-price-out");
+  const stCurrency = document.getElementById("st-currency");
   const btn = document.getElementById("btn-save-storage");
 
   if (type) type.value = item.type || "film";
@@ -433,6 +442,7 @@ function editStorage(id) {
   if (stQty) stQty.value = Number(item.quantity || 0);
   if (stPriceIn) stPriceIn.value = Number(item.price_in || 0);
   if (stPriceOut) stPriceOut.value = Number(item.price_out || 0);
+  if (stCurrency) stCurrency.value = item.currency || "USD";
   if (btn) btn.innerText = "Сохранить";
 
   document.getElementById("modal-storage")?.classList.add("open");
@@ -725,6 +735,7 @@ async function submitStorage() {
   const qty = parseFloat(document.getElementById("st-qty")?.value) || 0;
   const priceIn = parseFloat(document.getElementById("st-price-in")?.value) || 0;
   const priceOut = parseFloat(document.getElementById("st-price-out")?.value) || 0;
+  const currency = document.getElementById("st-currency")?.value || "USD";
 
   if (!name) return msg("Введите название материала");
 
@@ -742,7 +753,8 @@ async function submitStorage() {
       name,
       quantity: qty,
       price_in: priceIn,
-      price_out: priceOut
+      price_out: priceOut,
+      currency
     };
 
     if (currentStorageEditId) {
