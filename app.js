@@ -538,7 +538,6 @@ async function handleInventorySubmit(e) {
     category: val("#inventoryCategory") || "other",
     brand: val("#inventoryBrand"),
     name: val("#inventoryName"),
-    code: val("#inventoryCode"),
     quantity: num("#inventoryQuantity"),
     unit: val("#inventoryUnit") || "м",
     purchase_price: num("#inventoryPurchasePrice"),
@@ -588,7 +587,6 @@ function startEditInventory(id) {
   setVal("#inventoryCategory", item.category || "other");
   setVal("#inventoryBrand", item.brand);
   setVal("#inventoryName", item.name);
-  setVal("#inventoryCode", item.code);
   setVal("#inventoryQuantity", item.quantity);
   setVal("#inventoryUnit", item.unit || "м");
   setVal("#inventoryPurchasePrice", item.purchase_price);
@@ -635,7 +633,6 @@ function getFilteredInventory() {
       const text = [
         item.brand,
         item.name,
-        item.code,
         item.category,
         item.comment,
       ]
