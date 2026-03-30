@@ -467,19 +467,7 @@ function btn(text, onclick, variant = "secondary", extra = "") {
   `;
 }
 
-function btn(text, onclick, extra = "") {
-  return `
-    <button onclick="${onclick}" style="
-      padding:10px 12px;
-      border-radius:10px;
-      border:1px solid #374151;
-      background:#1f2937;
-      color:#fff;
-      cursor:pointer;
-      ${extra}
-    ">${text}</button>
-  `;
-}
+
 
 // ==============================
 // DASHBOARD
