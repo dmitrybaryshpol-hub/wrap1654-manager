@@ -29,17 +29,12 @@ document.addEventListener("DOMContentLoaded", initApp);
 
 async function initApp() {
   try {
-    if (tg) {
-      tg.expand();
-      tg.ready();
-      tg.setHeaderColor("#0f172a");
-      tg.setBackgroundColor("#0b1120");
-    }
-
+    initTelegramSafe();
     bindGlobalEvents();
     setupTabs();
     setActiveTab(state.currentTab);
     fillDefaultDates();
+    renderAll();
 
     await bootstrap();
   } catch (err) {
@@ -48,67 +43,104 @@ async function initApp() {
   }
 }
 
+function initTelegramSafe() {
+  try {
+    if (!tg) return;
+    tg.expand?.();
+    tg.ready?.();
+    tg.setHeaderColor?.("#0f172a");
+    tg.setBackgroundColor?.("#0b1120");
+  } catch (err) {
+    console.warn("Telegram init warning:", err);
+  }
+}
+
 async function bootstrap() {
   showGlobalLoader(true);
 
   try {
-    const initData = tg?.initData || "";
+    await authUser();
+  } catch (err) {
+    console.error("AUTH ERROR:", err);
+    // Не валим приложение полностью
+    state.user = {
+      first_name: "Пользователь",
+    };
+    renderUserInfo();
+    safeAlert(err.message || "Ошибка авторизации");
+  }
 
-    if (!initData) {
-      console.warn("Telegram initData is empty");
-    }
-
-    const auth = await api("auth", { initData }, true);
-
-    if (auth?.ok) {
-      state.user = auth.user || null;
-      renderUserInfo();
-    } else {
-      throw new Error(auth?.error || "Auth failed");
-    }
-
+  try {
     await loadAllData();
   } catch (err) {
-    console.error("BOOTSTRAP ERROR:", err);
-    safeAlert(err.message || "Ошибка авторизации");
+    console.error("LOAD DATA ERROR:", err);
+    renderAll();
+    safeAlert(err.message || "Ошибка загрузки данных");
   } finally {
     showGlobalLoader(false);
   }
+}
+
+async function authUser() {
+  const initData = tg?.initData || "";
+
+  if (!initData) {
+    console.warn("Telegram initData is empty");
+  }
+
+  const auth = await api("auth", { initData });
+
+  // Поддержка разных форматов ответа
+  if (auth?.ok === false) {
+    throw new Error(auth?.error || "Auth failed");
+  }
+
+  state.user = auth?.user || auth?.data?.user || auth?.telegramUser || null;
+  renderUserInfo();
 }
 
 // ==============================
 // API
 // ==============================
 
-async function api(action, payload = {}, useInitData = false) {
+async function api(action, payload = {}) {
   const body = {
     action,
     ...payload,
   };
 
-  if (useInitData && tg?.initData) {
-    body.initData = tg.initData;
-  } else if (tg?.initData && !body.initData) {
+  if (!body.initData && tg?.initData) {
     body.initData = tg.initData;
   }
 
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let res;
 
-  const text = await res.text();
+  try {
+    res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    throw new Error("Нет соединения с сервером");
+  }
+
+  const rawText = await res.text();
   let data = {};
 
   try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = { ok: false, error: text || "Некорректный ответ сервера" };
+    data = rawText ? JSON.parse(rawText) : {};
+  } catch (err) {
+    console.error("NON-JSON RESPONSE:", rawText);
+    throw new Error("Сервер вернул некорректный ответ");
   }
 
-  if (!res.ok || data?.ok === false) {
+  if (!res.ok) {
     throw new Error(data?.error || `HTTP ${res.status}`);
+  }
+
+  if (data?.ok === false) {
+    throw new Error(data?.error || "Ошибка сервера");
   }
 
   return data;
@@ -119,28 +151,46 @@ async function api(action, payload = {}, useInitData = false) {
 // ==============================
 
 async function loadAllData() {
-  await Promise.all([
+  const results = await Promise.allSettled([
     loadOrders(),
     loadClients(),
     loadInventory(),
   ]);
+
+  results.forEach((result, index) => {
+    if (result.status === "rejected") {
+      console.error(`LOAD ERROR [${index}]`, result.reason);
+    }
+  });
 
   renderAll();
 }
 
 async function loadOrders() {
   const data = await api("list_orders");
-  state.orders = Array.isArray(data.items) ? data.items : [];
+  state.orders = Array.isArray(data.items)
+    ? data.items
+    : Array.isArray(data.data)
+    ? data.data
+    : [];
 }
 
 async function loadClients() {
   const data = await api("list_clients");
-  state.clients = Array.isArray(data.items) ? data.items : [];
+  state.clients = Array.isArray(data.items)
+    ? data.items
+    : Array.isArray(data.data)
+    ? data.data
+    : [];
 }
 
 async function loadInventory() {
   const data = await api("list_inventory");
-  state.inventory = Array.isArray(data.items) ? data.items : [];
+  state.inventory = Array.isArray(data.items)
+    ? data.items
+    : Array.isArray(data.data)
+    ? data.data
+    : [];
 }
 
 // ==============================
@@ -148,7 +198,6 @@ async function loadInventory() {
 // ==============================
 
 function bindGlobalEvents() {
-  // Tabs
   document.querySelectorAll("[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const tab = btn.dataset.tab;
@@ -156,13 +205,12 @@ function bindGlobalEvents() {
     });
   });
 
-  // Orders search/filter
   const orderSearch = $("#orderSearch");
   const orderStatus = $("#orderStatusFilter");
 
   if (orderSearch) {
     orderSearch.addEventListener("input", (e) => {
-      state.orderSearch = e.target.value.trim().toLowerCase();
+      state.orderSearch = String(e.target.value || "").trim().toLowerCase();
       renderOrders();
     });
   }
@@ -174,13 +222,12 @@ function bindGlobalEvents() {
     });
   }
 
-  // Inventory search/filter
   const inventorySearch = $("#inventorySearch");
   const inventoryCategory = $("#inventoryCategoryFilter");
 
   if (inventorySearch) {
     inventorySearch.addEventListener("input", (e) => {
-      state.inventorySearch = e.target.value.trim().toLowerCase();
+      state.inventorySearch = String(e.target.value || "").trim().toLowerCase();
       renderInventory();
     });
   }
@@ -192,64 +239,53 @@ function bindGlobalEvents() {
     });
   }
 
-  // Forms
   $("#orderForm")?.addEventListener("submit", handleOrderSubmit);
   $("#clientForm")?.addEventListener("submit", handleClientSubmit);
   $("#inventoryForm")?.addEventListener("submit", handleInventorySubmit);
 
-  // Cancel edit buttons
   $("#cancelOrderEdit")?.addEventListener("click", resetOrderForm);
   $("#cancelClientEdit")?.addEventListener("click", resetClientForm);
   $("#cancelInventoryEdit")?.addEventListener("click", resetInventoryForm);
 
-  // Delegation: Orders
   $("#ordersList")?.addEventListener("click", async (e) => {
     const editBtn = e.target.closest("[data-action='edit-order']");
     const deleteBtn = e.target.closest("[data-action='delete-order']");
 
     if (editBtn) {
-      const id = editBtn.dataset.id;
-      startEditOrder(id);
+      startEditOrder(editBtn.dataset.id);
       return;
     }
 
     if (deleteBtn) {
-      const id = deleteBtn.dataset.id;
-      await deleteOrder(id);
+      await deleteOrder(deleteBtn.dataset.id);
     }
   });
 
-  // Delegation: Clients
   $("#clientsList")?.addEventListener("click", async (e) => {
     const editBtn = e.target.closest("[data-action='edit-client']");
     const deleteBtn = e.target.closest("[data-action='delete-client']");
 
     if (editBtn) {
-      const id = editBtn.dataset.id;
-      startEditClient(id);
+      startEditClient(editBtn.dataset.id);
       return;
     }
 
     if (deleteBtn) {
-      const id = deleteBtn.dataset.id;
-      await deleteClient(id);
+      await deleteClient(deleteBtn.dataset.id);
     }
   });
 
-  // Delegation: Inventory
   $("#inventoryList")?.addEventListener("click", async (e) => {
     const editBtn = e.target.closest("[data-action='edit-inventory']");
     const deleteBtn = e.target.closest("[data-action='delete-inventory']");
 
     if (editBtn) {
-      const id = editBtn.dataset.id;
-      startEditInventory(id);
+      startEditInventory(editBtn.dataset.id);
       return;
     }
 
     if (deleteBtn) {
-      const id = deleteBtn.dataset.id;
-      await deleteInventory(id);
+      await deleteInventory(deleteBtn.dataset.id);
     }
   });
 }
@@ -268,8 +304,7 @@ function setActiveTab(tab) {
   });
 
   document.querySelectorAll(".tab-content").forEach((el) => {
-    const match = el.dataset.tabContent === state.currentTab;
-    el.style.display = match ? "block" : "none";
+    el.style.display = el.dataset.tabContent === state.currentTab ? "block" : "none";
   });
 }
 
@@ -307,11 +342,9 @@ async function handleOrderSubmit(e) {
         id: state.editingOrderId,
         ...payload,
       });
-      safeHaptic("success");
       safeAlert("Заказ обновлён");
     } else {
       await api("create_order", payload);
-      safeHaptic("success");
       safeAlert("Заказ добавлен");
     }
 
@@ -319,6 +352,7 @@ async function handleOrderSubmit(e) {
     await loadOrders();
     renderOrders();
     renderDashboard();
+    safeHaptic("success");
   } catch (err) {
     console.error("ORDER SUBMIT ERROR:", err);
     safeAlert(err.message || "Ошибка сохранения заказа");
@@ -343,13 +377,13 @@ function startEditOrder(id) {
   setVal("#orderComment", item.comment);
 
   $("#cancelOrderEdit")?.classList.remove("hidden");
-  $("#orderSubmitText") && ($("#orderSubmitText").textContent = "Сохранить");
+  setText("#orderSubmitText", "Сохранить");
 
   scrollToElement("#orderFormCard");
 }
 
 async function deleteOrder(id) {
-  const ok = confirm("Удалить заказ?");
+  const ok = window.confirm("Удалить заказ?");
   if (!ok) return;
 
   try {
@@ -369,14 +403,13 @@ function resetOrderForm() {
   $("#orderForm")?.reset();
   fillDefaultDates();
   $("#cancelOrderEdit")?.classList.add("hidden");
-  $("#orderSubmitText") && ($("#orderSubmitText").textContent = "Добавить");
+  setText("#orderSubmitText", "Добавить");
 }
 
 function getFilteredOrders() {
   return [...state.orders]
     .filter((item) => {
-      const search = state.orderSearch;
-      if (!search) return true;
+      if (!state.orderSearch) return true;
 
       const text = [
         item.client_name,
@@ -387,7 +420,7 @@ function getFilteredOrders() {
         .join(" ")
         .toLowerCase();
 
-      return text.includes(search);
+      return text.includes(state.orderSearch);
     })
     .filter((item) => {
       if (state.orderStatus === "all") return true;
@@ -462,13 +495,13 @@ function startEditClient(id) {
   setVal("#clientNote", item.note);
 
   $("#cancelClientEdit")?.classList.remove("hidden");
-  $("#clientSubmitText") && ($("#clientSubmitText").textContent = "Сохранить");
+  setText("#clientSubmitText", "Сохранить");
 
   scrollToElement("#clientFormCard");
 }
 
 async function deleteClient(id) {
-  const ok = confirm("Удалить клиента?");
+  const ok = window.confirm("Удалить клиента?");
   if (!ok) return;
 
   try {
@@ -488,7 +521,7 @@ function resetClientForm() {
   state.editingClientId = null;
   $("#clientForm")?.reset();
   $("#cancelClientEdit")?.classList.add("hidden");
-  $("#clientSubmitText") && ($("#clientSubmitText").textContent = "Добавить");
+  setText("#clientSubmitText", "Добавить");
 }
 
 // ==============================
@@ -564,13 +597,13 @@ function startEditInventory(id) {
   setVal("#inventoryComment", item.comment);
 
   $("#cancelInventoryEdit")?.classList.remove("hidden");
-  $("#inventorySubmitText") && ($("#inventorySubmitText").textContent = "Сохранить");
+  setText("#inventorySubmitText", "Сохранить");
 
   scrollToElement("#inventoryFormCard");
 }
 
 async function deleteInventory(id) {
-  const ok = confirm("Удалить товар?");
+  const ok = window.confirm("Удалить товар?");
   if (!ok) return;
 
   try {
@@ -591,14 +624,13 @@ function resetInventoryForm() {
   setVal("#inventoryCurrency", "UAH");
   setVal("#inventoryUnit", "м");
   $("#cancelInventoryEdit")?.classList.add("hidden");
-  $("#inventorySubmitText") && ($("#inventorySubmitText").textContent = "Добавить");
+  setText("#inventorySubmitText", "Добавить");
 }
 
 function getFilteredInventory() {
   return [...state.inventory]
     .filter((item) => {
-      const search = state.inventorySearch;
-      if (!search) return true;
+      if (!state.inventorySearch) return true;
 
       const text = [
         item.brand,
@@ -610,7 +642,7 @@ function getFilteredInventory() {
         .join(" ")
         .toLowerCase();
 
-      return text.includes(search);
+      return text.includes(state.inventorySearch);
     })
     .filter((item) => {
       if (state.inventoryCategory === "all") return true;
@@ -637,30 +669,28 @@ function renderUserInfo() {
   if (!el) return;
 
   const user = state.user || {};
-  const name =
-    user.first_name ||
-    user.username ||
-    "Пользователь";
+  const name = user.first_name || user.username || "Пользователь";
 
   el.textContent = `👋 ${name}`;
 }
 
 function renderDashboard() {
-  const totalOrders = state.orders.length;
-  const activeOrders = state.orders.filter((x) => !["done", "completed", "closed"].includes(String(x.status || "").toLowerCase())).length;
-  const totalClients = state.clients.length;
-  const totalInventory = state.inventory.length;
+  setText("#statTotalOrders", String(state.orders.length));
 
-  setText("#statTotalOrders", String(totalOrders));
+  const activeOrders = state.orders.filter((x) => {
+    const s = String(x.status || "").toLowerCase();
+    return !["done", "completed", "closed", "cancelled"].includes(s);
+  }).length;
+
   setText("#statActiveOrders", String(activeOrders));
-  setText("#statTotalClients", String(totalClients));
-  setText("#statInventoryItems", String(totalInventory));
+  setText("#statTotalClients", String(state.clients.length));
+  setText("#statInventoryItems", String(state.inventory.length));
 
   const recentBox = $("#recentOrders");
   if (!recentBox) return;
 
   const recent = [...state.orders]
-    .sort((a, b) => new Date(b.day || 0) - new Date(a.day || 0))
+    .sort((a, b) => new Date(b.day || 0).getTime() - new Date(a.day || 0).getTime())
     .slice(0, 5);
 
   if (!recent.length) {
@@ -669,20 +699,18 @@ function renderDashboard() {
   }
 
   recentBox.innerHTML = recent
-    .map((item) => {
-      return `
-        <div class="list-row">
-          <div class="list-row-main">
-            <div class="list-row-title">${escapeHtml(item.client_name || "Без клиента")}</div>
-            <div class="list-row-sub">${escapeHtml(item.car_model || "-")} · ${escapeHtml(item.services || "-")}</div>
-          </div>
-          <div class="list-row-side">
-            <div class="badge-status status-${safeStatusClass(item.status)}">${escapeHtml(item.status || "new")}</div>
-            <div class="list-row-date">${formatDate(item.day)}</div>
-          </div>
+    .map((item) => `
+      <div class="list-row">
+        <div class="list-row-main">
+          <div class="list-row-title">${escapeHtml(item.client_name || "Без клиента")}</div>
+          <div class="list-row-sub">${escapeHtml(item.car_model || "-")} · ${escapeHtml(item.services || "-")}</div>
         </div>
-      `;
-    })
+        <div class="list-row-side">
+          <div class="badge-status status-${safeStatusClass(item.status)}">${escapeHtml(item.status || "new")}</div>
+          <div class="list-row-date">${formatDate(item.day)}</div>
+        </div>
+      </div>
+    `)
     .join("");
 }
 
@@ -698,31 +726,29 @@ function renderOrders() {
   }
 
   box.innerHTML = items
-    .map((item) => {
-      return `
-        <div class="item-card">
-          <div class="item-head">
-            <div>
-              <div class="item-title">${escapeHtml(item.client_name || "Без клиента")}</div>
-              <div class="item-subtitle">${escapeHtml(item.car_model || "-")}</div>
-            </div>
-            <div class="badge-status status-${safeStatusClass(item.status)}">${escapeHtml(item.status || "new")}</div>
+    .map((item) => `
+      <div class="item-card">
+        <div class="item-head">
+          <div>
+            <div class="item-title">${escapeHtml(item.client_name || "Без клиента")}</div>
+            <div class="item-subtitle">${escapeHtml(item.car_model || "-")}</div>
           </div>
-
-          <div class="item-body">
-            <div class="item-line"><b>Услуги:</b> ${escapeHtml(item.services || "-")}</div>
-            <div class="item-line"><b>Сумма:</b> ${formatMoney(item.amount, item.currency)}</div>
-            <div class="item-line"><b>Дата:</b> ${formatDate(item.day)}</div>
-            ${item.comment ? `<div class="item-line"><b>Комментарий:</b> ${escapeHtml(item.comment)}</div>` : ""}
-          </div>
-
-          <div class="item-actions">
-            <button class="action-btn edit-btn" data-action="edit-order" data-id="${escapeHtml(item.id)}">Редактировать</button>
-            <button class="action-btn delete-btn" data-action="delete-order" data-id="${escapeHtml(item.id)}">Удалить</button>
-          </div>
+          <div class="badge-status status-${safeStatusClass(item.status)}">${escapeHtml(item.status || "new")}</div>
         </div>
-      `;
-    })
+
+        <div class="item-body">
+          <div class="item-line"><b>Услуги:</b> ${escapeHtml(item.services || "-")}</div>
+          <div class="item-line"><b>Сумма:</b> ${formatMoney(item.amount, item.currency)}</div>
+          <div class="item-line"><b>Дата:</b> ${formatDate(item.day)}</div>
+          ${item.comment ? `<div class="item-line"><b>Комментарий:</b> ${escapeHtml(item.comment)}</div>` : ""}
+        </div>
+
+        <div class="item-actions">
+          <button class="action-btn edit-btn" data-action="edit-order" data-id="${escapeHtml(item.id)}">Редактировать</button>
+          <button class="action-btn delete-btn" data-action="delete-order" data-id="${escapeHtml(item.id)}">Удалить</button>
+        </div>
+      </div>
+    `)
     .join("");
 }
 
@@ -740,28 +766,26 @@ function renderClients() {
   }
 
   box.innerHTML = items
-    .map((item) => {
-      return `
-        <div class="item-card">
-          <div class="item-head">
-            <div>
-              <div class="item-title">${escapeHtml(item.name || "-")}</div>
-              <div class="item-subtitle">${escapeHtml(item.phone || "Без телефона")}</div>
-            </div>
-          </div>
-
-          <div class="item-body">
-            ${item.telegram_id ? `<div class="item-line"><b>Telegram ID:</b> ${escapeHtml(item.telegram_id)}</div>` : ""}
-            ${item.note ? `<div class="item-line"><b>Заметка:</b> ${escapeHtml(item.note)}</div>` : ""}
-          </div>
-
-          <div class="item-actions">
-            <button class="action-btn edit-btn" data-action="edit-client" data-id="${escapeHtml(item.id)}">Редактировать</button>
-            <button class="action-btn delete-btn" data-action="delete-client" data-id="${escapeHtml(item.id)}">Удалить</button>
+    .map((item) => `
+      <div class="item-card">
+        <div class="item-head">
+          <div>
+            <div class="item-title">${escapeHtml(item.name || "-")}</div>
+            <div class="item-subtitle">${escapeHtml(item.phone || "Без телефона")}</div>
           </div>
         </div>
-      `;
-    })
+
+        <div class="item-body">
+          ${item.telegram_id ? `<div class="item-line"><b>Telegram ID:</b> ${escapeHtml(item.telegram_id)}</div>` : ""}
+          ${item.note ? `<div class="item-line"><b>Заметка:</b> ${escapeHtml(item.note)}</div>` : ""}
+        </div>
+
+        <div class="item-actions">
+          <button class="action-btn edit-btn" data-action="edit-client" data-id="${escapeHtml(item.id)}">Редактировать</button>
+          <button class="action-btn delete-btn" data-action="delete-client" data-id="${escapeHtml(item.id)}">Удалить</button>
+        </div>
+      </div>
+    `)
     .join("");
 }
 
@@ -781,31 +805,29 @@ function renderInventory() {
   }
 
   box.innerHTML = items
-    .map((item) => {
-      return `
-        <div class="item-card">
-          <div class="item-head">
-            <div>
-              <div class="item-title">${escapeHtml(item.name || "-")}</div>
-              <div class="item-subtitle">${escapeHtml(item.brand || "-")} ${item.code ? "· " + escapeHtml(item.code) : ""}</div>
-            </div>
-            <div class="badge-status">${escapeHtml(item.category || "other")}</div>
+    .map((item) => `
+      <div class="item-card">
+        <div class="item-head">
+          <div>
+            <div class="item-title">${escapeHtml(item.name || "-")}</div>
+            <div class="item-subtitle">${escapeHtml(item.brand || "-")} ${item.code ? "· " + escapeHtml(item.code) : ""}</div>
           </div>
-
-          <div class="item-body">
-            <div class="item-line"><b>Количество:</b> ${escapeHtml(item.quantity ?? 0)} ${escapeHtml(item.unit || "")}</div>
-            <div class="item-line"><b>Вход:</b> ${formatMoney(item.purchase_price, item.currency)}</div>
-            <div class="item-line"><b>Розница:</b> ${formatMoney(item.retail_price, item.currency)}</div>
-            ${item.comment ? `<div class="item-line"><b>Комментарий:</b> ${escapeHtml(item.comment)}</div>` : ""}
-          </div>
-
-          <div class="item-actions">
-            <button class="action-btn edit-btn" data-action="edit-inventory" data-id="${escapeHtml(item.id)}">Редактировать</button>
-            <button class="action-btn delete-btn" data-action="delete-inventory" data-id="${escapeHtml(item.id)}">Удалить</button>
-          </div>
+          <div class="badge-status">${escapeHtml(item.category || "other")}</div>
         </div>
-      `;
-    })
+
+        <div class="item-body">
+          <div class="item-line"><b>Количество:</b> ${escapeHtml(item.quantity ?? 0)} ${escapeHtml(item.unit || "")}</div>
+          <div class="item-line"><b>Вход:</b> ${formatMoney(item.purchase_price, item.currency)}</div>
+          <div class="item-line"><b>Розница:</b> ${formatMoney(item.retail_price, item.currency)}</div>
+          ${item.comment ? `<div class="item-line"><b>Комментарий:</b> ${escapeHtml(item.comment)}</div>` : ""}
+        </div>
+
+        <div class="item-actions">
+          <button class="action-btn edit-btn" data-action="edit-inventory" data-id="${escapeHtml(item.id)}">Редактировать</button>
+          <button class="action-btn delete-btn" data-action="delete-inventory" data-id="${escapeHtml(item.id)}">Удалить</button>
+        </div>
+      </div>
+    `)
     .join("");
 }
 
@@ -849,11 +871,11 @@ function num(selector) {
 
 function escapeHtml(str = "") {
   return String(str)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function formatMoney(value, currency = "UAH") {
@@ -862,14 +884,16 @@ function formatMoney(value, currency = "UAH") {
     ? n.toLocaleString("ru-RU", { maximumFractionDigits: 2 })
     : "0";
 
-  if (currency === "USD") return `$${formatted}`;
-  return `${formatted} грн`;
+  return currency === "USD" ? `$${formatted}` : `${formatted} грн`;
 }
 
 function formatDate(dateStr) {
   if (!dateStr) return "-";
+
   const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return escapeHtml(String(dateStr));
+  if (Number.isNaN(date.getTime())) {
+    return escapeHtml(String(dateStr));
+  }
 
   return date.toLocaleDateString("ru-RU", {
     day: "2-digit",
@@ -882,9 +906,11 @@ function normalizeDateForInput(value) {
   if (!value) return "";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "";
+
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
+
   return `${year}-${month}-${day}`;
 }
 
@@ -904,13 +930,21 @@ function showGlobalLoader(show) {
 function toggleButtonLoading(btn, loading) {
   if (!btn) return;
   btn.disabled = !!loading;
-  btn.dataset.prevText ??= btn.textContent || "";
+
+  if (!btn.dataset.prevText) {
+    btn.dataset.prevText = btn.textContent || "";
+  }
+
   btn.textContent = loading ? "Сохраняю..." : btn.dataset.prevText;
 }
 
 function safeAlert(text) {
-  if (tg?.showAlert) tg.showAlert(String(text));
-  else alert(String(text));
+  try {
+    if (tg?.showAlert) tg.showAlert(String(text));
+    else alert(String(text));
+  } catch (err) {
+    alert(String(text));
+  }
 }
 
 function safeHaptic(type = "light") {
