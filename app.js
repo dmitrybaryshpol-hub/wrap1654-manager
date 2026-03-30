@@ -46,6 +46,19 @@ function getPaymentBadge(status = "") {
   const s = String(status || "").trim();
   return `<span class="badge-status payment-${s}">${escapeHtml(s || "unknown")}</span>`;
 }
+function icon(name = "") {
+  return `<span class="icon">${name}</span>`;
+}
+
+function emptyState(emoji, title, desc) {
+  return card(`
+    <div class="empty-state">
+      <div class="emoji">${emoji}</div>
+      <div class="title">${title}</div>
+      <div class="desc">${desc}</div>
+    </div>
+  `);
+}
 function injectStyles() {
   const old = document.getElementById("app-styles");
   if (old) old.remove();
@@ -464,6 +477,16 @@ function btn(text, onclick, extra = "") {
 async function loadDashboard() {
   const el = document.getElementById("dashboard");
   el.innerHTML = `
+  <div class="sticky-top">
+    <div class="toolbar-panel">
+      <div class="toolbar">
+        ${btn(`${icon("＋")} Заказ`, "openCreateOrder()", "primary")}
+        ${btn(`${icon("🛒")} Продажа`, "openCreateSale()", "secondary")}
+        ${btn(`${icon("₴")} Расход`, "openCreateExpense()", "ghost")}
+      </div>
+    </div>
+  </div>
+
   <div class="grid-2">
     ${card(`
       <div class="metric-card">
@@ -498,12 +521,6 @@ async function loadDashboard() {
     `)}
   </div>
 
-  <div class="toolbar">
-    ${btn("+ Заказ", "openCreateOrder()", "primary")}
-    ${btn("+ Продажа", "openCreateSale()", "secondary")}
-    ${btn("+ Расход", "openCreateExpense()", "ghost")}
-  </div>
-
   <div class="section-title">Активные заказы</div>
   ${(data.active_orders || []).length ? data.active_orders.map(o => `
     <div onclick="openOrder('${o.id}')">
@@ -513,33 +530,31 @@ async function loadDashboard() {
           ${getStatusBadge(o.status)}
           <b>${o.total || 0}</b>
         </div>
-        <div class="muted">Оплачено: ${o.paid || 0} · Долг: ${o.due || 0}</div>
+        <div class="mini-stat">
+          <span class="mini-stat-label">Оплачено</span>
+          <span class="mini-stat-value">${o.paid || 0}</span>
+        </div>
+        <div class="mini-stat">
+          <span class="mini-stat-label">Долг</span>
+          <span class="mini-stat-value danger">${o.due || 0}</span>
+        </div>
       `, "clickable")}
     </div>
-  `).join("") : card(`<div class="muted">Нет активных заказов</div>`)}
-
-  <div class="section-title">Долги</div>
-  ${(data.debts || []).length ? data.debts.map(d => `
-    ${card(`
-      <div class="app-card-title">${escapeHtml(d.order_number || "")}</div>
-      <div class="row" style="justify-content:space-between; align-items:center;">
-        ${getStatusBadge(d.status)}
-        <b class="danger">${d.due || 0}</b>
-      </div>
-    `)}
-  `).join("") : card(`<div class="muted">Нет долгов</div>`)}
+  `).join("") : emptyState("📭", "Нет активных заказов", "Когда появятся новые или текущие заказы, они будут показаны здесь.")}
 
   <div class="section-title">Заканчивается</div>
   ${(data.low_stock || []).length ? data.low_stock.map(i => `
     ${card(`
       <div class="app-card-title">${escapeHtml(i.name || "")}</div>
-      <div class="row" style="justify-content:space-between; align-items:center;">
-        <span class="muted">Остаток</span>
-        <b class="danger">${i.quantity}</b>
+      <div class="pretty-row">
+        <div>
+          <div class="pretty-row-title">Текущий остаток</div>
+          <div class="pretty-row-sub">Минимум: ${i.min_quantity || 0}</div>
+        </div>
+        <div class="pretty-row-right danger">${i.quantity}</div>
       </div>
-      <div class="muted">Минимум: ${i.min_quantity || 0}</div>
     `)}
-  `).join("") : card(`<div class="muted">Склад в норме</div>`)}
+  `).join("") : emptyState("✅", "Склад в норме", "Сейчас нет позиций, которые упали ниже минимального остатка.")}
 `;
 
   try {
@@ -624,40 +639,57 @@ async function loadOrders() {
     });
 
     el.innerHTML = `
-      <div>
-        <div class="toolbar">
-          ${btn("+ Новый заказ", "openCreateOrder()", "primary")}
-        </div>
-
-        <input
-          class="search-input"
-          placeholder="Поиск по номеру заказа"
-          value="${escapeHtml(state.orderSearch)}"
-          oninput="setOrderSearch(this.value)"
-        >
-
-        <div class="filter-row">
-          <button class="filter-chip ${state.orderStatus === "all" ? "active" : ""}" onclick="setOrderStatus('all')">Все</button>
-          <button class="filter-chip ${state.orderStatus === "new" ? "active" : ""}" onclick="setOrderStatus('new')">New</button>
-          <button class="filter-chip ${state.orderStatus === "in_progress" ? "active" : ""}" onclick="setOrderStatus('in_progress')">In progress</button>
-          <button class="filter-chip ${state.orderStatus === "ready" ? "active" : ""}" onclick="setOrderStatus('ready')">Ready</button>
-          <button class="filter-chip ${state.orderStatus === "closed" ? "active" : ""}" onclick="setOrderStatus('closed')">Closed</button>
-        </div>
-
-        ${filtered.length ? filtered.map(o => `
-          <div onclick="openOrder('${o.id}')" style="cursor:pointer;">
-            ${card(`
-              <div class="app-card-title">${escapeHtml(o.order_number || "")}</div>
-              <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:6px;">
-                ${getStatusBadge(o.status)}
-                <b>${o.total || 0} ${escapeHtml(o.currency || "UAH")}</b>
-              </div>
-              <div class="muted">Оплачено: ${o.paid || 0} | Долг: ${o.due || 0}</div>
-            `, "clickable")}
-          </div>
-        `).join("") : card(`<div class="muted">Ничего не найдено</div>`)}
+  <div class="sticky-top">
+    <div class="toolbar-panel">
+      <div class="toolbar">
+        ${btn(`${icon("＋")} Новый заказ`, "openCreateOrder()", "primary")}
       </div>
-    `;
+
+      <input
+        class="search-input"
+        placeholder="Поиск по номеру заказа"
+        value="${escapeHtml(state.orderSearch)}"
+        oninput="setOrderSearch(this.value)"
+      >
+
+      <div class="filter-row">
+        <button class="filter-chip ${state.orderStatus === "all" ? "active" : ""}" onclick="setOrderStatus('all')">Все</button>
+        <button class="filter-chip ${state.orderStatus === "new" ? "active" : ""}" onclick="setOrderStatus('new')">New</button>
+        <button class="filter-chip ${state.orderStatus === "in_progress" ? "active" : ""}" onclick="setOrderStatus('in_progress')">In progress</button>
+        <button class="filter-chip ${state.orderStatus === "ready" ? "active" : ""}" onclick="setOrderStatus('ready')">Ready</button>
+        <button class="filter-chip ${state.orderStatus === "closed" ? "active" : ""}" onclick="setOrderStatus('closed')">Closed</button>
+      </div>
+    </div>
+  </div>
+
+  ${filtered.length ? filtered.map(o => `
+    <div onclick="openOrder('${o.id}')" style="cursor:pointer;">
+      ${card(`
+        <div class="app-card-title">${escapeHtml(o.order_number || "")}</div>
+        <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:8px;">
+          ${getStatusBadge(o.status)}
+          <b>${o.total || 0} ${escapeHtml(o.currency || "UAH")}</b>
+        </div>
+
+        <div class="pretty-row">
+          <div>
+            <div class="pretty-row-title">Оплачено</div>
+            <div class="pretty-row-sub">Текущий прогресс оплаты</div>
+          </div>
+          <div class="pretty-row-right">${o.paid || 0}</div>
+        </div>
+
+        <div class="pretty-row">
+          <div>
+            <div class="pretty-row-title">Долг</div>
+            <div class="pretty-row-sub">Остаток к оплате</div>
+          </div>
+          <div class="pretty-row-right danger">${o.due || 0}</div>
+        </div>
+      `, "clickable")}
+    </div>
+  `).join("") : emptyState("🔎", "Ничего не найдено", "Попробуй изменить поиск или выбрать другой фильтр по статусу.")}
+`;
   } catch (e) {
     console.error(e);
     el.innerHTML = `<div style="padding:16px;">Ошибка загрузки заказов</div>`;
@@ -682,7 +714,7 @@ async function openOrder(id) {
     const order = await api("get_order", { id });
 
     let materialsHtml = `
-      <div style="font-size:13px; opacity:0.7;">Материалов пока нет</div>
+      <div class="muted">Материалы ещё не добавлены</div>
     `;
 
     if (order.materials && order.materials.length) {
@@ -718,9 +750,9 @@ async function openOrder(id) {
 </div>
 
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
-        ${btn("+ Оплата", `addPayment('${id}')`)}
-        ${btn("+ Материал", `addMaterial('${id}')`)}
-      </div>
+  ${btn(`${icon("₴")} Оплата`, `addPayment('${id}')`, "primary")}
+  ${btn(`${icon("🧩")} Материал`, `addMaterial('${id}')`, "secondary")}
+</div>
 
       <hr style="border-color:#1f2937;">
 
@@ -921,7 +953,68 @@ async function submitMaterialToOrder(order_id) {
 
 async function loadInventory() {
   const el = document.getElementById("inventory");
-  el.innerHTML = `<div style="padding:16px;">Загрузка...</div>`;
+  el.innerHTML = `
+  <div class="sticky-top">
+    <div class="toolbar-panel">
+      <div class="toolbar">
+        ${btn(`${icon("📦")} Приход`, "openAddStock()", "primary")}
+        ${btn(`${icon("＋")} Товар`, "openCreateInventoryItem()", "secondary")}
+      </div>
+
+      <input
+        class="search-input"
+        placeholder="Поиск по названию или бренду"
+        value="${escapeHtml(state.inventorySearch)}"
+        oninput="setInventorySearch(this.value)"
+      >
+
+      <div class="filter-row">
+        <button class="filter-chip ${state.inventoryCategory === "all" ? "active" : ""}" onclick="setInventoryCategory('all')">Все</button>
+        <button class="filter-chip ${state.inventoryCategory === "vinyl" ? "active" : ""}" onclick="setInventoryCategory('vinyl')">Vinyl</button>
+        <button class="filter-chip ${state.inventoryCategory === "ppf" ? "active" : ""}" onclick="setInventoryCategory('ppf')">PPF</button>
+        <button class="filter-chip ${state.inventoryCategory === "tint" ? "active" : ""}" onclick="setInventoryCategory('tint')">Tint</button>
+        <button class="filter-chip ${state.inventoryCategory === "consumables" ? "active" : ""}" onclick="setInventoryCategory('consumables')">Расходники</button>
+      </div>
+    </div>
+  </div>
+
+  ${filtered.length ? filtered.map(i => `
+    <div onclick="openItem('${i.id}')" style="cursor:pointer;">
+      ${card(`
+        <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <div class="app-card-title" style="margin-bottom:0;">${escapeHtml(i.name || "")}</div>
+          <span class="badge">${escapeHtml(i.category || "")}</span>
+        </div>
+
+        <div class="pretty-row">
+          <div>
+            <div class="pretty-row-title">Остаток</div>
+            <div class="pretty-row-sub">Полное количество на складе</div>
+          </div>
+          <div class="pretty-row-right">${i.quantity}</div>
+        </div>
+
+        <div class="pretty-row">
+          <div>
+            <div class="pretty-row-title">Резерв</div>
+            <div class="pretty-row-sub">Уже выделено под заказы</div>
+          </div>
+          <div class="pretty-row-right">${i.reserved_quantity}</div>
+        </div>
+
+        <div class="pretty-row">
+          <div>
+            <div class="pretty-row-title">Доступно</div>
+            <div class="pretty-row-sub">Свободный остаток</div>
+          </div>
+          <div class="pretty-row-right ${Number(i.available_quantity) <= Number(i.min_quantity || 0) ? "danger" : "success"}">
+            ${i.available_quantity}
+          </div>
+        </div>
+      `, "clickable")}
+    </div>
+  `).join("") : emptyState("📦", "Ничего не найдено", "Попробуй изменить поиск или выбрать другую категорию.")}
+`;
 
   try {
     const items = await api("get_inventory");
@@ -1292,7 +1385,7 @@ async function loadFinance() {
             <div>${x.amount || 0} ${escapeHtml(x.currency || "UAH")}</div>
             <div style="font-size:12px; opacity:0.7;">${escapeHtml(x.note || "")}</div>
           `)}
-        `).join("") : card("Расходов пока нет")}
+        `).join("") : emptyState("🧾", "Расходов пока нет", "Добавь первый расход, чтобы видеть более точную чистую прибыль.")
       </div>
     `;
   } catch (e) {
