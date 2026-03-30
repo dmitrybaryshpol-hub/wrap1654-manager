@@ -193,10 +193,13 @@ async function loadInventory() {
     <button onclick="openAddStock()">+ Приход</button>
 
     ${items.map(i => `
-      <div onclick="openItem('${i.id}')">
-        ${i.name} — ${i.quantity}
-      </div>
-    `).join("")}
+  <div onclick="openItem('${i.id}')" style="padding:10px; border-bottom:1px solid #333;">
+    <b>${i.name}</b><br>
+    Остаток: ${i.quantity}<br>
+    Резерв: ${i.reserved_quantity}<br>
+    Доступно: ${i.available_quantity}
+  </div>
+`).join("")}
   `;
 }
 
@@ -269,12 +272,12 @@ async function addMaterial(order_id) {
   const item_id = prompt("ID товара");
   const qty = prompt("Количество");
 
-  await api("writeoff_inventory", {
-    order_id,
-    item_id,
-    quantity: Number(qty)
-  });
-
+  await api("writeoff_reserved_inventory", {
+  order_id,
+  item_id,
+  quantity: Number(qty)
+});
+  
   tg.showAlert("Списано");
 }
 
@@ -291,6 +294,94 @@ function openAddStock() {
 
     <button onclick="addStock()">Добавить</button>
   `);
+}
+
+// ==============================
+// INVENTORY ITEM (карточка товара)
+// ==============================
+
+async function openItem(id) {
+  const item = await api("get_inventory_item", { id });
+  const movements = await api("get_inventory_movements", { item_id: id });
+
+  openModal(`
+    <h3>${item.name}</h3>
+
+    <p>Остаток: ${item.quantity}</p>
+    <p>Резерв: ${item.reserved_quantity}</p>
+    <p>Доступно: ${item.available_quantity}</p>
+
+    <p>Вход: ${item.purchase_price}</p>
+    <p>Розница: ${item.retail_price}</p>
+
+    <br>
+
+    <button onclick="reserveItem('${id}')">🔒 Резерв</button>
+    <button onclick="unreserveItem('${id}')">🔓 Снять резерв</button>
+    <button onclick="adjustItem('${id}')">⚙️ Корректировка</button>
+
+    <hr>
+
+    <h4>История</h4>
+
+    <div style="max-height:200px; overflow:auto;">
+      ${movements.map(m => `
+        <div style="border-bottom:1px solid #333; padding:5px;">
+          ${m.movement_type} — ${m.quantity}
+        </div>
+      `).join("")}
+    </div>
+  `);
+}
+// ==============================
+// RESERVE
+// ==============================
+
+async function reserveItem(id) {
+  const qty = prompt("Сколько зарезервировать?");
+
+  await api("reserve_inventory", {
+    item_id: id,
+    quantity: Number(qty),
+    comment: "Резерв из приложения"
+  });
+
+  tg.showAlert("Зарезервировано");
+  loadInventory();
+}
+
+// ==============================
+// UNRESERVE
+// ==============================
+
+async function unreserveItem(id) {
+  const qty = prompt("Сколько снять с резерва?");
+
+  await api("unreserve_inventory", {
+    item_id: id,
+    quantity: Number(qty),
+    comment: "Снятие резерва"
+  });
+
+  tg.showAlert("Резерв снят");
+  loadInventory();
+}
+
+// ==============================
+// ADJUST
+// ==============================
+
+async function adjustItem(id) {
+  const qty = prompt("Изменение (+ или -)");
+
+  await api("adjust_inventory", {
+    item_id: id,
+    quantity_delta: Number(qty),
+    comment: "Корректировка"
+  });
+
+  tg.showAlert("Обновлено");
+  loadInventory();
 }
 
 async function addStock() {
