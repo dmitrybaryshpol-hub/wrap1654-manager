@@ -370,13 +370,24 @@ async function initApp() {
   try {
     injectStyles();
 
+    document.body.innerHTML = `
+      <div style="padding:40px; color:white; background:black; min-height:100vh; font-size:28px;">
+        NEW APP JS WORKS
+      </div>
+    `;
+
     const user = await api("auth");
     state.user = user;
 
     renderLayout();
     showTab("dashboard");
   } catch (e) {
-    console.error(e);
+    console.error("INIT ERROR:", e);
+    document.body.innerHTML = `
+      <div style="padding:30px; color:red; background:black; min-height:100vh;">
+        INIT ERROR: ${String(e.message || e)}
+      </div>
+    `;
   }
 }
 
