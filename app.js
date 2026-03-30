@@ -33,7 +33,281 @@ function safeAlert(text) {
   if (tg?.showAlert) tg.showAlert(text);
   else alert(text);
 }
+function injectStyles() {
+  const old = document.getElementById("app-styles");
+  if (old) old.remove();
 
+  const style = document.createElement("style");
+  style.id = "app-styles";
+  style.innerHTML = `
+    :root{
+      --bg:#05060a;
+      --panel:#0b0f17;
+      --panel-2:#111827;
+      --line:#1f2937;
+      --soft:#94a3b8;
+      --text:#f8fafc;
+      --accent:#f5c518;
+      --accent-2:#ffd54a;
+      --danger:#ef4444;
+      --success:#22c55e;
+      --shadow:0 10px 30px rgba(0,0,0,.35);
+      --radius:18px;
+    }
+
+    *{
+      box-sizing:border-box;
+      -webkit-tap-highlight-color:transparent;
+    }
+
+    html,body{
+      margin:0;
+      padding:0;
+      background:linear-gradient(180deg,#05060a 0%, #0a0d14 100%);
+      color:var(--text);
+      font-family:Inter, Arial, sans-serif;
+    }
+
+    body{
+      min-height:100vh;
+    }
+
+    input, select, textarea, button{
+      font:inherit;
+    }
+
+    input, select, textarea{
+      width:100%;
+      background:#0b1220;
+      color:var(--text);
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:12px 14px;
+      outline:none;
+      transition:.2s ease;
+    }
+
+    input:focus, select:focus, textarea:focus{
+      border-color:#334155;
+      box-shadow:0 0 0 3px rgba(245,197,24,.08);
+    }
+
+    button{
+      border:none;
+      outline:none;
+    }
+
+    .shell{
+      min-height:100vh;
+      padding-bottom:92px;
+      background:
+        radial-gradient(circle at top right, rgba(245,197,24,.08), transparent 24%),
+        radial-gradient(circle at top left, rgba(255,255,255,.03), transparent 20%);
+    }
+
+    .topbar{
+      padding:18px 16px 10px;
+    }
+
+    .brand{
+      font-size:22px;
+      font-weight:800;
+      letter-spacing:.2px;
+    }
+
+    .sub{
+      font-size:12px;
+      color:var(--soft);
+      margin-top:4px;
+    }
+
+    .page{
+      padding:0 16px 16px;
+    }
+
+    .app-card{
+      background:linear-gradient(180deg, rgba(17,24,39,.96), rgba(11,15,23,.96));
+      border:1px solid rgba(255,255,255,.05);
+      border-radius:22px;
+      padding:14px;
+      margin-bottom:12px;
+      box-shadow:var(--shadow);
+    }
+
+    .app-card.clickable{
+      cursor:pointer;
+      transition:transform .18s ease, border-color .18s ease, background .18s ease;
+    }
+
+    .app-card.clickable:active{
+      transform:scale(.99);
+    }
+
+    .app-card-title{
+      font-weight:700;
+      font-size:15px;
+      margin-bottom:6px;
+    }
+
+    .muted{
+      color:var(--soft);
+      font-size:13px;
+    }
+
+    .row{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+
+    .grid-2{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+    }
+
+    .stat-value{
+      font-size:22px;
+      font-weight:800;
+      margin-top:6px;
+    }
+
+    .section-title{
+      font-size:15px;
+      font-weight:800;
+      margin:14px 0 10px;
+    }
+
+    .btn{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      min-height:42px;
+      padding:0 14px;
+      border-radius:14px;
+      font-weight:700;
+      cursor:pointer;
+      transition:.18s ease;
+      white-space:nowrap;
+    }
+
+    .btn:active{
+      transform:scale(.98);
+    }
+
+    .btn-primary{
+      background:linear-gradient(180deg,var(--accent-2),var(--accent));
+      color:#111;
+      box-shadow:0 8px 24px rgba(245,197,24,.22);
+    }
+
+    .btn-secondary{
+      background:#0f172a;
+      color:var(--text);
+      border:1px solid var(--line);
+    }
+
+    .btn-ghost{
+      background:transparent;
+      color:var(--soft);
+      border:1px solid var(--line);
+    }
+
+    .bottom-nav{
+      position:fixed;
+      left:0;
+      right:0;
+      bottom:0;
+      z-index:30;
+      padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+      background:rgba(7,10,16,.92);
+      backdrop-filter:blur(14px);
+      border-top:1px solid rgba(255,255,255,.06);
+      display:flex;
+      gap:8px;
+    }
+
+    .nav-btn{
+      flex:1;
+      min-height:48px;
+      border-radius:16px;
+      background:#0b1220;
+      color:var(--soft);
+      border:1px solid var(--line);
+      font-weight:700;
+    }
+
+    .nav-btn.active{
+      background:linear-gradient(180deg,#1b2433,#111827);
+      color:#fff;
+      border-color:#334155;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
+    }
+
+    .modal-overlay{
+      position:fixed;
+      inset:0;
+      z-index:100;
+      background:rgba(0,0,0,.68);
+      backdrop-filter:blur(8px);
+      display:flex;
+      align-items:flex-end;
+      justify-content:center;
+    }
+
+    .modal-sheet{
+      width:100%;
+      max-width:760px;
+      max-height:88vh;
+      overflow:auto;
+      background:linear-gradient(180deg,#0b0f17,#0d1320);
+      border:1px solid rgba(255,255,255,.06);
+      border-top-left-radius:24px;
+      border-top-right-radius:24px;
+      padding:16px;
+      box-shadow:0 -10px 30px rgba(0,0,0,.45);
+    }
+
+    .modal-title{
+      font-size:18px;
+      font-weight:800;
+      margin:0 0 14px;
+    }
+
+    .list-row{
+      padding:10px 0;
+      border-bottom:1px solid rgba(255,255,255,.06);
+    }
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      padding:4px 8px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:700;
+      background:#111827;
+      border:1px solid var(--line);
+      color:#cbd5e1;
+    }
+
+    .danger{
+      color:#fca5a5;
+    }
+
+    .success{
+      color:#86efac;
+    }
+
+    .divider{
+      height:1px;
+      background:rgba(255,255,255,.06);
+      margin:12px 0;
+    }
+  `;
+  document.head.appendChild(style);
+}
 // ==============================
 // API
 // ==============================
@@ -68,6 +342,8 @@ async function api(action, data = {}) {
 
 async function initApp() {
   try {
+    injectStyles();
+
     const user = await api("auth");
     state.user = user;
 
@@ -86,31 +362,25 @@ initApp();
 
 function renderLayout() {
   document.body.innerHTML = `
-    <div id="app-shell" style="padding-bottom:80px; color:#fff; background:#0b1120; min-height:100vh; font-family:Arial,sans-serif;">
-      <div style="padding:16px 16px 8px 16px;">
-        <div style="font-size:20px; font-weight:700;">Wrap 1654 CRM</div>
-        <div style="font-size:12px; opacity:0.7;">
-          ${escapeHtml(state.user?.first_name || state.user?.username || "User")}
-        </div>
+    <div class="shell">
+      <div class="topbar">
+        <div class="brand">Wrap 1654 CRM</div>
+        <div class="sub">${escapeHtml(state.user?.first_name || state.user?.username || "User")}</div>
       </div>
 
       <div id="app">
-        <div id="dashboard" class="tab"></div>
-        <div id="orders" class="tab" style="display:none"></div>
-        <div id="inventory" class="tab" style="display:none"></div>
-        <div id="finance" class="tab" style="display:none"></div>
+        <div id="dashboard" class="tab page"></div>
+        <div id="orders" class="tab page" style="display:none"></div>
+        <div id="inventory" class="tab page" style="display:none"></div>
+        <div id="finance" class="tab page" style="display:none"></div>
       </div>
     </div>
 
-    <div id="bottom-nav" style="
-      position:fixed; left:0; right:0; bottom:0;
-      display:flex; gap:8px; padding:10px;
-      background:#111827; border-top:1px solid #1f2937;
-    ">
-      <button onclick="showTab('dashboard')" style="flex:1;">Главная</button>
-      <button onclick="showTab('orders')" style="flex:1;">Заказы</button>
-      <button onclick="showTab('inventory')" style="flex:1;">Склад</button>
-      <button onclick="showTab('finance')" style="flex:1;">Финансы</button>
+    <div class="bottom-nav">
+      <button id="nav-dashboard" class="nav-btn" onclick="showTab('dashboard')">Главная</button>
+      <button id="nav-orders" class="nav-btn" onclick="showTab('orders')">Заказы</button>
+      <button id="nav-inventory" class="nav-btn" onclick="showTab('inventory')">Склад</button>
+      <button id="nav-finance" class="nav-btn" onclick="showTab('finance')">Финансы</button>
     </div>
 
     <div id="modal"></div>
@@ -128,8 +398,15 @@ function showTab(tab) {
     el.style.display = "none";
   });
 
+  document.querySelectorAll(".nav-btn").forEach(el => {
+    el.classList.remove("active");
+  });
+
   const current = document.getElementById(tab);
   if (current) current.style.display = "block";
+
+  const nav = document.getElementById(`nav-${tab}`);
+  if (nav) nav.classList.add("active");
 
   if (tab === "dashboard") loadDashboard();
   if (tab === "orders") loadOrders();
@@ -142,17 +419,14 @@ function showTab(tab) {
 // ==============================
 
 function card(html, extra = "") {
+  return `<div class="app-card ${extra}">${html}</div>`;
+}
+
+function btn(text, onclick, variant = "secondary", extra = "") {
   return `
-    <div style="
-      background:#111827;
-      border:1px solid #1f2937;
-      border-radius:14px;
-      padding:12px;
-      margin-bottom:10px;
-      ${extra}
-    ">
-      ${html}
-    </div>
+    <button onclick="${onclick}" class="btn btn-${variant}" style="${extra}">
+      ${text}
+    </button>
   `;
 }
 
@@ -185,63 +459,52 @@ async function loadDashboard() {
     const stats = data.stats || {};
 
     el.innerHTML = `
-      <div style="padding:16px;">
+  <div class="grid-2">
+    ${card(`
+      <div class="muted">Выручка</div>
+      <div class="stat-value">${(f.orders_revenue || 0) + (f.sales_revenue || 0)}</div>
+    `)}
+    ${card(`
+      <div class="muted">Чистая прибыль</div>
+      <div class="stat-value">${f.net_profit || 0}</div>
+    `)}
+    ${card(`
+      <div class="muted">Расходы</div>
+      <div class="stat-value">${f.expenses_total || 0}</div>
+    `)}
+    ${card(`
+      <div class="muted">Долги</div>
+      <div class="stat-value">${stats.total_debt || 0}</div>
+    `)}
+  </div>
 
-        <!-- ФИНАНСЫ -->
-        ${card(`
-          <div style="font-weight:700; margin-bottom:8px;">💰 Финансы (месяц)</div>
-          <div>Выручка: ${(f.orders_revenue || 0) + (f.sales_revenue || 0)}</div>
-          <div>Расходы: ${f.expenses_total || 0}</div>
-          <hr style="border-color:#1f2937;">
-          <div><b>Чистая прибыль: ${f.net_profit || 0}</b></div>
-        `)}
+  <div class="row" style="margin:12px 0 8px;">
+    ${btn("+ Заказ", "openCreateOrder()", "primary")}
+    ${btn("+ Продажа", "openCreateSale()", "secondary")}
+    ${btn("+ Расход", "openCreateExpense()", "ghost")}
+  </div>
 
-        <!-- СТАТИСТИКА -->
-        ${card(`
-          <div style="font-weight:700; margin-bottom:8px;">📊 Статистика</div>
-          <div>Активных заказов: ${stats.active_count || 0}</div>
-          <div>В работе: ${stats.total_in_work || 0}</div>
-          <div>Долги: ${stats.total_debt || 0}</div>
-        `)}
-
-        <!-- БЫСТРЫЕ ДЕЙСТВИЯ -->
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
-          ${btn("+ Заказ", "openCreateOrder()")}
-          ${btn("+ Продажа", "openCreateSale()")}
-          ${btn("+ Расход", "openCreateExpense()")}
+  <div class="section-title">Активные заказы</div>
+  ${(data.active_orders || []).length ? data.active_orders.map(o => `
+    <div onclick="openOrder('${o.id}')">
+      ${card(`
+        <div class="app-card-title">${escapeHtml(o.order_number || "")}</div>
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <span class="badge">${escapeHtml(o.status || "")}</span>
+          <b>${o.total || 0}</b>
         </div>
+      `, "clickable")}
+    </div>
+  `).join("") : card(`<div class="muted">Нет активных заказов</div>`)}
 
-        <!-- АКТИВНЫЕ ЗАКАЗЫ -->
-        <h3 style="margin:12px 0;">📦 Активные заказы</h3>
-        ${(data.active_orders || []).length ? data.active_orders.map(o => `
-          <div onclick="openOrder('${o.id}')">
-            ${card(`
-              <b>${escapeHtml(o.order_number || "")}</b><br>
-              ${escapeHtml(o.status || "")}<br>
-              ${o.total || 0}
-            `)}
-          </div>
-        `).join("") : card("Нет активных заказов")}
-
-        <!-- ДОЛГИ -->
-        <h3 style="margin:12px 0;">💸 Долги</h3>
-        ${(data.debts || []).length ? data.debts.map(d => `
-          ${card(`
-            <b>${escapeHtml(d.order_number || "")}</b><br>
-            Долг: ${d.due || 0}
-          `)}
-        `).join("") : card("Нет долгов")}
-
-        <!-- СКЛАД -->
-        <h3 style="margin:12px 0;">⚠️ Заканчивается</h3>
-        ${(data.low_stock || []).length ? data.low_stock.map(i => `
-          ${card(`
-            <b>${escapeHtml(i.name || "")}</b><br>
-            Остаток: ${i.quantity}
-          `)}
-        `).join("") : card("Склад в норме")}
-      </div>
-    `;
+  <div class="section-title">Заканчивается</div>
+  ${(data.low_stock || []).length ? data.low_stock.map(i => `
+    ${card(`
+      <div class="app-card-title">${escapeHtml(i.name || "")}</div>
+      <div class="muted">Остаток: ${i.quantity}</div>
+    `)}
+  `).join("") : card(`<div class="muted">Склад в норме</div>`)}
+`;
   } catch (e) {
     console.error(e);
     el.innerHTML = `<div style="padding:16px;">Ошибка загрузки</div>`;
@@ -261,17 +524,19 @@ async function loadOrders() {
     el.innerHTML = `
       <div style="padding:16px;">
         <div style="display:flex; gap:8px; margin-bottom:14px;">
-          ${btn("+ Новый заказ", "openCreateOrder()")}
+          ${btn("+ Новый заказ", "openCreateOrder()", "primary")}
         </div>
 
         ${(orders || []).length ? orders.map(o => `
           <div onclick="openOrder('${o.id}')" style="cursor:pointer;">
-            ${card(`
-              <div style="font-weight:700;">${escapeHtml(o.order_number || "")}</div>
-              <div>${escapeHtml(o.status || "")}</div>
-              <div>${o.total || 0} ${escapeHtml(o.currency || "UAH")}</div>
-              <div style="font-size:13px; opacity:0.7;">Оплачено: ${o.paid || 0} | Долг: ${o.due || 0}</div>
-            `)}
+           ${card(`
+  <div class="app-card-title">${escapeHtml(o.order_number || "")}</div>
+  <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:6px;">
+    <span class="badge">${escapeHtml(o.status || "")}</span>
+    <b>${o.total || 0} ${escapeHtml(o.currency || "UAH")}</b>
+  </div>
+  <div class="muted">Оплачено: ${o.paid || 0} | Долг: ${o.due || 0}</div>
+`, "clickable")}
           </div>
         `).join("") : card("Заказов пока нет")}
       </div>
@@ -526,17 +791,17 @@ async function loadInventory() {
       <div style="padding:16px;">
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
           ${btn("+ Приход", "openAddStock()")}
-          ${btn("+ Товар", "openCreateInventoryItem()")}
+         ${btn("+ Товар", "openCreateInventoryItem()", "secondary")}
         </div>
 
         ${(items || []).length ? items.map(i => `
           <div onclick="openItem('${i.id}')" style="cursor:pointer;">
             ${card(`
-              <div style="font-weight:700;">${escapeHtml(i.name || "")}</div>
-              <div style="font-size:13px; opacity:0.85;">Остаток: ${i.quantity}</div>
-              <div style="font-size:13px; opacity:0.85;">Резерв: ${i.reserved_quantity}</div>
-              <div style="font-size:13px; opacity:0.85;">Доступно: ${i.available_quantity}</div>
-            `)}
+              <div class="app-card-title">${escapeHtml(i.name || "")}</div>
+              <div class="muted">Остаток: ${i.quantity}</div>
+              <div class="muted">Резерв: ${i.reserved_quantity}</div>
+              <div class="muted">Доступно: ${i.available_quantity}</div>
+            `, "clickable")}
           </div>
         `).join("") : card("Склад пуст")}
       </div>
@@ -796,23 +1061,18 @@ function openCreateClient() {
 
 function openModal(html) {
   document.getElementById("modal").innerHTML = `
-    <div style="
-      position:fixed; inset:0; background:rgba(0,0,0,0.7);
-      display:flex; align-items:flex-end; justify-content:center;
-      z-index:9999;
-    ">
-      <div style="
-        width:100%; max-width:700px; max-height:85vh; overflow:auto;
-        background:#0f172a; color:#fff; padding:16px;
-        border-top-left-radius:18px; border-top-right-radius:18px;
-        border:1px solid #1f2937;
-      ">
+    <div class="modal-overlay">
+      <div class="modal-sheet">
         ${html}
-        <br><br>
-        ${btn("Закрыть", "closeModal()")}
+        <div style="height:10px;"></div>
+        ${btn("Закрыть", "closeModal()", "ghost")}
       </div>
     </div>
   `;
+}
+
+function closeModal() {
+  document.getElementById("modal").innerHTML = "";
 }
 
 // ==============================
