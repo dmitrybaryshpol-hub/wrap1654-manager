@@ -244,6 +244,96 @@ html,body{
   margin-top:4px;
 }
 
+    .badge-status{
+      display:inline-flex;
+      align-items:center;
+      padding:5px 10px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:800;
+      border:1px solid transparent;
+    }
+
+    .status-new{ background:rgba(148,163,184,.12); color:#cbd5e1; border-color:rgba(148,163,184,.18); }
+    .status-approved{ background:rgba(59,130,246,.12); color:#93c5fd; border-color:rgba(59,130,246,.18); }
+    .status-booked{ background:rgba(99,102,241,.12); color:#a5b4fc; border-color:rgba(99,102,241,.18); }
+    .status-car_received{ background:rgba(245,158,11,.12); color:#fcd34d; border-color:rgba(245,158,11,.18); }
+    .status-in_progress{ background:rgba(234,179,8,.12); color:#fde047; border-color:rgba(234,179,8,.18); }
+    .status-paused{ background:rgba(249,115,22,.12); color:#fdba74; border-color:rgba(249,115,22,.18); }
+    .status-ready{ background:rgba(34,197,94,.12); color:#86efac; border-color:rgba(34,197,94,.18); }
+    .status-delivered{ background:rgba(16,185,129,.12); color:#6ee7b7; border-color:rgba(16,185,129,.18); }
+    .status-closed{ background:rgba(20,184,166,.12); color:#5eead4; border-color:rgba(20,184,166,.18); }
+    .status-cancelled{ background:rgba(239,68,68,.12); color:#fca5a5; border-color:rgba(239,68,68,.18); }
+
+    .payment-unpaid{ background:rgba(239,68,68,.12); color:#fca5a5; border-color:rgba(239,68,68,.18); }
+    .payment-partial_paid{ background:rgba(245,158,11,.12); color:#fcd34d; border-color:rgba(245,158,11,.18); }
+    .payment-paid{ background:rgba(34,197,94,.12); color:#86efac; border-color:rgba(34,197,94,.18); }
+
+    .metric-card{
+      position:relative;
+      overflow:hidden;
+    }
+
+    .metric-card::after{
+      content:"";
+      position:absolute;
+      top:-30px;
+      right:-30px;
+      width:90px;
+      height:90px;
+      border-radius:50%;
+      background:rgba(255,255,255,.03);
+    }
+
+    .metric-label{
+      font-size:12px;
+      color:var(--soft);
+      letter-spacing:.2px;
+    }
+
+    .metric-value{
+      font-size:24px;
+      font-weight:900;
+      margin-top:8px;
+      letter-spacing:.2px;
+    }
+
+    .toolbar{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-bottom:12px;
+    }
+
+    .search-input{
+      width:100%;
+      margin-bottom:10px;
+    }
+
+    .filter-row{
+      display:flex;
+      gap:8px;
+      margin-bottom:12px;
+      flex-wrap:wrap;
+    }
+
+    .filter-chip{
+      padding:8px 12px;
+      border-radius:999px;
+      background:#0f172a;
+      color:#cbd5e1;
+      border:1px solid var(--line);
+      cursor:pointer;
+      font-size:13px;
+      font-weight:700;
+    }
+
+    .filter-chip.active{
+      background:linear-gradient(180deg,var(--accent-2),var(--accent));
+      color:#111;
+      border-color:transparent;
+    }
+
 .status-badge{
   display:inline-flex;
   padding:5px 9px;
