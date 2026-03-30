@@ -6,8 +6,10 @@ const API_URL = "https://hbciwqgfccdfnzrhiops.supabase.co/functions/v1/smart-han
 // INIT
 // ==============================
 
-tg.expand();
-tg.setHeaderColor("#0f172a");
+if (tg) {
+  tg.expand();
+  tg.setHeaderColor("#0f172a");
+}
 
 const state = {
   user: null,
@@ -15,7 +17,25 @@ const state = {
 };
 
 // ==============================
-// API (через Edge Function)
+// HELPERS
+// ==============================
+
+function escapeHtml(str = "") {
+  return String(str)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function safeAlert(text) {
+  if (tg?.showAlert) tg.showAlert(text);
+  else alert(text);
+}
+
+// ==============================
+// API
 // ==============================
 
 async function api(action, data = {}) {
@@ -26,7 +46,7 @@ async function api(action, data = {}) {
     },
     body: JSON.stringify({
       action,
-      initData: tg.initData,
+      initData: tg?.initData || "",
       ...data
     })
   });
@@ -35,26 +55,11 @@ async function api(action, data = {}) {
 
   if (!res.ok) {
     console.error("API error:", json);
-    tg.showAlert(json.error || "Ошибка");
-    throw new Error(json.error);
+    safeAlert(json.error || "Ошибка");
+    throw new Error(json.error || "API error");
   }
 
   return json;
-}
-
-// ==============================
-// NAVIGATION
-// ==============================
-
-function showTab(tab) {
-  state.currentTab = tab;
-
-  document.querySelectorAll(".tab").forEach(el => el.style.display = "none");
-  document.getElementById(tab).style.display = "block";
-
-  if (tab === "dashboard") loadDashboard();
-  if (tab === "orders") loadOrders();
-  if (tab === "inventory") loadInventory();
 }
 
 // ==============================
@@ -68,7 +73,6 @@ async function initApp() {
 
     renderLayout();
     showTab("dashboard");
-
   } catch (e) {
     console.error(e);
   }
@@ -82,21 +86,84 @@ initApp();
 
 function renderLayout() {
   document.body.innerHTML = `
-    <div id="app">
+    <div id="app-shell" style="padding-bottom:80px; color:#fff; background:#0b1120; min-height:100vh; font-family:Arial,sans-serif;">
+      <div style="padding:16px 16px 8px 16px;">
+        <div style="font-size:20px; font-weight:700;">Wrap 1654 CRM</div>
+        <div style="font-size:12px; opacity:0.7;">
+          ${escapeHtml(state.user?.first_name || state.user?.username || "User")}
+        </div>
+      </div>
 
-      <div id="dashboard" class="tab"></div>
-      <div id="orders" class="tab" style="display:none"></div>
-      <div id="inventory" class="tab" style="display:none"></div>
-
+      <div id="app">
+        <div id="dashboard" class="tab"></div>
+        <div id="orders" class="tab" style="display:none"></div>
+        <div id="inventory" class="tab" style="display:none"></div>
+      </div>
     </div>
 
-    <div id="bottom-nav">
-      <button onclick="showTab('dashboard')">Главная</button>
-      <button onclick="showTab('orders')">Заказы</button>
-      <button onclick="showTab('inventory')">Склад</button>
+    <div id="bottom-nav" style="
+      position:fixed; left:0; right:0; bottom:0;
+      display:flex; gap:8px; padding:10px;
+      background:#111827; border-top:1px solid #1f2937;
+    ">
+      <button onclick="showTab('dashboard')" style="flex:1;">Главная</button>
+      <button onclick="showTab('orders')" style="flex:1;">Заказы</button>
+      <button onclick="showTab('inventory')" style="flex:1;">Склад</button>
     </div>
 
     <div id="modal"></div>
+  `;
+}
+
+// ==============================
+// NAVIGATION
+// ==============================
+
+function showTab(tab) {
+  state.currentTab = tab;
+
+  document.querySelectorAll(".tab").forEach(el => {
+    el.style.display = "none";
+  });
+
+  const current = document.getElementById(tab);
+  if (current) current.style.display = "block";
+
+  if (tab === "dashboard") loadDashboard();
+  if (tab === "orders") loadOrders();
+  if (tab === "inventory") loadInventory();
+}
+
+// ==============================
+// UI HELPERS
+// ==============================
+
+function card(html, extra = "") {
+  return `
+    <div style="
+      background:#111827;
+      border:1px solid #1f2937;
+      border-radius:14px;
+      padding:12px;
+      margin-bottom:10px;
+      ${extra}
+    ">
+      ${html}
+    </div>
+  `;
+}
+
+function btn(text, onclick, extra = "") {
+  return `
+    <button onclick="${onclick}" style="
+      padding:10px 12px;
+      border-radius:10px;
+      border:1px solid #374151;
+      background:#1f2937;
+      color:#fff;
+      cursor:pointer;
+      ${extra}
+    ">${text}</button>
   `;
 }
 
@@ -106,30 +173,43 @@ function renderLayout() {
 
 async function loadDashboard() {
   const el = document.getElementById("dashboard");
+  el.innerHTML = `<div style="padding:16px;">Загрузка...</div>`;
 
-  el.innerHTML = "Загрузка...";
+  try {
+    const data = await api("dashboard");
 
-  const data = await api("dashboard");
+    el.innerHTML = `
+      <div style="padding:16px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+          ${btn("+ Заказ", "openCreateOrder()")}
+          ${btn("+ Клиент", "openCreateClient()")}
+          ${btn("+ Продажа", "openCreateSale()")}
+        </div>
 
-  el.innerHTML = `
-    <h2>Dashboard</h2>
+        <h3 style="margin:12px 0;">Активные заказы</h3>
+        ${(data.orders || []).length ? (data.orders || []).map(o => `
+          <div onclick="openOrder('${o.id}')" style="cursor:pointer;">
+            ${card(`
+              <div style="font-weight:700;">${escapeHtml(o.order_number || "")}</div>
+              <div style="font-size:14px; opacity:0.8;">Статус: ${escapeHtml(o.status || "")}</div>
+              <div style="font-size:14px; opacity:0.8;">Сумма: ${o.total || 0} ${escapeHtml(o.currency || "UAH")}</div>
+            `)}
+          </div>
+        `).join("") : card("Нет активных заказов")}
 
-    <button onclick="openCreateOrder()">+ Заказ</button>
-    <button onclick="openCreateClient()">+ Клиент</button>
-    <button onclick="openCreateSale()">+ Продажа</button>
-
-    <h3>Активные заказы</h3>
-    ${data.orders.map(o => `
-      <div onclick="openOrder('${o.id}')">
-        ${o.order_number} — ${o.status}
+        <h3 style="margin:12px 0;">Долги</h3>
+        ${(data.debts || []).length ? (data.debts || []).map(d => `
+          ${card(`
+            <div style="font-weight:700;">${escapeHtml(d.order_number || "")}</div>
+            <div>Долг: ${d.due || 0} ${escapeHtml(d.currency || "UAH")}</div>
+          `)}
+        `).join("") : card("Долгов нет")}
       </div>
-    `).join("")}
-
-    <h3>Долги</h3>
-    ${data.debts.map(d => `
-      <div>${d.order_number} — ${d.due}</div>
-    `).join("")}
-  `;
+    `;
+  } catch (e) {
+    console.error(e);
+    el.innerHTML = `<div style="padding:16px;">Ошибка загрузки Dashboard</div>`;
+  }
 }
 
 // ==============================
@@ -138,24 +218,33 @@ async function loadDashboard() {
 
 async function loadOrders() {
   const el = document.getElementById("orders");
+  el.innerHTML = `<div style="padding:16px;">Загрузка...</div>`;
 
-  el.innerHTML = "Загрузка...";
+  try {
+    const orders = await api("get_orders");
 
-  const orders = await api("get_orders");
+    el.innerHTML = `
+      <div style="padding:16px;">
+        <div style="display:flex; gap:8px; margin-bottom:14px;">
+          ${btn("+ Новый заказ", "openCreateOrder()")}
+        </div>
 
-  el.innerHTML = `
-    <h2>Заказы</h2>
-
-    <button onclick="openCreateOrder()">+ Новый заказ</button>
-
-    ${orders.map(o => `
-      <div onclick="openOrder('${o.id}')">
-        <b>${o.order_number}</b><br>
-        ${o.status}<br>
-        ${o.total} ${o.currency}
+        ${(orders || []).length ? orders.map(o => `
+          <div onclick="openOrder('${o.id}')" style="cursor:pointer;">
+            ${card(`
+              <div style="font-weight:700;">${escapeHtml(o.order_number || "")}</div>
+              <div>${escapeHtml(o.status || "")}</div>
+              <div>${o.total || 0} ${escapeHtml(o.currency || "UAH")}</div>
+              <div style="font-size:13px; opacity:0.7;">Оплачено: ${o.paid || 0} | Долг: ${o.due || 0}</div>
+            `)}
+          </div>
+        `).join("") : card("Заказов пока нет")}
       </div>
-    `).join("")}
-  `;
+    `;
+  } catch (e) {
+    console.error(e);
+    el.innerHTML = `<div style="padding:16px;">Ошибка загрузки заказов</div>`;
+  }
 }
 
 // ==============================
@@ -163,78 +252,45 @@ async function loadOrders() {
 // ==============================
 
 async function openOrder(id) {
-  const order = await api("get_order", { id });
+  try {
+    const order = await api("get_order", { id });
 
-  let materialsHtml = "";
-  if (order.materials && order.materials.length) {
-    materialsHtml = `
-      <h4>Материалы</h4>
-      ${order.materials.map(m => `
-        <div style="border-bottom:1px solid #333; padding:6px 0;">
-          ${m.item_name || m.inventory_item_id} — ${m.quantity}
-        </div>
-      `).join("")}
+    let materialsHtml = `
+      <div style="font-size:13px; opacity:0.7;">Материалов пока нет</div>
     `;
+
+    if (order.materials && order.materials.length) {
+      materialsHtml = order.materials.map(m => `
+        <div style="border-bottom:1px solid #1f2937; padding:6px 0;">
+          <div><b>${escapeHtml(m.item_name || m.inventory_item_id || "Материал")}</b></div>
+          <div style="font-size:13px; opacity:0.8;">
+            Кол-во: ${m.quantity} | Себестоимость: ${m.total_cost || 0}
+          </div>
+        </div>
+      `).join("");
+    }
+
+    openModal(`
+      <h3 style="margin-top:0;">${escapeHtml(order.order_number || "")}</h3>
+
+      <p>Статус: ${escapeHtml(order.status || "")}</p>
+      <p>Сумма: ${order.total || 0}</p>
+      <p>Оплачено: ${order.paid || 0}</p>
+      <p>Долг: ${order.due || 0}</p>
+
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
+        ${btn("+ Оплата", `addPayment('${id}')`)}
+        ${btn("+ Материал", `addMaterial('${id}')`)}
+      </div>
+
+      <hr style="border-color:#1f2937;">
+
+      <h4>Материалы</h4>
+      <div style="max-height:220px; overflow:auto;">${materialsHtml}</div>
+    `);
+  } catch (e) {
+    console.error(e);
   }
-
-  openModal(`
-    <h3>${order.order_number}</h3>
-
-    <p>Статус: ${order.status}</p>
-    <p>Сумма: ${order.total}</p>
-    <p>Оплачено: ${order.paid || 0}</p>
-    <p>Долг: ${order.due || 0}</p>
-
-    <button onclick="addPayment('${id}')">+ Оплата</button>
-    <button onclick="addMaterial('${id}')">+ Материал</button>
-
-    <hr>
-    ${materialsHtml}
-  `);
-}
-// ==============================
-// INVENTORY
-// ==============================
-
-async function loadInventory() {
-  const el = document.getElementById("inventory");
-
-  el.innerHTML = "Загрузка...";
-
-  const items = await api("get_inventory");
-
-  el.innerHTML = `
-    <h2>Склад</h2>
-
-    <button onclick="openAddStock()">+ Приход</button>
-
-    ${items.map(i => `
-  <div onclick="openItem('${i.id}')" style="padding:10px; border-bottom:1px solid #333;">
-    <b>${i.name}</b><br>
-    Остаток: ${i.quantity}<br>
-    Резерв: ${i.reserved_quantity}<br>
-    Доступно: ${i.available_quantity}
-  </div>
-`).join("")}
-  `;
-}
-
-// ==============================
-// MODAL
-// ==============================
-
-function openModal(html) {
-  document.getElementById("modal").innerHTML = `
-    <div class="modal">
-      ${html}
-      <br><br>
-      <button onclick="closeModal()">Закрыть</button>
-    </div>
-  `;
-}
-
-function closeModal() {
-  document.getElementById("modal").innerHTML = "";
 }
 
 // ==============================
@@ -243,26 +299,41 @@ function closeModal() {
 
 function openCreateOrder() {
   openModal(`
-    <h3>Новый заказ</h3>
+    <h3 style="margin-top:0;">Новый заказ</h3>
 
-    <input id="client" placeholder="Client ID"><br>
-    <input id="total" placeholder="Сумма"><br>
+    <input id="client" placeholder="Client ID" style="width:100%; margin-bottom:10px;">
+    <input id="total" placeholder="Сумма" type="number" style="width:100%; margin-bottom:10px;">
 
-    <button onclick="createOrder()">Создать</button>
+    ${btn("Создать", "createOrder()")}
   `);
 }
 
 async function createOrder() {
-  const client_id = document.getElementById("client").value;
+  const client_id = document.getElementById("client").value.trim();
   const total = Number(document.getElementById("total").value);
 
-  await api("create_order", {
-    client_id,
-    total
-  });
+  if (!client_id) {
+    safeAlert("Укажи client_id");
+    return;
+  }
 
-  closeModal();
-  loadOrders();
+  if (!total || total <= 0) {
+    safeAlert("Укажи сумму");
+    return;
+  }
+
+  try {
+    await api("create_order", {
+      client_id,
+      total
+    });
+
+    closeModal();
+    loadOrders();
+    safeAlert("Заказ создан");
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 // ==============================
@@ -272,65 +343,100 @@ async function createOrder() {
 async function addPayment(order_id) {
   const amount = prompt("Сумма");
 
-  await api("add_payment", {
-    order_id,
-    amount: Number(amount)
-  });
+  if (!amount) return;
 
-  tg.showAlert("Оплата добавлена");
+  try {
+    await api("add_payment", {
+      order_id,
+      amount: Number(amount)
+    });
+
+    safeAlert("Оплата добавлена");
+    openOrder(order_id);
+    loadOrders();
+    loadDashboard();
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 // ==============================
-// ADD MATERIAL
+// MATERIALS IN ORDER UI
 // ==============================
 
 async function addMaterial(order_id) {
-  const items = await api("get_inventory");
+  try {
+    const items = await api("get_inventory");
 
-  openModal(`
-    <h3>Добавить материал в заказ</h3>
+    openModal(`
+      <h3 style="margin-top:0;">Добавить материал в заказ</h3>
 
-    <input id="material-search" placeholder="Поиск товара" oninput="filterMaterialList()" style="width:100%; margin-bottom:10px;">
+      <input
+        id="material-search"
+        placeholder="Поиск товара"
+        oninput="filterMaterialList()"
+        style="width:100%; margin-bottom:10px;"
+      >
 
-    <input type="hidden" id="selected_item_id">
-    <div id="selected_item_name" style="margin-bottom:10px; color:#aaa;">Товар не выбран</div>
+      <input type="hidden" id="selected_item_id">
+      <div id="selected_item_name" style="margin-bottom:10px; color:#9ca3af;">
+        Товар не выбран
+      </div>
 
-    <input id="material_qty" placeholder="Количество" type="number" step="0.1" style="width:100%; margin-bottom:10px;">
+      <input
+        id="material_qty"
+        placeholder="Количество"
+        type="number"
+        step="0.1"
+        style="width:100%; margin-bottom:10px;"
+      >
 
-    <div id="material-list" style="max-height:220px; overflow:auto; border:1px solid #333; padding:6px; border-radius:8px;">
-      ${items.map(i => `
-        <div 
-          class="material-row"
-          data-name="${(i.name || "").toLowerCase()}"
-          onclick="selectMaterial('${i.id}', \`${escapeHtml(i.name)}\`)"
-          style="padding:8px; border-bottom:1px solid #333; cursor:pointer;"
-        >
-          <b>${escapeHtml(i.name)}</b><br>
-          Остаток: ${i.quantity} | Резерв: ${i.reserved_quantity} | Доступно: ${i.available_quantity}
-        </div>
-      `).join("")}
-    </div>
+      <div id="material-list" style="
+        max-height:240px;
+        overflow:auto;
+        border:1px solid #1f2937;
+        padding:6px;
+        border-radius:10px;
+      ">
+        ${(items || []).map(i => `
+          <div
+            class="material-row"
+            data-name="${escapeHtml((i.name || "").toLowerCase())}"
+            onclick="selectMaterial('${i.id}', \`${escapeHtml(i.name || "")}\`)"
+            style="
+              padding:8px;
+              border-bottom:1px solid #1f2937;
+              cursor:pointer;
+              border-radius:8px;
+            "
+          >
+            <b>${escapeHtml(i.name || "")}</b><br>
+            <span style="font-size:13px; opacity:0.8;">
+              Остаток: ${i.quantity} | Резерв: ${i.reserved_quantity} | Доступно: ${i.available_quantity}
+            </span>
+          </div>
+        `).join("")}
+      </div>
 
-    <br>
-    <button onclick="submitMaterialToOrder('${order_id}')">Списать в заказ</button>
-  `);
-}
-function escapeHtml(str = "") {
-  return String(str)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+      <br>
+      ${btn("Списать в заказ", `submitMaterialToOrder('${order_id}')`)}
+    `);
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 function selectMaterial(id, name) {
-  document.getElementById("selected_item_id").value = id;
-  document.getElementById("selected_item_name").innerHTML = `Выбрано: <b>${name}</b>`;
+  const hidden = document.getElementById("selected_item_id");
+  const label = document.getElementById("selected_item_name");
+  if (hidden) hidden.value = id;
+  if (label) label.innerHTML = `Выбрано: <b>${name}</b>`;
 }
 
 function filterMaterialList() {
-  const q = document.getElementById("material-search").value.trim().toLowerCase();
+  const input = document.getElementById("material-search");
+  const q = (input?.value || "").trim().toLowerCase();
+
   document.querySelectorAll(".material-row").forEach(row => {
     const name = row.dataset.name || "";
     row.style.display = name.includes(q) ? "block" : "none";
@@ -338,146 +444,342 @@ function filterMaterialList() {
 }
 
 async function submitMaterialToOrder(order_id) {
-  const item_id = document.getElementById("selected_item_id").value;
-  const qty = Number(document.getElementById("material_qty").value);
+  const item_id = document.getElementById("selected_item_id")?.value;
+  const qty = Number(document.getElementById("material_qty")?.value);
 
   if (!item_id) {
-    tg.showAlert("Сначала выбери товар");
+    safeAlert("Сначала выбери товар");
     return;
   }
 
   if (!qty || qty <= 0) {
-    tg.showAlert("Укажи корректное количество");
+    safeAlert("Укажи корректное количество");
     return;
   }
 
   try {
-    await api("writeoff_reserved_inventory", {
+    // если у тебя в smart-handler action называется иначе,
+    // поменяй на writeoff_reserved_inventory
+    await api("writeoff_inventory", {
       order_id,
       item_id,
       quantity: qty
     });
 
-    tg.showAlert("Материал списан");
+    safeAlert("Материал списан");
     closeModal();
     openOrder(order_id);
     loadInventory();
+    loadOrders();
   } catch (e) {
     console.error(e);
   }
 }
+
+// ==============================
+// INVENTORY
+// ==============================
+
+async function loadInventory() {
+  const el = document.getElementById("inventory");
+  el.innerHTML = `<div style="padding:16px;">Загрузка...</div>`;
+
+  try {
+    const items = await api("get_inventory");
+
+    el.innerHTML = `
+      <div style="padding:16px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+          ${btn("+ Приход", "openAddStock()")}
+          ${btn("+ Товар", "openCreateInventoryItem()")}
+        </div>
+
+        ${(items || []).length ? items.map(i => `
+          <div onclick="openItem('${i.id}')" style="cursor:pointer;">
+            ${card(`
+              <div style="font-weight:700;">${escapeHtml(i.name || "")}</div>
+              <div style="font-size:13px; opacity:0.85;">Остаток: ${i.quantity}</div>
+              <div style="font-size:13px; opacity:0.85;">Резерв: ${i.reserved_quantity}</div>
+              <div style="font-size:13px; opacity:0.85;">Доступно: ${i.available_quantity}</div>
+            `)}
+          </div>
+        `).join("") : card("Склад пуст")}
+      </div>
+    `;
+  } catch (e) {
+    console.error(e);
+    el.innerHTML = `<div style="padding:16px;">Ошибка загрузки склада</div>`;
+  }
+}
+
+// ==============================
+// INVENTORY ITEM
+// ==============================
+
+async function openItem(id) {
+  try {
+    const item = await api("get_inventory_item", { id });
+    const movements = await api("get_inventory_movements", { item_id: id });
+
+    openModal(`
+      <h3 style="margin-top:0;">${escapeHtml(item.name || "")}</h3>
+
+      <p>Остаток: ${item.quantity}</p>
+      <p>Резерв: ${item.reserved_quantity}</p>
+      <p>Доступно: ${item.available_quantity}</p>
+      <p>Вход: ${item.purchase_price || 0}</p>
+      <p>Розница: ${item.retail_price || 0}</p>
+
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
+        ${btn("🔒 Резерв", `reserveItem('${id}')`)}
+        ${btn("🔓 Снять резерв", `unreserveItem('${id}')`)}
+        ${btn("⚙️ Корректировка", `adjustItem('${id}')`)}
+      </div>
+
+      <hr style="border-color:#1f2937;">
+
+      <h4>История</h4>
+      <div style="max-height:220px; overflow:auto;">
+        ${(movements || []).length ? movements.map(m => `
+          <div style="border-bottom:1px solid #1f2937; padding:6px 0;">
+            <div><b>${escapeHtml(m.movement_type || "")}</b> — ${m.quantity}</div>
+            <div style="font-size:12px; opacity:0.75;">
+              ${escapeHtml(m.comment || "")}
+            </div>
+          </div>
+        `).join("") : `<div style="opacity:0.7;">Движений пока нет</div>`}
+      </div>
+    `);
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+// ==============================
+// CREATE INVENTORY ITEM
+// ==============================
+
+function openCreateInventoryItem() {
+  openModal(`
+    <h3 style="margin-top:0;">Новый товар</h3>
+
+    <input id="inv_category" placeholder="Категория (vinyl / ppf / tint / consumables)" style="width:100%; margin-bottom:8px;">
+    <input id="inv_brand" placeholder="Бренд" style="width:100%; margin-bottom:8px;">
+    <input id="inv_name" placeholder="Название" style="width:100%; margin-bottom:8px;">
+    <input id="inv_width" placeholder="Ширина, см" type="number" style="width:100%; margin-bottom:8px;">
+    <input id="inv_unit" placeholder="Ед. изм. (m / pcs / roll / l / set)" style="width:100%; margin-bottom:8px;">
+    <input id="inv_quantity" placeholder="Количество" type="number" step="0.1" style="width:100%; margin-bottom:8px;">
+    <input id="inv_purchase" placeholder="Входная цена" type="number" step="0.01" style="width:100%; margin-bottom:8px;">
+    <input id="inv_retail" placeholder="Розничная цена" type="number" step="0.01" style="width:100%; margin-bottom:8px;">
+    <input id="inv_currency" placeholder="Валюта (UAH / USD)" style="width:100%; margin-bottom:8px;">
+    <input id="inv_min" placeholder="Мин. остаток" type="number" step="0.1" style="width:100%; margin-bottom:8px;">
+
+    ${btn("Создать", "createInventoryItem()")}
+  `);
+}
+
+async function createInventoryItem() {
+  const payload = {
+    category: document.getElementById("inv_category").value.trim(),
+    brand: document.getElementById("inv_brand").value.trim(),
+    name: document.getElementById("inv_name").value.trim(),
+    width_cm: Number(document.getElementById("inv_width").value) || null,
+    unit: document.getElementById("inv_unit").value.trim() || "m",
+    quantity: Number(document.getElementById("inv_quantity").value) || 0,
+    purchase_price: Number(document.getElementById("inv_purchase").value) || 0,
+    retail_price: Number(document.getElementById("inv_retail").value) || 0,
+    currency: document.getElementById("inv_currency").value.trim() || "UAH",
+    min_quantity: Number(document.getElementById("inv_min").value) || 0
+  };
+
+  if (!payload.category || !payload.name) {
+    safeAlert("Заполни категорию и название");
+    return;
+  }
+
+  try {
+    await api("create_inventory_item", payload);
+    closeModal();
+    loadInventory();
+    safeAlert("Товар создан");
+  } catch (e) {
+    console.error(e);
+  }
+}
+
 // ==============================
 // ADD STOCK
 // ==============================
 
 function openAddStock() {
   openModal(`
-    <h3>Приход</h3>
+    <h3 style="margin-top:0;">Приход</h3>
 
-    <input id="item_id" placeholder="ID товара"><br>
-    <input id="qty" placeholder="Количество"><br>
+    <input id="item_id" placeholder="ID товара" style="width:100%; margin-bottom:10px;">
+    <input id="qty" placeholder="Количество" type="number" step="0.1" style="width:100%; margin-bottom:10px;">
+    <input id="purchase_price" placeholder="Входная цена" type="number" step="0.01" style="width:100%; margin-bottom:10px;">
 
-    <button onclick="addStock()">Добавить</button>
+    ${btn("Добавить", "addStock()")}
   `);
 }
 
-// ==============================
-// INVENTORY ITEM (карточка товара)
-// ==============================
+async function addStock() {
+  const item_id = document.getElementById("item_id").value.trim();
+  const qty = Number(document.getElementById("qty").value);
+  const purchase_price = Number(document.getElementById("purchase_price").value) || 0;
 
-async function openItem(id) {
-  const item = await api("get_inventory_item", { id });
-  const movements = await api("get_inventory_movements", { item_id: id });
+  if (!item_id) {
+    safeAlert("Укажи ID товара");
+    return;
+  }
 
-  openModal(`
-    <h3>${item.name}</h3>
+  if (!qty || qty <= 0) {
+    safeAlert("Укажи количество");
+    return;
+  }
 
-    <p>Остаток: ${item.quantity}</p>
-    <p>Резерв: ${item.reserved_quantity}</p>
-    <p>Доступно: ${item.available_quantity}</p>
+  try {
+    await api("add_stock", {
+      item_id,
+      quantity: qty,
+      purchase_price
+    });
 
-    <p>Вход: ${item.purchase_price}</p>
-    <p>Розница: ${item.retail_price}</p>
-
-    <br>
-
-    <button onclick="reserveItem('${id}')">🔒 Резерв</button>
-    <button onclick="unreserveItem('${id}')">🔓 Снять резерв</button>
-    <button onclick="adjustItem('${id}')">⚙️ Корректировка</button>
-
-    <hr>
-
-    <h4>История</h4>
-
-    <div style="max-height:200px; overflow:auto;">
-      ${movements.map(m => `
-        <div style="border-bottom:1px solid #333; padding:5px;">
-          ${m.movement_type} — ${m.quantity}
-        </div>
-      `).join("")}
-    </div>
-  `);
+    closeModal();
+    loadInventory();
+    safeAlert("Приход добавлен");
+  } catch (e) {
+    console.error(e);
+  }
 }
+
 // ==============================
-// RESERVE
+// RESERVE / UNRESERVE / ADJUST
 // ==============================
 
 async function reserveItem(id) {
   const qty = prompt("Сколько зарезервировать?");
+  if (!qty) return;
 
-  await api("reserve_inventory", {
-    item_id: id,
-    quantity: Number(qty),
-    comment: "Резерв из приложения"
-  });
+  try {
+    await api("reserve_inventory", {
+      item_id: id,
+      quantity: Number(qty),
+      comment: "Резерв из приложения"
+    });
 
-  tg.showAlert("Зарезервировано");
-  loadInventory();
+    safeAlert("Зарезервировано");
+    openItem(id);
+    loadInventory();
+  } catch (e) {
+    console.error(e);
+  }
 }
-
-// ==============================
-// UNRESERVE
-// ==============================
 
 async function unreserveItem(id) {
   const qty = prompt("Сколько снять с резерва?");
+  if (!qty) return;
 
-  await api("unreserve_inventory", {
-    item_id: id,
-    quantity: Number(qty),
-    comment: "Снятие резерва"
-  });
+  try {
+    await api("unreserve_inventory", {
+      item_id: id,
+      quantity: Number(qty),
+      comment: "Снятие резерва"
+    });
 
-  tg.showAlert("Резерв снят");
-  loadInventory();
+    safeAlert("Резерв снят");
+    openItem(id);
+    loadInventory();
+  } catch (e) {
+    console.error(e);
+  }
 }
-
-// ==============================
-// ADJUST
-// ==============================
 
 async function adjustItem(id) {
   const qty = prompt("Изменение (+ или -)");
+  if (!qty) return;
 
-  await api("adjust_inventory", {
-    item_id: id,
-    quantity_delta: Number(qty),
-    comment: "Корректировка"
-  });
+  try {
+    await api("adjust_inventory", {
+      item_id: id,
+      quantity_delta: Number(qty),
+      comment: "Корректировка"
+    });
 
-  tg.showAlert("Обновлено");
-  loadInventory();
+    safeAlert("Обновлено");
+    openItem(id);
+    loadInventory();
+  } catch (e) {
+    console.error(e);
+  }
 }
 
-async function addStock() {
-  const item_id = document.getElementById("item_id").value;
-  const qty = Number(document.getElementById("qty").value);
+// ==============================
+// SALES (заготовка)
+// ==============================
 
-  await api("add_stock", {
-    item_id,
-    quantity: qty
-  });
+function openCreateSale() {
+  openModal(`
+    <h3 style="margin-top:0;">Новая продажа</h3>
 
-  closeModal();
-  loadInventory();
+    <input id="sale_client_id" placeholder="Client ID" style="width:100%; margin-bottom:10px;">
+    <input id="sale_comment" placeholder="Комментарий" style="width:100%; margin-bottom:10px;">
+
+    ${btn("Создать продажу", "createSale()")}
+  `);
+}
+
+async function createSale() {
+  const client_id = document.getElementById("sale_client_id").value.trim();
+  const comment = document.getElementById("sale_comment").value.trim();
+
+  try {
+    const sale = await api("create_sale", {
+      client_id: client_id || null,
+      comment,
+      currency: "UAH"
+    });
+
+    closeModal();
+    safeAlert(`Продажа создана: ${sale.sale_number || sale.id}`);
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+// ==============================
+// CLIENTS (заглушка)
+// ==============================
+
+function openCreateClient() {
+  safeAlert("Экран клиентов добавим следующим шагом");
+}
+
+// ==============================
+// MODAL
+// ==============================
+
+function openModal(html) {
+  document.getElementById("modal").innerHTML = `
+    <div style="
+      position:fixed; inset:0; background:rgba(0,0,0,0.7);
+      display:flex; align-items:flex-end; justify-content:center;
+      z-index:9999;
+    ">
+      <div style="
+        width:100%; max-width:700px; max-height:85vh; overflow:auto;
+        background:#0f172a; color:#fff; padding:16px;
+        border-top-left-radius:18px; border-top-right-radius:18px;
+        border:1px solid #1f2937;
+      ">
+        ${html}
+        <br><br>
+        ${btn("Закрыть", "closeModal()")}
+      </div>
+    </div>
+  `;
+}
+
+function closeModal() {
+  document.getElementById("modal").innerHTML = "";
 }
