@@ -14,6 +14,10 @@ if (tg) {
 const state = {
   user: null,
   currentTab: "dashboard"
+  orderSearch: "",
+  orderStatus: "all",
+  inventorySearch: "",
+  inventoryCategory: "all",
 };
 
 // ==============================
@@ -32,6 +36,15 @@ function escapeHtml(str = "") {
 function safeAlert(text) {
   if (tg?.showAlert) tg.showAlert(text);
   else alert(text);
+}
+function getStatusBadge(status = "") {
+  const s = String(status || "").trim();
+  return `<span class="badge-status status-${s}">${escapeHtml(s || "unknown")}</span>`;
+}
+
+function getPaymentBadge(status = "") {
+  const s = String(status || "").trim();
+  return `<span class="badge-status payment-${s}">${escapeHtml(s || "unknown")}</span>`;
 }
 function injectStyles() {
   const old = document.getElementById("app-styles");
@@ -450,7 +463,84 @@ function btn(text, onclick, extra = "") {
 
 async function loadDashboard() {
   const el = document.getElementById("dashboard");
-  el.innerHTML = `<div style="padding:16px;">Загрузка...</div>`;
+  el.innerHTML = `
+  <div class="grid-2">
+    ${card(`
+      <div class="metric-card">
+        <div class="metric-label">Общая выручка</div>
+        <div class="metric-value">${(f.orders_revenue || 0) + (f.sales_revenue || 0)}</div>
+        <div class="muted">Заказы + склад</div>
+      </div>
+    `)}
+
+    ${card(`
+      <div class="metric-card">
+        <div class="metric-label">Чистая прибыль</div>
+        <div class="metric-value">${f.net_profit || 0}</div>
+        <div class="muted">После расходов</div>
+      </div>
+    `)}
+
+    ${card(`
+      <div class="metric-card">
+        <div class="metric-label">Расходы</div>
+        <div class="metric-value">${f.expenses_total || 0}</div>
+        <div class="muted">За текущий месяц</div>
+      </div>
+    `)}
+
+    ${card(`
+      <div class="metric-card">
+        <div class="metric-label">Долги клиентов</div>
+        <div class="metric-value">${stats.total_debt || 0}</div>
+        <div class="muted">По открытым заказам</div>
+      </div>
+    `)}
+  </div>
+
+  <div class="toolbar">
+    ${btn("+ Заказ", "openCreateOrder()", "primary")}
+    ${btn("+ Продажа", "openCreateSale()", "secondary")}
+    ${btn("+ Расход", "openCreateExpense()", "ghost")}
+  </div>
+
+  <div class="section-title">Активные заказы</div>
+  ${(data.active_orders || []).length ? data.active_orders.map(o => `
+    <div onclick="openOrder('${o.id}')">
+      ${card(`
+        <div class="app-card-title">${escapeHtml(o.order_number || "")}</div>
+        <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:8px;">
+          ${getStatusBadge(o.status)}
+          <b>${o.total || 0}</b>
+        </div>
+        <div class="muted">Оплачено: ${o.paid || 0} · Долг: ${o.due || 0}</div>
+      `, "clickable")}
+    </div>
+  `).join("") : card(`<div class="muted">Нет активных заказов</div>`)}
+
+  <div class="section-title">Долги</div>
+  ${(data.debts || []).length ? data.debts.map(d => `
+    ${card(`
+      <div class="app-card-title">${escapeHtml(d.order_number || "")}</div>
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        ${getStatusBadge(d.status)}
+        <b class="danger">${d.due || 0}</b>
+      </div>
+    `)}
+  `).join("") : card(`<div class="muted">Нет долгов</div>`)}
+
+  <div class="section-title">Заканчивается</div>
+  ${(data.low_stock || []).length ? data.low_stock.map(i => `
+    ${card(`
+      <div class="app-card-title">${escapeHtml(i.name || "")}</div>
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <span class="muted">Остаток</span>
+        <b class="danger">${i.quantity}</b>
+      </div>
+      <div class="muted">Минимум: ${i.min_quantity || 0}</div>
+    `)}
+  `).join("") : card(`<div class="muted">Склад в норме</div>`)}
+`;
 
   try {
     const data = await api("dashboard");
@@ -520,31 +610,67 @@ async function loadOrders() {
 
   try {
     const orders = await api("get_orders");
+    const search = (state.orderSearch || "").trim().toLowerCase();
+    const status = state.orderStatus || "all";
+
+    const filtered = (orders || []).filter(o => {
+      const orderNumber = String(o.order_number || "").toLowerCase();
+      const orderStatus = String(o.status || "").toLowerCase();
+
+      const matchSearch = !search || orderNumber.includes(search);
+      const matchStatus = status === "all" || orderStatus === status;
+
+      return matchSearch && matchStatus;
+    });
 
     el.innerHTML = `
-      <div style="padding:16px;">
-        <div style="display:flex; gap:8px; margin-bottom:14px;">
+      <div>
+        <div class="toolbar">
           ${btn("+ Новый заказ", "openCreateOrder()", "primary")}
         </div>
 
-        ${(orders || []).length ? orders.map(o => `
+        <input
+          class="search-input"
+          placeholder="Поиск по номеру заказа"
+          value="${escapeHtml(state.orderSearch)}"
+          oninput="setOrderSearch(this.value)"
+        >
+
+        <div class="filter-row">
+          <button class="filter-chip ${state.orderStatus === "all" ? "active" : ""}" onclick="setOrderStatus('all')">Все</button>
+          <button class="filter-chip ${state.orderStatus === "new" ? "active" : ""}" onclick="setOrderStatus('new')">New</button>
+          <button class="filter-chip ${state.orderStatus === "in_progress" ? "active" : ""}" onclick="setOrderStatus('in_progress')">In progress</button>
+          <button class="filter-chip ${state.orderStatus === "ready" ? "active" : ""}" onclick="setOrderStatus('ready')">Ready</button>
+          <button class="filter-chip ${state.orderStatus === "closed" ? "active" : ""}" onclick="setOrderStatus('closed')">Closed</button>
+        </div>
+
+        ${filtered.length ? filtered.map(o => `
           <div onclick="openOrder('${o.id}')" style="cursor:pointer;">
-           ${card(`
-  <div class="app-card-title">${escapeHtml(o.order_number || "")}</div>
-  <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:6px;">
-    <span class="badge">${escapeHtml(o.status || "")}</span>
-    <b>${o.total || 0} ${escapeHtml(o.currency || "UAH")}</b>
-  </div>
-  <div class="muted">Оплачено: ${o.paid || 0} | Долг: ${o.due || 0}</div>
-`, "clickable")}
+            ${card(`
+              <div class="app-card-title">${escapeHtml(o.order_number || "")}</div>
+              <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:6px;">
+                ${getStatusBadge(o.status)}
+                <b>${o.total || 0} ${escapeHtml(o.currency || "UAH")}</b>
+              </div>
+              <div class="muted">Оплачено: ${o.paid || 0} | Долг: ${o.due || 0}</div>
+            `, "clickable")}
           </div>
-        `).join("") : card("Заказов пока нет")}
+        `).join("") : card(`<div class="muted">Ничего не найдено</div>`)}
       </div>
     `;
   } catch (e) {
     console.error(e);
     el.innerHTML = `<div style="padding:16px;">Ошибка загрузки заказов</div>`;
   }
+}
+function setOrderSearch(value) {
+  state.orderSearch = value;
+  loadOrders();
+}
+
+function setOrderStatus(value) {
+  state.orderStatus = value;
+  loadOrders();
 }
 
 // ==============================
@@ -573,10 +699,23 @@ async function openOrder(id) {
     openModal(`
       <h3 style="margin-top:0;">${escapeHtml(order.order_number || "")}</h3>
 
-      <p>Статус: ${escapeHtml(order.status || "")}</p>
-      <p>Сумма: ${order.total || 0}</p>
-      <p>Оплачено: ${order.paid || 0}</p>
-      <p>Долг: ${order.due || 0}</p>
+      <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:10px;">
+  ${getStatusBadge(order.status)}
+  ${getPaymentBadge(
+    (order.paid || 0) <= 0 ? "unpaid" : (order.due || 0) > 0 ? "partial_paid" : "paid"
+  )}
+</div>
+
+<div class="grid-2" style="margin-bottom:12px;">
+  ${card(`
+    <div class="metric-label">Сумма</div>
+    <div class="metric-value" style="font-size:20px;">${order.total || 0}</div>
+  `)}
+  ${card(`
+    <div class="metric-label">Долг</div>
+    <div class="metric-value" style="font-size:20px;">${order.due || 0}</div>
+  `)}
+</div>
 
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
         ${btn("+ Оплата", `addPayment('${id}')`)}
@@ -786,30 +925,71 @@ async function loadInventory() {
 
   try {
     const items = await api("get_inventory");
+    const search = (state.inventorySearch || "").trim().toLowerCase();
+    const category = state.inventoryCategory || "all";
+
+    const filtered = (items || []).filter(i => {
+      const name = String(i.name || "").toLowerCase();
+      const brand = String(i.brand || "").toLowerCase();
+      const itemCategory = String(i.category || "").toLowerCase();
+
+      const matchSearch = !search || name.includes(search) || brand.includes(search);
+      const matchCategory = category === "all" || itemCategory === category;
+
+      return matchSearch && matchCategory;
+    });
 
     el.innerHTML = `
-      <div style="padding:16px;">
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
-          ${btn("+ Приход", "openAddStock()")}
-         ${btn("+ Товар", "openCreateInventoryItem()", "secondary")}
+      <div>
+        <div class="toolbar">
+          ${btn("+ Приход", "openAddStock()", "primary")}
+          ${btn("+ Товар", "openCreateInventoryItem()", "secondary")}
         </div>
 
-        ${(items || []).length ? items.map(i => `
+        <input
+          class="search-input"
+          placeholder="Поиск по названию или бренду"
+          value="${escapeHtml(state.inventorySearch)}"
+          oninput="setInventorySearch(this.value)"
+        >
+
+        <div class="filter-row">
+          <button class="filter-chip ${state.inventoryCategory === "all" ? "active" : ""}" onclick="setInventoryCategory('all')">Все</button>
+          <button class="filter-chip ${state.inventoryCategory === "vinyl" ? "active" : ""}" onclick="setInventoryCategory('vinyl')">Vinyl</button>
+          <button class="filter-chip ${state.inventoryCategory === "ppf" ? "active" : ""}" onclick="setInventoryCategory('ppf')">PPF</button>
+          <button class="filter-chip ${state.inventoryCategory === "tint" ? "active" : ""}" onclick="setInventoryCategory('tint')">Tint</button>
+          <button class="filter-chip ${state.inventoryCategory === "consumables" ? "active" : ""}" onclick="setInventoryCategory('consumables')">Расходники</button>
+        </div>
+
+        ${filtered.length ? filtered.map(i => `
           <div onclick="openItem('${i.id}')" style="cursor:pointer;">
             ${card(`
               <div class="app-card-title">${escapeHtml(i.name || "")}</div>
+              <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span class="badge">${escapeHtml(i.category || "")}</span>
+                <b>${i.available_quantity}</b>
+              </div>
               <div class="muted">Остаток: ${i.quantity}</div>
               <div class="muted">Резерв: ${i.reserved_quantity}</div>
               <div class="muted">Доступно: ${i.available_quantity}</div>
             `, "clickable")}
           </div>
-        `).join("") : card("Склад пуст")}
+        `).join("") : card(`<div class="muted">Ничего не найдено</div>`)}
       </div>
     `;
   } catch (e) {
     console.error(e);
     el.innerHTML = `<div style="padding:16px;">Ошибка загрузки склада</div>`;
   }
+}
+function setInventorySearch(value) {
+  state.inventorySearch = value;
+  loadInventory();
+}
+
+function setInventoryCategory(value) {
+  state.inventoryCategory = value;
+  loadInventory();
 }
 
 // ==============================
