@@ -181,40 +181,72 @@ async function loadDashboard() {
   try {
     const data = await api("dashboard");
 
+    const f = data.finance || {};
+    const stats = data.stats || {};
+
     el.innerHTML = `
       <div style="padding:16px;">
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+
+        <!-- ФИНАНСЫ -->
+        ${card(`
+          <div style="font-weight:700; margin-bottom:8px;">💰 Финансы (месяц)</div>
+          <div>Выручка: ${(f.orders_revenue || 0) + (f.sales_revenue || 0)}</div>
+          <div>Расходы: ${f.expenses_total || 0}</div>
+          <hr style="border-color:#1f2937;">
+          <div><b>Чистая прибыль: ${f.net_profit || 0}</b></div>
+        `)}
+
+        <!-- СТАТИСТИКА -->
+        ${card(`
+          <div style="font-weight:700; margin-bottom:8px;">📊 Статистика</div>
+          <div>Активных заказов: ${stats.active_count || 0}</div>
+          <div>В работе: ${stats.total_in_work || 0}</div>
+          <div>Долги: ${stats.total_debt || 0}</div>
+        `)}
+
+        <!-- БЫСТРЫЕ ДЕЙСТВИЯ -->
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
           ${btn("+ Заказ", "openCreateOrder()")}
-          ${btn("+ Клиент", "openCreateClient()")}
           ${btn("+ Продажа", "openCreateSale()")}
+          ${btn("+ Расход", "openCreateExpense()")}
         </div>
 
-        <h3 style="margin:12px 0;">Активные заказы</h3>
-        ${(data.orders || []).length ? (data.orders || []).map(o => `
-          <div onclick="openOrder('${o.id}')" style="cursor:pointer;">
+        <!-- АКТИВНЫЕ ЗАКАЗЫ -->
+        <h3 style="margin:12px 0;">📦 Активные заказы</h3>
+        ${(data.active_orders || []).length ? data.active_orders.map(o => `
+          <div onclick="openOrder('${o.id}')">
             ${card(`
-              <div style="font-weight:700;">${escapeHtml(o.order_number || "")}</div>
-              <div style="font-size:14px; opacity:0.8;">Статус: ${escapeHtml(o.status || "")}</div>
-              <div style="font-size:14px; opacity:0.8;">Сумма: ${o.total || 0} ${escapeHtml(o.currency || "UAH")}</div>
+              <b>${escapeHtml(o.order_number || "")}</b><br>
+              ${escapeHtml(o.status || "")}<br>
+              ${o.total || 0}
             `)}
           </div>
         `).join("") : card("Нет активных заказов")}
 
-        <h3 style="margin:12px 0;">Долги</h3>
-        ${(data.debts || []).length ? (data.debts || []).map(d => `
+        <!-- ДОЛГИ -->
+        <h3 style="margin:12px 0;">💸 Долги</h3>
+        ${(data.debts || []).length ? data.debts.map(d => `
           ${card(`
-            <div style="font-weight:700;">${escapeHtml(d.order_number || "")}</div>
-            <div>Долг: ${d.due || 0} ${escapeHtml(d.currency || "UAH")}</div>
+            <b>${escapeHtml(d.order_number || "")}</b><br>
+            Долг: ${d.due || 0}
           `)}
-        `).join("") : card("Долгов нет")}
+        `).join("") : card("Нет долгов")}
+
+        <!-- СКЛАД -->
+        <h3 style="margin:12px 0;">⚠️ Заканчивается</h3>
+        ${(data.low_stock || []).length ? data.low_stock.map(i => `
+          ${card(`
+            <b>${escapeHtml(i.name || "")}</b><br>
+            Остаток: ${i.quantity}
+          `)}
+        `).join("") : card("Склад в норме")}
       </div>
     `;
   } catch (e) {
     console.error(e);
-    el.innerHTML = `<div style="padding:16px;">Ошибка загрузки Dashboard</div>`;
+    el.innerHTML = `<div style="padding:16px;">Ошибка загрузки</div>`;
   }
 }
-
 // ==============================
 // ORDERS
 // ==============================
