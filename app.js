@@ -540,8 +540,7 @@ async function handleInventorySubmit(e) {
     name: val("#inventoryName"),
     quantity: num("#inventoryQuantity"),
     unit: val("#inventoryUnit") || "м",
-    purchase_price: num("#inventoryPurchasePrice"),
-    retail_price: num("#inventoryRetailPrice"),
+    price: num("#inventoryPrice"),
     currency: val("#inventoryCurrency") || "UAH",
     comment: val("#inventoryComment"),
   };
@@ -589,8 +588,7 @@ function startEditInventory(id) {
   setVal("#inventoryName", item.name);
   setVal("#inventoryQuantity", item.quantity);
   setVal("#inventoryUnit", item.unit || "м");
-  setVal("#inventoryPurchasePrice", item.purchase_price);
-  setVal("#inventoryRetailPrice", item.retail_price);
+  setVal("#inventoryPrice", item.price);
   setVal("#inventoryCurrency", item.currency || "UAH");
   setVal("#inventoryComment", item.comment);
 
@@ -814,8 +812,7 @@ function renderInventory() {
 
         <div class="item-body">
           <div class="item-line"><b>Количество:</b> ${escapeHtml(item.quantity ?? 0)} ${escapeHtml(item.unit || "")}</div>
-          <div class="item-line"><b>Вход:</b> ${formatMoney(item.purchase_price, item.currency)}</div>
-          <div class="item-line"><b>Розница:</b> ${formatMoney(item.retail_price, item.currency)}</div>
+          <div class="item-line"><b>Цена:</b> ${formatMoney(item.price, item.currency)}</div>
           ${item.comment ? `<div class="item-line"><b>Комментарий:</b> ${escapeHtml(item.comment)}</div>` : ""}
         </div>
 
