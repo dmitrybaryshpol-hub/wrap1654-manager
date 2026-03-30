@@ -165,17 +165,33 @@ async function loadOrders() {
 async function openOrder(id) {
   const order = await api("get_order", { id });
 
+  let materialsHtml = "";
+  if (order.materials && order.materials.length) {
+    materialsHtml = `
+      <h4>Материалы</h4>
+      ${order.materials.map(m => `
+        <div style="border-bottom:1px solid #333; padding:6px 0;">
+          ${m.item_name || m.inventory_item_id} — ${m.quantity}
+        </div>
+      `).join("")}
+    `;
+  }
+
   openModal(`
     <h3>${order.order_number}</h3>
 
     <p>Статус: ${order.status}</p>
     <p>Сумма: ${order.total}</p>
+    <p>Оплачено: ${order.paid || 0}</p>
+    <p>Долг: ${order.due || 0}</p>
 
     <button onclick="addPayment('${id}')">+ Оплата</button>
     <button onclick="addMaterial('${id}')">+ Материал</button>
+
+    <hr>
+    ${materialsHtml}
   `);
 }
-
 // ==============================
 // INVENTORY
 // ==============================
@@ -269,18 +285,87 @@ async function addPayment(order_id) {
 // ==============================
 
 async function addMaterial(order_id) {
-  const item_id = prompt("ID товара");
-  const qty = prompt("Количество");
+  const items = await api("get_inventory");
 
-  await api("writeoff_reserved_inventory", {
-  order_id,
-  item_id,
-  quantity: Number(qty)
-});
-  
-  tg.showAlert("Списано");
+  openModal(`
+    <h3>Добавить материал в заказ</h3>
+
+    <input id="material-search" placeholder="Поиск товара" oninput="filterMaterialList()" style="width:100%; margin-bottom:10px;">
+
+    <input type="hidden" id="selected_item_id">
+    <div id="selected_item_name" style="margin-bottom:10px; color:#aaa;">Товар не выбран</div>
+
+    <input id="material_qty" placeholder="Количество" type="number" step="0.1" style="width:100%; margin-bottom:10px;">
+
+    <div id="material-list" style="max-height:220px; overflow:auto; border:1px solid #333; padding:6px; border-radius:8px;">
+      ${items.map(i => `
+        <div 
+          class="material-row"
+          data-name="${(i.name || "").toLowerCase()}"
+          onclick="selectMaterial('${i.id}', \`${escapeHtml(i.name)}\`)"
+          style="padding:8px; border-bottom:1px solid #333; cursor:pointer;"
+        >
+          <b>${escapeHtml(i.name)}</b><br>
+          Остаток: ${i.quantity} | Резерв: ${i.reserved_quantity} | Доступно: ${i.available_quantity}
+        </div>
+      `).join("")}
+    </div>
+
+    <br>
+    <button onclick="submitMaterialToOrder('${order_id}')">Списать в заказ</button>
+  `);
+}
+function escapeHtml(str = "") {
+  return String(str)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
+function selectMaterial(id, name) {
+  document.getElementById("selected_item_id").value = id;
+  document.getElementById("selected_item_name").innerHTML = `Выбрано: <b>${name}</b>`;
+}
+
+function filterMaterialList() {
+  const q = document.getElementById("material-search").value.trim().toLowerCase();
+  document.querySelectorAll(".material-row").forEach(row => {
+    const name = row.dataset.name || "";
+    row.style.display = name.includes(q) ? "block" : "none";
+  });
+}
+
+async function submitMaterialToOrder(order_id) {
+  const item_id = document.getElementById("selected_item_id").value;
+  const qty = Number(document.getElementById("material_qty").value);
+
+  if (!item_id) {
+    tg.showAlert("Сначала выбери товар");
+    return;
+  }
+
+  if (!qty || qty <= 0) {
+    tg.showAlert("Укажи корректное количество");
+    return;
+  }
+
+  try {
+    await api("writeoff_reserved_inventory", {
+      order_id,
+      item_id,
+      quantity: qty
+    });
+
+    tg.showAlert("Материал списан");
+    closeModal();
+    openOrder(order_id);
+    loadInventory();
+  } catch (e) {
+    console.error(e);
+  }
+}
 // ==============================
 // ADD STOCK
 // ==============================
