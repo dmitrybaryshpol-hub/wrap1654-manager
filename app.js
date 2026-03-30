@@ -98,6 +98,7 @@ function renderLayout() {
         <div id="dashboard" class="tab"></div>
         <div id="orders" class="tab" style="display:none"></div>
         <div id="inventory" class="tab" style="display:none"></div>
+        <div id="finance" class="tab" style="display:none"></div>
       </div>
     </div>
 
@@ -109,6 +110,7 @@ function renderLayout() {
       <button onclick="showTab('dashboard')" style="flex:1;">Главная</button>
       <button onclick="showTab('orders')" style="flex:1;">Заказы</button>
       <button onclick="showTab('inventory')" style="flex:1;">Склад</button>
+      <button onclick="showTab('finance')" style="flex:1;">Финансы</button>
     </div>
 
     <div id="modal"></div>
@@ -132,6 +134,7 @@ function showTab(tab) {
   if (tab === "dashboard") loadDashboard();
   if (tab === "orders") loadOrders();
   if (tab === "inventory") loadInventory();
+  if (tab === "finance") loadFinance();
 }
 
 // ==============================
@@ -778,6 +781,99 @@ function openModal(html) {
       </div>
     </div>
   `;
+}
+
+// ==============================
+// FINANCE
+// ==============================
+
+async function loadFinance() {
+  const el = document.getElementById("finance");
+  el.innerHTML = `<div style="padding:16px;">Загрузка...</div>`;
+
+  try {
+    const summary = await api("get_finance_summary");
+    const expenses = await api("get_expenses");
+
+    el.innerHTML = `
+      <div style="padding:16px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+          ${btn("+ Расход", "openCreateExpense()")}
+        </div>
+
+        ${card(`
+          <div style="font-weight:700; margin-bottom:8px;">Сводка за месяц</div>
+          <div>Выручка по заказам: ${summary.orders_revenue || 0}</div>
+          <div>Прибыль по заказам: ${summary.orders_profit || 0}</div>
+          <div>Выручка со склада: ${summary.sales_revenue || 0}</div>
+          <div>Прибыль со склада: ${summary.sales_profit || 0}</div>
+          <div>Расходы: ${summary.expenses_total || 0}</div>
+          <hr style="border-color:#1f2937;">
+          <div><b>Валовая прибыль: ${summary.gross_profit || 0}</b></div>
+          <div><b>Чистая прибыль: ${summary.net_profit || 0}</b></div>
+        `)}
+
+        <h3 style="margin:12px 0;">Расходы</h3>
+        ${(expenses || []).length ? expenses.map(x => `
+          ${card(`
+            <div style="font-weight:700;">${escapeHtml(x.category || "")}</div>
+            <div>${x.amount || 0} ${escapeHtml(x.currency || "UAH")}</div>
+            <div style="font-size:12px; opacity:0.7;">${escapeHtml(x.note || "")}</div>
+          `)}
+        `).join("") : card("Расходов пока нет")}
+      </div>
+    `;
+  } catch (e) {
+    console.error(e);
+    el.innerHTML = `<div style="padding:16px;">Ошибка загрузки финансов</div>`;
+  }
+}
+function openCreateExpense() {
+  openModal(`
+    <h3 style="margin-top:0;">Новый расход</h3>
+
+    <input id="exp_category" placeholder="Категория (rent / utilities / ads / salary / other)" style="width:100%; margin-bottom:10px;">
+    <input id="exp_amount" placeholder="Сумма" type="number" step="0.01" style="width:100%; margin-bottom:10px;">
+    <input id="exp_currency" placeholder="Валюта (UAH / USD)" style="width:100%; margin-bottom:10px;">
+    <input id="exp_supplier" placeholder="Поставщик" style="width:100%; margin-bottom:10px;">
+    <input id="exp_note" placeholder="Комментарий" style="width:100%; margin-bottom:10px;">
+
+    ${btn("Сохранить", "createExpense()")}
+  `);
+}
+
+async function createExpense() {
+  const category = document.getElementById("exp_category").value.trim();
+  const amount = Number(document.getElementById("exp_amount").value);
+  const currency = document.getElementById("exp_currency").value.trim() || "UAH";
+  const supplier = document.getElementById("exp_supplier").value.trim();
+  const note = document.getElementById("exp_note").value.trim();
+
+  if (!category) {
+    safeAlert("Укажи категорию");
+    return;
+  }
+
+  if (!amount || amount <= 0) {
+    safeAlert("Укажи сумму");
+    return;
+  }
+
+  try {
+    await api("create_expense", {
+      category,
+      amount,
+      currency,
+      supplier,
+      note
+    });
+
+    closeModal();
+    loadFinance();
+    safeAlert("Расход добавлен");
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 function closeModal() {
