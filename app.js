@@ -13,7 +13,7 @@ if (tg) {
 
 const state = {
   user: null,
-  currentTab: "dashboard"
+  currentTab: "dashboard",
   orderSearch: "",
   orderStatus: "all",
   inventorySearch: "",
