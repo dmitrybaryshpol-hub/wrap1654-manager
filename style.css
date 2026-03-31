@@ -961,3 +961,135 @@ textarea{
     .mini-stat-value{
       font-weight:800;
     }
+    /* ==============================
+   PRO DESIGN UPGRADE (WEB3 STYLE)
+============================== */
+
+/* фон глубже */
+body{
+  background:
+    radial-gradient(800px 400px at 20% -10%, rgba(255,51,204,0.08), transparent),
+    radial-gradient(600px 300px at 90% 0%, rgba(124,58,237,0.08), transparent),
+    var(--bg);
+}
+
+/* карточки как в OKX */
+.card,
+.stat-card,
+.item-card{
+  background: linear-gradient(180deg, #141419, #111118);
+  border: 1px solid rgba(255,255,255,0.05);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.02),
+    0 10px 30px rgba(0,0,0,0.4);
+  transition: all 0.2s ease;
+}
+
+.card:hover{
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.04),
+    0 20px 40px rgba(0,0,0,0.5);
+}
+
+/* кнопки */
+.primary-btn{
+  background: linear-gradient(135deg, var(--pink), #7c3aed);
+  box-shadow: 0 6px 18px rgba(255,51,204,0.3);
+}
+
+.primary-btn:active{
+  transform: scale(0.96);
+}
+
+.secondary-btn{
+  backdrop-filter: blur(6px);
+}
+
+/* табы */
+.tab-btn{
+  background: rgba(20,20,25,0.6);
+  backdrop-filter: blur(10px);
+}
+
+.tab-btn.active{
+  background: linear-gradient(135deg,var(--pink),#7c3aed);
+  box-shadow: 0 4px 14px rgba(255,51,204,0.35);
+}
+
+/* inputs */
+input, select, textarea{
+  background: rgba(20,20,25,0.9);
+  backdrop-filter: blur(6px);
+}
+
+/* hover inputs */
+input:focus,
+select:focus,
+textarea:focus{
+  border-color: rgba(255,51,204,.6);
+  box-shadow: 0 0 0 3px rgba(255,51,204,.12);
+}
+
+/* item карточки */
+.item-card{
+  position: relative;
+  overflow: hidden;
+}
+
+.item-card::after{
+  content:"";
+  position:absolute;
+  top:-40px;
+  right:-40px;
+  width:120px;
+  height:120px;
+  border-radius:50%;
+  background:rgba(255,255,255,0.02);
+}
+
+/* суммы */
+.item-title{
+  letter-spacing: .3px;
+}
+
+/* статус как pill */
+.badge-status{
+  backdrop-filter: blur(6px);
+}
+
+/* список */
+.list-row{
+  transition: all .15s ease;
+}
+
+.list-row:hover{
+  transform: translateX(2px);
+}
+
+/* actions */
+.action-btn{
+  background: rgba(17,19,24,0.9);
+  backdrop-filter: blur(6px);
+}
+
+/* glow эффект */
+.primary-btn,
+.tab-btn.active{
+  position: relative;
+}
+
+.primary-btn::after,
+.tab-btn.active::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:inherit;
+  background: radial-gradient(circle at 50% 0%, rgba(255,255,255,0.25), transparent);
+  opacity:.15;
+}
+
+/* плавность */
+*{
+  -webkit-tap-highlight-color: transparent;
+}
