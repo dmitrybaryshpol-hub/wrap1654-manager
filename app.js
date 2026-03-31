@@ -1,5 +1,4 @@
 const tg = window.Telegram?.WebApp || null;
-
 const API_URL = "https://hbciwqgfccdfnzrhiops.supabase.co/functions/v1/smart-handler";
 
 const state = {
@@ -62,10 +61,7 @@ async function bootstrap() {
     await authUser();
   } catch (err) {
     console.error("AUTH ERROR:", err);
-    // Не валим приложение полностью
-    state.user = {
-      first_name: "Пользователь",
-    };
+    state.user = { first_name: "Пользователь" };
     renderUserInfo();
     safeAlert(err.message || "Ошибка авторизации");
   }
@@ -83,19 +79,13 @@ async function bootstrap() {
 
 async function authUser() {
   const initData = tg?.initData || "";
-
-  if (!initData) {
-    console.warn("Telegram initData is empty");
-  }
-
   const auth = await api("auth", { initData });
 
-  // Поддержка разных форматов ответа
   if (auth?.ok === false) {
     throw new Error(auth?.error || "Auth failed");
   }
 
-  state.user = auth?.user || auth?.data?.user || auth?.telegramUser || null;
+  state.user = auth?.user || auth?.data?.user || auth?.telegramUser || auth || null;
   renderUserInfo();
 }
 
@@ -104,17 +94,13 @@ async function authUser() {
 // ==============================
 
 async function api(action, payload = {}) {
-  const body = {
-    action,
-    ...payload,
-  };
+  const body = { action, ...payload };
 
   if (!body.initData && tg?.initData) {
     body.initData = tg.initData;
   }
 
   let res;
-
   try {
     res = await fetch(API_URL, {
       method: "POST",
@@ -167,30 +153,18 @@ async function loadAllData() {
 }
 
 async function loadOrders() {
-  const data = await api("list_orders");
-  state.orders = Array.isArray(data.items)
-    ? data.items
-    : Array.isArray(data.data)
-    ? data.data
-    : [];
+  const data = await api("get_orders");
+  state.orders = Array.isArray(data) ? data : Array.isArray(data.items) ? data.items : [];
 }
 
 async function loadClients() {
-  const data = await api("list_clients");
-  state.clients = Array.isArray(data.items)
-    ? data.items
-    : Array.isArray(data.data)
-    ? data.data
-    : [];
+  const data = await api("get_clients");
+  state.clients = Array.isArray(data) ? data : Array.isArray(data.items) ? data.items : [];
 }
 
 async function loadInventory() {
-  const data = await api("list_inventory");
-  state.inventory = Array.isArray(data.items)
-    ? data.items
-    : Array.isArray(data.data)
-    ? data.data
-    : [];
+  const data = await api("get_inventory");
+  state.inventory = Array.isArray(data) ? data : Array.isArray(data.items) ? data.items : [];
 }
 
 // ==============================
@@ -200,44 +174,29 @@ async function loadInventory() {
 function bindGlobalEvents() {
   document.querySelectorAll("[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const tab = btn.dataset.tab;
-      setActiveTab(tab);
+      setActiveTab(btn.dataset.tab);
     });
   });
 
-  const orderSearch = $("#orderSearch");
-  const orderStatus = $("#orderStatusFilter");
+  $("#orderSearch")?.addEventListener("input", (e) => {
+    state.orderSearch = String(e.target.value || "").trim().toLowerCase();
+    renderOrders();
+  });
 
-  if (orderSearch) {
-    orderSearch.addEventListener("input", (e) => {
-      state.orderSearch = String(e.target.value || "").trim().toLowerCase();
-      renderOrders();
-    });
-  }
+  $("#orderStatusFilter")?.addEventListener("change", (e) => {
+    state.orderStatus = e.target.value || "all";
+    renderOrders();
+  });
 
-  if (orderStatus) {
-    orderStatus.addEventListener("change", (e) => {
-      state.orderStatus = e.target.value || "all";
-      renderOrders();
-    });
-  }
+  $("#inventorySearch")?.addEventListener("input", (e) => {
+    state.inventorySearch = String(e.target.value || "").trim().toLowerCase();
+    renderInventory();
+  });
 
-  const inventorySearch = $("#inventorySearch");
-  const inventoryCategory = $("#inventoryCategoryFilter");
-
-  if (inventorySearch) {
-    inventorySearch.addEventListener("input", (e) => {
-      state.inventorySearch = String(e.target.value || "").trim().toLowerCase();
-      renderInventory();
-    });
-  }
-
-  if (inventoryCategory) {
-    inventoryCategory.addEventListener("change", (e) => {
-      state.inventoryCategory = e.target.value || "all";
-      renderInventory();
-    });
-  }
+  $("#inventoryCategoryFilter")?.addEventListener("change", (e) => {
+    state.inventoryCategory = e.target.value || "all";
+    renderInventory();
+  });
 
   $("#orderForm")?.addEventListener("submit", handleOrderSubmit);
   $("#clientForm")?.addEventListener("submit", handleClientSubmit);
@@ -251,42 +210,24 @@ function bindGlobalEvents() {
     const editBtn = e.target.closest("[data-action='edit-order']");
     const deleteBtn = e.target.closest("[data-action='delete-order']");
 
-    if (editBtn) {
-      startEditOrder(editBtn.dataset.id);
-      return;
-    }
-
-    if (deleteBtn) {
-      await deleteOrder(deleteBtn.dataset.id);
-    }
+    if (editBtn) return startEditOrder(editBtn.dataset.id);
+    if (deleteBtn) return deleteOrder(deleteBtn.dataset.id);
   });
 
   $("#clientsList")?.addEventListener("click", async (e) => {
     const editBtn = e.target.closest("[data-action='edit-client']");
     const deleteBtn = e.target.closest("[data-action='delete-client']");
 
-    if (editBtn) {
-      startEditClient(editBtn.dataset.id);
-      return;
-    }
-
-    if (deleteBtn) {
-      await deleteClient(deleteBtn.dataset.id);
-    }
+    if (editBtn) return startEditClient(editBtn.dataset.id);
+    if (deleteBtn) return deleteClient(deleteBtn.dataset.id);
   });
 
   $("#inventoryList")?.addEventListener("click", async (e) => {
     const editBtn = e.target.closest("[data-action='edit-inventory']");
     const deleteBtn = e.target.closest("[data-action='delete-inventory']");
 
-    if (editBtn) {
-      startEditInventory(editBtn.dataset.id);
-      return;
-    }
-
-    if (deleteBtn) {
-      await deleteInventory(deleteBtn.dataset.id);
-    }
+    if (editBtn) return startEditInventory(editBtn.dataset.id);
+    if (deleteBtn) return deleteInventory(deleteBtn.dataset.id);
   });
 }
 
@@ -318,30 +259,32 @@ async function handleOrderSubmit(e) {
   const form = e.currentTarget;
   const submitBtn = form.querySelector("button[type='submit']");
 
-  const payload = {
-    client_name: val("#orderClientName"),
-    car_model: val("#orderCarModel"),
-    services: val("#orderServices"),
-    amount: num("#orderAmount"),
-    currency: val("#orderCurrency") || "UAH",
-    status: val("#orderStatus") || "new",
-    day: val("#orderDay"),
-    comment: val("#orderComment"),
-  };
+  const clientName = val("#orderClientName");
+  const matchedClient = state.clients.find(
+    (c) => String(c.full_name || "").trim().toLowerCase() === clientName.trim().toLowerCase()
+  );
 
-  if (!payload.client_name || !payload.car_model) {
-    safeAlert("Заполни имя клиента и машину");
+  if (!matchedClient) {
+    safeAlert("Сначала выбери клиента из базы");
     return;
   }
+
+  const payload = {
+    client_id: matchedClient.id,
+    type: val("#orderType") || "combined",
+    status: val("#orderStatus") || "new",
+    start_date: val("#orderStartDate") || null,
+    end_date: val("#orderEndDate") || null,
+    total: num("#orderAmount"),
+    currency: val("#orderCurrency") || "UAH",
+    note: val("#orderNote"),
+  };
 
   toggleButtonLoading(submitBtn, true);
 
   try {
     if (state.editingOrderId) {
-      await api("update_order", {
-        id: state.editingOrderId,
-        ...payload,
-      });
+      await api("update_order", { id: state.editingOrderId, ...payload });
       safeAlert("Заказ обновлён");
     } else {
       await api("create_order", payload);
@@ -367,14 +310,16 @@ function startEditOrder(id) {
 
   state.editingOrderId = item.id;
 
-  setVal("#orderClientName", item.client_name);
-  setVal("#orderCarModel", item.car_model);
-  setVal("#orderServices", item.services);
-  setVal("#orderAmount", item.amount);
-  setVal("#orderCurrency", item.currency || "UAH");
+  const client = state.clients.find((c) => String(c.id) === String(item.client_id));
+
+  setVal("#orderClientName", client?.full_name || "");
+  setVal("#orderType", item.type || "combined");
   setVal("#orderStatus", item.status || "new");
-  setVal("#orderDay", normalizeDateForInput(item.day));
-  setVal("#orderComment", item.comment);
+  setVal("#orderStartDate", normalizeDateForInput(item.start_date));
+  setVal("#orderEndDate", normalizeDateForInput(item.end_date));
+  setVal("#orderAmount", item.total);
+  setVal("#orderCurrency", item.currency || "UAH");
+  setVal("#orderNote", item.note);
 
   $("#cancelOrderEdit")?.classList.remove("hidden");
   setText("#orderSubmitText", "Сохранить");
@@ -412,10 +357,10 @@ function getFilteredOrders() {
       if (!state.orderSearch) return true;
 
       const text = [
-        item.client_name,
-        item.car_model,
-        item.services,
-        item.comment,
+        item.order_number,
+        item.type,
+        item.status,
+        item.note,
       ]
         .join(" ")
         .toLowerCase();
@@ -427,8 +372,8 @@ function getFilteredOrders() {
       return String(item.status || "").toLowerCase() === state.orderStatus.toLowerCase();
     })
     .sort((a, b) => {
-      const da = new Date(a.day || 0).getTime();
-      const db = new Date(b.day || 0).getTime();
+      const da = new Date(a.start_date || 0).getTime();
+      const db = new Date(b.start_date || 0).getTime();
       return db - da;
     });
 }
@@ -444,13 +389,15 @@ async function handleClientSubmit(e) {
   const submitBtn = form.querySelector("button[type='submit']");
 
   const payload = {
-    name: val("#clientName"),
+    full_name: val("#clientName"),
     phone: val("#clientPhone"),
-    telegram_id: val("#clientTelegram"),
+    telegram_username: val("#clientTelegram"),
+    instagram: val("#clientInstagram"),
+    source: val("#clientSource"),
     note: val("#clientNote"),
   };
 
-  if (!payload.name) {
+  if (!payload.full_name) {
     safeAlert("Введите имя клиента");
     return;
   }
@@ -489,9 +436,11 @@ function startEditClient(id) {
 
   state.editingClientId = item.id;
 
-  setVal("#clientName", item.name);
+  setVal("#clientName", item.full_name);
   setVal("#clientPhone", item.phone);
-  setVal("#clientTelegram", item.telegram_id);
+  setVal("#clientTelegram", item.telegram_username);
+  setVal("#clientInstagram", item.instagram);
+  setVal("#clientSource", item.source);
   setVal("#clientNote", item.note);
 
   $("#cancelClientEdit")?.classList.remove("hidden");
@@ -538,11 +487,17 @@ async function handleInventorySubmit(e) {
     category: val("#inventoryCategory") || "other",
     brand: val("#inventoryBrand"),
     name: val("#inventoryName"),
+    sku: val("#inventorySku"),
+    color: val("#inventoryColor"),
+    width_cm: num("#inventoryWidthCm"),
     quantity: num("#inventoryQuantity"),
-    unit: val("#inventoryUnit") || "м",
-    price: num("#inventoryPrice"),
+    unit: val("#inventoryUnit") || "m",
+    purchase_price: num("#inventoryPurchasePrice"),
+    retail_price: num("#inventoryRetailPrice"),
     currency: val("#inventoryCurrency") || "UAH",
-    comment: val("#inventoryComment"),
+    supplier: val("#inventorySupplier"),
+    min_quantity: num("#inventoryMinQuantity"),
+    note: val("#inventoryNote"),
   };
 
   if (!payload.name) {
@@ -554,13 +509,13 @@ async function handleInventorySubmit(e) {
 
   try {
     if (state.editingInventoryId) {
-      await api("update_inventory", {
+      await api("update_inventory_item", {
         id: state.editingInventoryId,
         ...payload,
       });
       safeAlert("Товар обновлён");
     } else {
-      await api("create_inventory", payload);
+      await api("create_inventory_item", payload);
       safeAlert("Товар добавлен");
     }
 
@@ -586,11 +541,17 @@ function startEditInventory(id) {
   setVal("#inventoryCategory", item.category || "other");
   setVal("#inventoryBrand", item.brand);
   setVal("#inventoryName", item.name);
+  setVal("#inventorySku", item.sku);
+  setVal("#inventoryColor", item.color);
+  setVal("#inventoryWidthCm", item.width_cm);
   setVal("#inventoryQuantity", item.quantity);
-  setVal("#inventoryUnit", item.unit || "м");
-  setVal("#inventoryPrice", item.price);
+  setVal("#inventoryUnit", item.unit || "m");
+  setVal("#inventoryPurchasePrice", item.purchase_price);
+  setVal("#inventoryRetailPrice", item.retail_price);
   setVal("#inventoryCurrency", item.currency || "UAH");
-  setVal("#inventoryComment", item.comment);
+  setVal("#inventorySupplier", item.supplier);
+  setVal("#inventoryMinQuantity", item.min_quantity);
+  setVal("#inventoryNote", item.note);
 
   $("#cancelInventoryEdit")?.classList.remove("hidden");
   setText("#inventorySubmitText", "Сохранить");
@@ -618,7 +579,7 @@ function resetInventoryForm() {
   state.editingInventoryId = null;
   $("#inventoryForm")?.reset();
   setVal("#inventoryCurrency", "UAH");
-  setVal("#inventoryUnit", "м");
+  setVal("#inventoryUnit", "m");
   $("#cancelInventoryEdit")?.classList.add("hidden");
   setText("#inventorySubmitText", "Добавить");
 }
@@ -632,7 +593,10 @@ function getFilteredInventory() {
         item.brand,
         item.name,
         item.category,
-        item.comment,
+        item.note,
+        item.sku,
+        item.color,
+        item.supplier,
       ]
         .join(" ")
         .toLowerCase();
@@ -665,7 +629,6 @@ function renderUserInfo() {
 
   const user = state.user || {};
   const name = user.first_name || user.username || "Пользователь";
-
   el.textContent = `👋 ${name}`;
 }
 
@@ -685,7 +648,7 @@ function renderDashboard() {
   if (!recentBox) return;
 
   const recent = [...state.orders]
-    .sort((a, b) => new Date(b.day || 0).getTime() - new Date(a.day || 0).getTime())
+    .sort((a, b) => new Date(b.start_date || 0).getTime() - new Date(a.start_date || 0).getTime())
     .slice(0, 5);
 
   if (!recent.length) {
@@ -697,12 +660,12 @@ function renderDashboard() {
     .map((item) => `
       <div class="list-row">
         <div class="list-row-main">
-          <div class="list-row-title">${escapeHtml(item.client_name || "Без клиента")}</div>
-          <div class="list-row-sub">${escapeHtml(item.car_model || "-")} · ${escapeHtml(item.services || "-")}</div>
+          <div class="list-row-title">${escapeHtml(item.order_number || "Без номера")}</div>
+          <div class="list-row-sub">${escapeHtml(item.type || "-")} · ${formatMoney(item.total, item.currency)}</div>
         </div>
         <div class="list-row-side">
           <div class="badge-status status-${safeStatusClass(item.status)}">${escapeHtml(item.status || "new")}</div>
-          <div class="list-row-date">${formatDate(item.day)}</div>
+          <div class="list-row-date">${formatDate(item.start_date)}</div>
         </div>
       </div>
     `)
@@ -725,17 +688,19 @@ function renderOrders() {
       <div class="item-card">
         <div class="item-head">
           <div>
-            <div class="item-title">${escapeHtml(item.client_name || "Без клиента")}</div>
-            <div class="item-subtitle">${escapeHtml(item.car_model || "-")}</div>
+            <div class="item-title">${escapeHtml(item.order_number || "Без номера")}</div>
+            <div class="item-subtitle">${escapeHtml(item.type || "-")}</div>
           </div>
           <div class="badge-status status-${safeStatusClass(item.status)}">${escapeHtml(item.status || "new")}</div>
         </div>
 
         <div class="item-body">
-          <div class="item-line"><b>Услуги:</b> ${escapeHtml(item.services || "-")}</div>
-          <div class="item-line"><b>Сумма:</b> ${formatMoney(item.amount, item.currency)}</div>
-          <div class="item-line"><b>Дата:</b> ${formatDate(item.day)}</div>
-          ${item.comment ? `<div class="item-line"><b>Комментарий:</b> ${escapeHtml(item.comment)}</div>` : ""}
+          <div class="item-line"><b>Сумма:</b> ${formatMoney(item.total, item.currency)}</div>
+          <div class="item-line"><b>Оплачено:</b> ${formatMoney(item.paid, item.currency)}</div>
+          <div class="item-line"><b>Долг:</b> ${formatMoney(item.due, item.currency)}</div>
+          <div class="item-line"><b>Начало:</b> ${formatDate(item.start_date)}</div>
+          <div class="item-line"><b>Конец:</b> ${formatDate(item.end_date)}</div>
+          ${item.note ? `<div class="item-line"><b>Комментарий:</b> ${escapeHtml(item.note)}</div>` : ""}
         </div>
 
         <div class="item-actions">
@@ -752,7 +717,7 @@ function renderClients() {
   if (!box) return;
 
   const items = [...state.clients].sort((a, b) =>
-    String(a.name || "").localeCompare(String(b.name || ""), "ru")
+    String(a.full_name || "").localeCompare(String(b.full_name || ""), "ru")
   );
 
   if (!items.length) {
@@ -765,13 +730,15 @@ function renderClients() {
       <div class="item-card">
         <div class="item-head">
           <div>
-            <div class="item-title">${escapeHtml(item.name || "-")}</div>
+            <div class="item-title">${escapeHtml(item.full_name || "-")}</div>
             <div class="item-subtitle">${escapeHtml(item.phone || "Без телефона")}</div>
           </div>
         </div>
 
         <div class="item-body">
-          ${item.telegram_id ? `<div class="item-line"><b>Telegram ID:</b> ${escapeHtml(item.telegram_id)}</div>` : ""}
+          ${item.telegram_username ? `<div class="item-line"><b>Telegram:</b> ${escapeHtml(item.telegram_username)}</div>` : ""}
+          ${item.instagram ? `<div class="item-line"><b>Instagram:</b> ${escapeHtml(item.instagram)}</div>` : ""}
+          ${item.source ? `<div class="item-line"><b>Источник:</b> ${escapeHtml(item.source)}</div>` : ""}
           ${item.note ? `<div class="item-line"><b>Заметка:</b> ${escapeHtml(item.note)}</div>` : ""}
         </div>
 
@@ -805,15 +772,19 @@ function renderInventory() {
         <div class="item-head">
           <div>
             <div class="item-title">${escapeHtml(item.name || "-")}</div>
-            <div class="item-subtitle">${escapeHtml(item.brand || "-")} ${item.code ? "· " + escapeHtml(item.code) : ""}</div>
+            <div class="item-subtitle">${escapeHtml(item.brand || "-")}${item.sku ? " · " + escapeHtml(item.sku) : ""}</div>
           </div>
           <div class="badge-status">${escapeHtml(item.category || "other")}</div>
         </div>
 
         <div class="item-body">
           <div class="item-line"><b>Количество:</b> ${escapeHtml(item.quantity ?? 0)} ${escapeHtml(item.unit || "")}</div>
-          <div class="item-line"><b>Цена:</b> ${formatMoney(item.price, item.currency)}</div>
-          ${item.comment ? `<div class="item-line"><b>Комментарий:</b> ${escapeHtml(item.comment)}</div>` : ""}
+          <div class="item-line"><b>Вход:</b> ${formatMoney(item.purchase_price, item.currency)}</div>
+          <div class="item-line"><b>Розница:</b> ${formatMoney(item.retail_price, item.currency)}</div>
+          ${item.color ? `<div class="item-line"><b>Цвет:</b> ${escapeHtml(item.color)}</div>` : ""}
+          ${item.width_cm ? `<div class="item-line"><b>Ширина:</b> ${escapeHtml(item.width_cm)} см</div>` : ""}
+          ${item.supplier ? `<div class="item-line"><b>Поставщик:</b> ${escapeHtml(item.supplier)}</div>` : ""}
+          ${item.note ? `<div class="item-line"><b>Комментарий:</b> ${escapeHtml(item.note)}</div>` : ""}
         </div>
 
         <div class="item-actions">
@@ -830,7 +801,7 @@ function fillClientsDatalist() {
   if (!list) return;
 
   list.innerHTML = state.clients
-    .map((c) => `<option value="${escapeHtml(c.name || "")}"></option>`)
+    .map((c) => `<option value="${escapeHtml(c.full_name || "")}"></option>`)
     .join("");
 }
 
@@ -861,15 +832,6 @@ function num(selector) {
   const raw = val(selector).replace(",", ".");
   const n = Number(raw);
   return Number.isFinite(n) ? n : 0;
-}
-
-function escapeHtml(str = "") {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 }
 
 function formatMoney(value, currency = "UAH") {
@@ -909,9 +871,9 @@ function normalizeDateForInput(value) {
 }
 
 function fillDefaultDates() {
-  const orderDay = $("#orderDay");
-  if (orderDay && !orderDay.value) {
-    orderDay.value = normalizeDateForInput(new Date());
+  const start = $("#orderStartDate");
+  if (start && !start.value) {
+    start.value = normalizeDateForInput(new Date());
   }
 }
 
@@ -967,6 +929,15 @@ function scrollToElement(selector) {
   el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+function escapeHtml(str = "") {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function safeStatusClass(status = "") {
   const s = String(status || "").trim().toLowerCase();
 
@@ -974,6 +945,7 @@ function safeStatusClass(status = "") {
   if (["in_progress", "progress", "work", "в работе"].includes(s)) return "in-progress";
   if (["done", "completed", "finish", "готово"].includes(s)) return "done";
   if (["cancelled", "canceled", "отмена"].includes(s)) return "cancelled";
+  if (["closed"].includes(s)) return "done";
 
   return s.replace(/[^a-z0-9-_]/g, "") || "default";
 }
