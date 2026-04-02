@@ -1,6 +1,57 @@
 const tg = window.Telegram?.WebApp || null;
 
 const API_URL = "https://hbciwqgfccdfnzrhiops.supabase.co/functions/v1/smart-handler";
+async function initApp() {
+  try {
+    if (!tg || !tg.initData) {
+      document.body.innerHTML = `
+        <div style="
+          min-height:100vh;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          background:#0b1120;
+          color:#fff;
+          font-family:Arial,sans-serif;
+          padding:24px;
+          text-align:center;
+        ">
+          <div>
+            <h2>Доступ только через Telegram</h2>
+            <p>Открой приложение из бота Wrap 1654 Manager.</p>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    const auth = await api("auth");
+    state.user = auth.user;
+
+    renderLayout();
+    showTab("dashboard");
+  } catch (e) {
+    console.error(e);
+    document.body.innerHTML = `
+      <div style="
+        min-height:100vh;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        background:#0b1120;
+        color:#fff;
+        font-family:Arial,sans-serif;
+        padding:24px;
+        text-align:center;
+      ">
+        <div>
+          <h2>Access denied</h2>
+          <p>У вас нет доступа к приложению.</p>
+        </div>
+      </div>
+    `;
+  }
+}
 
 if (tg) {
   tg.expand();
