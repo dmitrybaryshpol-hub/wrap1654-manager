@@ -1,951 +1,898 @@
-const tg = window.Telegram?.WebApp || null;
+const tg = window.Telegram?.WebApp;
+
 const API_URL = "https://hbciwqgfccdfnzrhiops.supabase.co/functions/v1/smart-handler";
-
-const state = {
-  user: null,
-  currentTab: "dashboard",
-
-  orders: [],
-  clients: [],
-  inventory: [],
-
-  orderSearch: "",
-  orderStatus: "all",
-
-  inventorySearch: "",
-  inventoryCategory: "all",
-
-  editingOrderId: null,
-  editingClientId: null,
-  editingInventoryId: null,
-};
-
-document.addEventListener("DOMContentLoaded", initApp);
 
 // ==============================
 // INIT
 // ==============================
 
-async function initApp() {
-  try {
-    initTelegramSafe();
-    bindGlobalEvents();
-    setupTabs();
-    setActiveTab(state.currentTab);
-    fillDefaultDates();
-    renderAll();
-
-    await bootstrap();
-  } catch (err) {
-    console.error("INIT ERROR:", err);
-    safeAlert("Ошибка запуска приложения");
-  }
+if (tg) {
+  tg.expand();
+  tg.setHeaderColor("#0f172a");
 }
 
-function initTelegramSafe() {
-  try {
-    if (!tg) return;
-    tg.expand?.();
-    tg.ready?.();
-    tg.setHeaderColor?.("#0f172a");
-    tg.setBackgroundColor?.("#0b1120");
-  } catch (err) {
-    console.warn("Telegram init warning:", err);
-  }
+const state = {
+  user: null,
+  currentTab: "dashboard"
+};
+
+// ==============================
+// HELPERS
+// ==============================
+
+function escapeHtml(str = "") {
+  return String(str)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
-async function bootstrap() {
-  showGlobalLoader(true);
-
-  try {
-    await authUser();
-  } catch (err) {
-    console.error("AUTH ERROR:", err);
-    state.user = { first_name: "Пользователь" };
-    renderUserInfo();
-    safeAlert(err.message || "Ошибка авторизации");
-  }
-
-  try {
-    await loadAllData();
-  } catch (err) {
-    console.error("LOAD DATA ERROR:", err);
-    renderAll();
-    safeAlert(err.message || "Ошибка загрузки данных");
-  } finally {
-    showGlobalLoader(false);
-  }
-}
-
-async function authUser() {
-  const initData = tg?.initData || "";
-  const auth = await api("auth", { initData });
-
-  if (auth?.ok === false) {
-    throw new Error(auth?.error || "Auth failed");
-  }
-
-  state.user = auth?.user || auth?.data?.user || auth?.telegramUser || auth || null;
-  renderUserInfo();
+function safeAlert(text) {
+  if (tg?.showAlert) tg.showAlert(text);
+  else alert(text);
 }
 
 // ==============================
 // API
 // ==============================
 
-async function api(action, payload = {}) {
-  const body = { action, ...payload };
+async function api(action, data = {}) {
+  const res = await fetch(API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      action,
+      initData: tg?.initData || "",
+      ...data
+    })
+  });
 
-  if (!body.initData && tg?.initData) {
-    body.initData = tg.initData;
-  }
-
-  let res;
-  try {
-    res = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  } catch (err) {
-    throw new Error("Нет соединения с сервером");
-  }
-
-  const rawText = await res.text();
-  let data = {};
-
-  try {
-    data = rawText ? JSON.parse(rawText) : {};
-  } catch (err) {
-    console.error("NON-JSON RESPONSE:", rawText);
-    throw new Error("Сервер вернул некорректный ответ");
-  }
+  const json = await res.json();
 
   if (!res.ok) {
-    throw new Error(data?.error || `HTTP ${res.status}`);
+    console.error("API error:", json);
+    safeAlert(json.error || "Ошибка");
+    throw new Error(json.error || "API error");
   }
 
-  if (data?.ok === false) {
-    throw new Error(data?.error || "Ошибка сервера");
+  return json;
+}
+
+// ==============================
+// INIT APP
+// ==============================
+
+async function initApp() {
+  try {
+    const user = await api("auth");
+    state.user = user;
+
+    renderLayout();
+    showTab("dashboard");
+  } catch (e) {
+    console.error(e);
   }
+}
 
-  return data;
+initApp();
+
+// ==============================
+// LAYOUT
+// ==============================
+
+function renderLayout() {
+  document.body.innerHTML = `
+    <div id="app-shell" style="padding-bottom:80px; color:#fff; background:#0b1120; min-height:100vh; font-family:Arial,sans-serif;">
+      <div style="padding:16px 16px 8px 16px;">
+        <div style="font-size:20px; font-weight:700;">Wrap 1654 CRM</div>
+        <div style="font-size:12px; opacity:0.7;">
+          ${escapeHtml(state.user?.first_name || state.user?.username || "User")}
+        </div>
+      </div>
+      <div id="app">
+        <div id="dashboard" class="tab"></div>
+        <div id="orders" class="tab" style="display:none"></div>
+        <div id="inventory" class="tab" style="display:none"></div>
+        <div id="finance" class="tab" style="display:none"></div>
+      </div>
+    </div>
+    <div id="bottom-nav" style="
+      position:fixed; left:0; right:0; bottom:0;
+      display:flex; gap:8px; padding:10px;
+      background:#111827; border-top:1px solid #1f2937;
+    ">
+      <button onclick="showTab('dashboard')" style="flex:1;">Главная</button>
+      <button onclick="showTab('orders')" style="flex:1;">Заказы</button>
+      <button onclick="showTab('inventory')" style="flex:1;">Склад</button>
+      <button onclick="showTab('finance')" style="flex:1;">Финансы</button>
+    </div>
+    <div id="modal"></div>
+  `;
 }
 
 // ==============================
-// LOADERS
+// NAVIGATION
 // ==============================
 
-async function loadAllData() {
-  const results = await Promise.allSettled([
-    loadOrders(),
-    loadClients(),
-    loadInventory(),
-  ]);
+function showTab(tab) {
+  state.currentTab = tab;
 
-  results.forEach((result, index) => {
-    if (result.status === "rejected") {
-      console.error(`LOAD ERROR [${index}]`, result.reason);
-    }
-  });
-
-  renderAll();
-}
-
-async function loadOrders() {
-  const data = await api("get_orders");
-  state.orders = Array.isArray(data) ? data : Array.isArray(data.items) ? data.items : [];
-}
-
-async function loadClients() {
-  const data = await api("get_clients");
-  state.clients = Array.isArray(data) ? data : Array.isArray(data.items) ? data.items : [];
-}
-
-async function loadInventory() {
-  const data = await api("get_inventory");
-  state.inventory = Array.isArray(data) ? data : Array.isArray(data.items) ? data.items : [];
-}
-
-// ==============================
-// EVENTS
-// ==============================
-
-function bindGlobalEvents() {
-  document.querySelectorAll("[data-tab]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      setActiveTab(btn.dataset.tab);
-    });
-  });
-
-  $("#orderSearch")?.addEventListener("input", (e) => {
-    state.orderSearch = String(e.target.value || "").trim().toLowerCase();
-    renderOrders();
-  });
-
-  $("#orderStatusFilter")?.addEventListener("change", (e) => {
-    state.orderStatus = e.target.value || "all";
-    renderOrders();
-  });
-
-  $("#inventorySearch")?.addEventListener("input", (e) => {
-    state.inventorySearch = String(e.target.value || "").trim().toLowerCase();
-    renderInventory();
-  });
-
-  $("#inventoryCategoryFilter")?.addEventListener("change", (e) => {
-    state.inventoryCategory = e.target.value || "all";
-    renderInventory();
-  });
-
-  $("#orderForm")?.addEventListener("submit", handleOrderSubmit);
-  $("#clientForm")?.addEventListener("submit", handleClientSubmit);
-  $("#inventoryForm")?.addEventListener("submit", handleInventorySubmit);
-
-  $("#cancelOrderEdit")?.addEventListener("click", resetOrderForm);
-  $("#cancelClientEdit")?.addEventListener("click", resetClientForm);
-  $("#cancelInventoryEdit")?.addEventListener("click", resetInventoryForm);
-
-  $("#ordersList")?.addEventListener("click", async (e) => {
-    const editBtn = e.target.closest("[data-action='edit-order']");
-    const deleteBtn = e.target.closest("[data-action='delete-order']");
-
-    if (editBtn) return startEditOrder(editBtn.dataset.id);
-    if (deleteBtn) return deleteOrder(deleteBtn.dataset.id);
-  });
-
-  $("#clientsList")?.addEventListener("click", async (e) => {
-    const editBtn = e.target.closest("[data-action='edit-client']");
-    const deleteBtn = e.target.closest("[data-action='delete-client']");
-
-    if (editBtn) return startEditClient(editBtn.dataset.id);
-    if (deleteBtn) return deleteClient(deleteBtn.dataset.id);
-  });
-
-  $("#inventoryList")?.addEventListener("click", async (e) => {
-    const editBtn = e.target.closest("[data-action='edit-inventory']");
-    const deleteBtn = e.target.closest("[data-action='delete-inventory']");
-
-    if (editBtn) return startEditInventory(editBtn.dataset.id);
-    if (deleteBtn) return deleteInventory(deleteBtn.dataset.id);
-  });
-}
-
-function setupTabs() {
-  document.querySelectorAll(".tab-content").forEach((el) => {
+  document.querySelectorAll(".tab").forEach(el => {
     el.style.display = "none";
   });
+
+  const current = document.getElementById(tab);
+  if (current) current.style.display = "block";
+
+  if (tab === "dashboard") loadDashboard();
+  if (tab === "orders") loadOrders();
+  if (tab === "inventory") loadInventory();
+  if (tab === "finance") loadFinance();
 }
 
-function setActiveTab(tab) {
-  state.currentTab = tab || "dashboard";
+// ==============================
+// UI HELPERS
+// ==============================
 
-  document.querySelectorAll("[data-tab]").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.tab === state.currentTab);
-  });
-
-  document.querySelectorAll(".tab-content").forEach((el) => {
-    el.style.display = el.dataset.tabContent === state.currentTab ? "block" : "none";
-  });
+function card(html, extra = "") {
+  return `
+    <div style="
+      background:#111827;
+      border:1px solid #1f2937;
+      border-radius:14px;
+      padding:12px;
+      margin-bottom:10px;
+      ${extra}
+    ">
+      ${html}
+    </div>
+  `;
 }
 
+function btn(text, onclick, extra = "") {
+  return `
+    <button onclick="${onclick}" style="
+      padding:10px 12px;
+      border-radius:10px;
+      border:1px solid #374151;
+      background:#1f2937;
+      color:#fff;
+      cursor:pointer;
+      ${extra}
+    ">${text}</button>
+  `;
+}
+
+// ==============================
+// DASHBOARD
+// ==============================
+
+async function loadDashboard() {
+  const el = document.getElementById("dashboard");
+  el.innerHTML = `<div style="padding:16px;">Загрузка...</div>`;
+
+  try {
+    const data = await api("dashboard");
+
+    const f = data.finance || {};
+    const stats = data.stats || {};
+    el.innerHTML = `
+      <div style="padding:16px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+        <!-- ФИНАНСЫ -->
+        ${card(`
+          <div style="font-weight:700; margin-bottom:8px;">💰 Финансы (месяц)</div>
+          <div>Выручка: ${(f.orders_revenue || 0) + (f.sales_revenue || 0)}</div>
+          <div>Расходы: ${f.expenses_total || 0}</div>
+          <hr style="border-color:#1f2937;">
+          <div><b>Чистая прибыль: ${f.net_profit || 0}</b></div>
+        `)}
+        <!-- СТАТИСТИКА -->
+        ${card(`
+          <div style="font-weight:700; margin-bottom:8px;">📊 Статистика</div>
+          <div>Активных заказов: ${stats.active_count || 0}</div>
+          <div>В работе: ${stats.total_in_work || 0}</div>
+          <div>Долги: ${stats.total_debt || 0}</div>
+        `)}
+        <!-- БЫСТРЫЕ ДЕЙСТВИЯ -->
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+          ${btn("+ Заказ", "openCreateOrder()")}
+          ${btn("+ Клиент", "openCreateClient()")}
+          ${btn("+ Продажа", "openCreateSale()")}
+          ${btn("+ Расход", "openCreateExpense()")}
+        </div>
+        <h3 style="margin:12px 0;">Активные заказы</h3>
+        ${(data.orders || []).length ? (data.orders || []).map(o => `
+          <div onclick="openOrder('${o.id}')" style="cursor:pointer;">
+        <!-- АКТИВНЫЕ ЗАКАЗЫ -->
+        <h3 style="margin:12px 0;">📦 Активные заказы</h3>
+        ${(data.active_orders || []).length ? data.active_orders.map(o => `
+          <div onclick="openOrder('${o.id}')">
+            ${card(`
+              <div style="font-weight:700;">${escapeHtml(o.order_number || "")}</div>
+              <div style="font-size:14px; opacity:0.8;">Статус: ${escapeHtml(o.status || "")}</div>
+              <div style="font-size:14px; opacity:0.8;">Сумма: ${o.total || 0} ${escapeHtml(o.currency || "UAH")}</div>
+              <b>${escapeHtml(o.order_number || "")}</b><br>
+              ${escapeHtml(o.status || "")}<br>
+              ${o.total || 0}
+            `)}
+          </div>
+        `).join("") : card("Нет активных заказов")}
+        <h3 style="margin:12px 0;">Долги</h3>
+        ${(data.debts || []).length ? (data.debts || []).map(d => `
+        <!-- ДОЛГИ -->
+        <h3 style="margin:12px 0;">💸 Долги</h3>
+        ${(data.debts || []).length ? data.debts.map(d => `
+          ${card(`
+            <div style="font-weight:700;">${escapeHtml(d.order_number || "")}</div>
+            <div>Долг: ${d.due || 0} ${escapeHtml(d.currency || "UAH")}</div>
+            <b>${escapeHtml(d.order_number || "")}</b><br>
+            Долг: ${d.due || 0}
+          `)}
+        `).join("") : card("Долгов нет")}
+        `).join("") : card("Нет долгов")}
+        <!-- СКЛАД -->
+        <h3 style="margin:12px 0;">⚠️ Заканчивается</h3>
+        ${(data.low_stock || []).length ? data.low_stock.map(i => `
+          ${card(`
+            <b>${escapeHtml(i.name || "")}</b><br>
+            Остаток: ${i.quantity}
+          `)}
+        `).join("") : card("Склад в норме")}
+      </div>
+    `;
+  } catch (e) {
+    console.error(e);
+    el.innerHTML = `<div style="padding:16px;">Ошибка загрузки Dashboard</div>`;
+    el.innerHTML = `<div style="padding:16px;">Ошибка загрузки</div>`;
+  }
+}
 // ==============================
 // ORDERS
 // ==============================
 
-async function handleOrderSubmit(e) {
-  e.preventDefault();
+async function loadOrders() {
+  const el = document.getElementById("orders");
+  el.innerHTML = `<div style="padding:16px;">Загрузка...</div>`;
 
-  const form = e.currentTarget;
-  const submitBtn = form.querySelector("button[type='submit']");
+  try {
+    const orders = await api("get_orders");
 
-  const clientName = val("#orderClientName");
-  const matchedClient = state.clients.find(
-    (c) => String(c.full_name || "").trim().toLowerCase() === clientName.trim().toLowerCase()
-  );
+    el.innerHTML = `
+      <div style="padding:16px;">
+        <div style="display:flex; gap:8px; margin-bottom:14px;">
+          ${btn("+ Новый заказ", "openCreateOrder()")}
+        </div>
+        ${(orders || []).length ? orders.map(o => `
+          <div onclick="openOrder('${o.id}')" style="cursor:pointer;">
+            ${card(`
+              <div style="font-weight:700;">${escapeHtml(o.order_number || "")}</div>
+              <div>${escapeHtml(o.status || "")}</div>
+              <div>${o.total || 0} ${escapeHtml(o.currency || "UAH")}</div>
+              <div style="font-size:13px; opacity:0.7;">Оплачено: ${o.paid || 0} | Долг: ${o.due || 0}</div>
+            `)}
+          </div>
+        `).join("") : card("Заказов пока нет")}
+      </div>
+    `;
+  } catch (e) {
+    console.error(e);
+    el.innerHTML = `<div style="padding:16px;">Ошибка загрузки заказов</div>`;
+  }
+}
 
-  if (!matchedClient) {
-    safeAlert("Сначала выбери клиента из базы");
+// ==============================
+// ORDER VIEW
+// ==============================
+
+async function openOrder(id) {
+  try {
+    const order = await api("get_order", { id });
+
+    let materialsHtml = `
+      <div style="font-size:13px; opacity:0.7;">Материалов пока нет</div>
+    `;
+
+    if (order.materials && order.materials.length) {
+      materialsHtml = order.materials.map(m => `
+        <div style="border-bottom:1px solid #1f2937; padding:6px 0;">
+          <div><b>${escapeHtml(m.item_name || m.inventory_item_id || "Материал")}</b></div>
+          <div style="font-size:13px; opacity:0.8;">
+            Кол-во: ${m.quantity} | Себестоимость: ${m.total_cost || 0}
+          </div>
+        </div>
+      `).join("");
+    }
+
+    openModal(`
+      <h3 style="margin-top:0;">${escapeHtml(order.order_number || "")}</h3>
+      <p>Статус: ${escapeHtml(order.status || "")}</p>
+      <p>Сумма: ${order.total || 0}</p>
+      <p>Оплачено: ${order.paid || 0}</p>
+      <p>Долг: ${order.due || 0}</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
+        ${btn("+ Оплата", `addPayment('${id}')`)}
+        ${btn("+ Материал", `addMaterial('${id}')`)}
+      </div>
+      <hr style="border-color:#1f2937;">
+      <h4>Материалы</h4>
+      <div style="max-height:220px; overflow:auto;">${materialsHtml}</div>
+    `);
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+// ==============================
+// CREATE ORDER
+// ==============================
+
+function openCreateOrder() {
+  openModal(`
+    <h3 style="margin-top:0;">Новый заказ</h3>
+    <input id="client" placeholder="Client ID" style="width:100%; margin-bottom:10px;">
+    <input id="total" placeholder="Сумма" type="number" style="width:100%; margin-bottom:10px;">
+    ${btn("Создать", "createOrder()")}
+  `);
+}
+
+async function createOrder() {
+  const client_id = document.getElementById("client").value.trim();
+  const total = Number(document.getElementById("total").value);
+
+  if (!client_id) {
+    safeAlert("Укажи client_id");
     return;
   }
 
-  const payload = {
-    client_id: matchedClient.id,
-    type: val("#orderType") || "combined",
-    status: val("#orderStatus") || "new",
-    start_date: val("#orderStartDate") || null,
-    end_date: val("#orderEndDate") || null,
-    total: num("#orderAmount"),
-    currency: val("#orderCurrency") || "UAH",
-    note: val("#orderNote"),
-  };
-
-  toggleButtonLoading(submitBtn, true);
+  if (!total || total <= 0) {
+    safeAlert("Укажи сумму");
+    return;
+  }
 
   try {
-    if (state.editingOrderId) {
-      await api("update_order", { id: state.editingOrderId, ...payload });
-      safeAlert("Заказ обновлён");
-    } else {
-      await api("create_order", payload);
-      safeAlert("Заказ добавлен");
-    }
-
-    resetOrderForm();
-    await loadOrders();
-    renderOrders();
-    renderDashboard();
-    safeHaptic("success");
-  } catch (err) {
-    console.error("ORDER SUBMIT ERROR:", err);
-    safeAlert(err.message || "Ошибка сохранения заказа");
-  } finally {
-    toggleButtonLoading(submitBtn, false);
-  }
-}
-
-function startEditOrder(id) {
-  const item = state.orders.find((x) => String(x.id) === String(id));
-  if (!item) return;
-
-  state.editingOrderId = item.id;
-
-  const client = state.clients.find((c) => String(c.id) === String(item.client_id));
-
-  setVal("#orderClientName", client?.full_name || "");
-  setVal("#orderType", item.type || "combined");
-  setVal("#orderStatus", item.status || "new");
-  setVal("#orderStartDate", normalizeDateForInput(item.start_date));
-  setVal("#orderEndDate", normalizeDateForInput(item.end_date));
-  setVal("#orderAmount", item.total);
-  setVal("#orderCurrency", item.currency || "UAH");
-  setVal("#orderNote", item.note);
-
-  $("#cancelOrderEdit")?.classList.remove("hidden");
-  setText("#orderSubmitText", "Сохранить");
-
-  scrollToElement("#orderFormCard");
-}
-
-async function deleteOrder(id) {
-  const ok = window.confirm("Удалить заказ?");
-  if (!ok) return;
-
-  try {
-    await api("delete_order", { id });
-    state.orders = state.orders.filter((x) => String(x.id) !== String(id));
-    renderOrders();
-    renderDashboard();
-    safeHaptic("success");
-  } catch (err) {
-    console.error("DELETE ORDER ERROR:", err);
-    safeAlert(err.message || "Ошибка удаления заказа");
-  }
-}
-
-function resetOrderForm() {
-  state.editingOrderId = null;
-  $("#orderForm")?.reset();
-  fillDefaultDates();
-  $("#cancelOrderEdit")?.classList.add("hidden");
-  setText("#orderSubmitText", "Добавить");
-}
-
-function getFilteredOrders() {
-  return [...state.orders]
-    .filter((item) => {
-      if (!state.orderSearch) return true;
-
-      const text = [
-        item.order_number,
-        item.type,
-        item.status,
-        item.note,
-      ]
-        .join(" ")
-        .toLowerCase();
-
-      return text.includes(state.orderSearch);
-    })
-    .filter((item) => {
-      if (state.orderStatus === "all") return true;
-      return String(item.status || "").toLowerCase() === state.orderStatus.toLowerCase();
-    })
-    .sort((a, b) => {
-      const da = new Date(a.start_date || 0).getTime();
-      const db = new Date(b.start_date || 0).getTime();
-      return db - da;
+    await api("create_order", {
+      client_id,
+      total
     });
+
+    closeModal();
+    loadOrders();
+    safeAlert("Заказ создан");
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 // ==============================
-// CLIENTS
+// ADD PAYMENT
 // ==============================
 
-async function handleClientSubmit(e) {
-  e.preventDefault();
+async function addPayment(order_id) {
+  const amount = prompt("Сумма");
 
-  const form = e.currentTarget;
-  const submitBtn = form.querySelector("button[type='submit']");
+  if (!amount) return;
 
-  const payload = {
-    full_name: val("#clientName"),
-    phone: val("#clientPhone"),
-    telegram_username: val("#clientTelegram"),
-    instagram: val("#clientInstagram"),
-    source: val("#clientSource"),
-    note: val("#clientNote"),
-  };
+  try {
+    await api("add_payment", {
+      order_id,
+      amount: Number(amount)
+    });
 
-  if (!payload.full_name) {
-    safeAlert("Введите имя клиента");
+    safeAlert("Оплата добавлена");
+    openOrder(order_id);
+    loadOrders();
+    loadDashboard();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+// ==============================
+// MATERIALS IN ORDER UI
+// ==============================
+
+async function addMaterial(order_id) {
+  try {
+    const items = await api("get_inventory");
+
+    openModal(`
+      <h3 style="margin-top:0;">Добавить материал в заказ</h3>
+      <input
+        id="material-search"
+        placeholder="Поиск товара"
+        oninput="filterMaterialList()"
+        style="width:100%; margin-bottom:10px;"
+      >
+      <input type="hidden" id="selected_item_id">
+      <div id="selected_item_name" style="margin-bottom:10px; color:#9ca3af;">
+        Товар не выбран
+      </div>
+      <input
+        id="material_qty"
+        placeholder="Количество"
+        type="number"
+        step="0.1"
+        style="width:100%; margin-bottom:10px;"
+      >
+      <div id="material-list" style="
+        max-height:240px;
+        overflow:auto;
+        border:1px solid #1f2937;
+        padding:6px;
+        border-radius:10px;
+      ">
+        ${(items || []).map(i => `
+          <div
+            class="material-row"
+            data-name="${escapeHtml((i.name || "").toLowerCase())}"
+            onclick="selectMaterial('${i.id}', \`${escapeHtml(i.name || "")}\`)"
+            style="
+              padding:8px;
+              border-bottom:1px solid #1f2937;
+              cursor:pointer;
+              border-radius:8px;
+            "
+          >
+            <b>${escapeHtml(i.name || "")}</b><br>
+            <span style="font-size:13px; opacity:0.8;">
+              Остаток: ${i.quantity} | Резерв: ${i.reserved_quantity} | Доступно: ${i.available_quantity}
+            </span>
+          </div>
+        `).join("")}
+      </div>
+      <br>
+      ${btn("Списать в заказ", `submitMaterialToOrder('${order_id}')`)}
+    `);
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function selectMaterial(id, name) {
+  const hidden = document.getElementById("selected_item_id");
+  const label = document.getElementById("selected_item_name");
+  if (hidden) hidden.value = id;
+  if (label) label.innerHTML = `Выбрано: <b>${name}</b>`;
+}
+
+function filterMaterialList() {
+  const input = document.getElementById("material-search");
+  const q = (input?.value || "").trim().toLowerCase();
+
+  document.querySelectorAll(".material-row").forEach(row => {
+    const name = row.dataset.name || "";
+    row.style.display = name.includes(q) ? "block" : "none";
+  });
+}
+
+async function submitMaterialToOrder(order_id) {
+  const item_id = document.getElementById("selected_item_id")?.value;
+  const qty = Number(document.getElementById("material_qty")?.value);
+
+  if (!item_id) {
+    safeAlert("Сначала выбери товар");
     return;
   }
 
-  toggleButtonLoading(submitBtn, true);
+  if (!qty || qty <= 0) {
+    safeAlert("Укажи корректное количество");
+    return;
+  }
 
   try {
-    if (state.editingClientId) {
-      await api("update_client", {
-        id: state.editingClientId,
-        ...payload,
-      });
-      safeAlert("Клиент обновлён");
-    } else {
-      await api("create_client", payload);
-      safeAlert("Клиент добавлен");
-    }
+    // если у тебя в smart-handler action называется иначе,
+    // поменяй на writeoff_reserved_inventory
+    await api("writeoff_inventory", {
+      order_id,
+      item_id,
+      quantity: qty
+    });
 
-    resetClientForm();
-    await loadClients();
-    renderClients();
-    renderDashboard();
-    fillClientsDatalist();
-    safeHaptic("success");
-  } catch (err) {
-    console.error("CLIENT SUBMIT ERROR:", err);
-    safeAlert(err.message || "Ошибка сохранения клиента");
-  } finally {
-    toggleButtonLoading(submitBtn, false);
+    safeAlert("Материал списан");
+    closeModal();
+    openOrder(order_id);
+    loadInventory();
+    loadOrders();
+  } catch (e) {
+    console.error(e);
   }
-}
-
-function startEditClient(id) {
-  const item = state.clients.find((x) => String(x.id) === String(id));
-  if (!item) return;
-
-  state.editingClientId = item.id;
-
-  setVal("#clientName", item.full_name);
-  setVal("#clientPhone", item.phone);
-  setVal("#clientTelegram", item.telegram_username);
-  setVal("#clientInstagram", item.instagram);
-  setVal("#clientSource", item.source);
-  setVal("#clientNote", item.note);
-
-  $("#cancelClientEdit")?.classList.remove("hidden");
-  setText("#clientSubmitText", "Сохранить");
-
-  scrollToElement("#clientFormCard");
-}
-
-async function deleteClient(id) {
-  const ok = window.confirm("Удалить клиента?");
-  if (!ok) return;
-
-  try {
-    await api("delete_client", { id });
-    state.clients = state.clients.filter((x) => String(x.id) !== String(id));
-    renderClients();
-    renderDashboard();
-    fillClientsDatalist();
-    safeHaptic("success");
-  } catch (err) {
-    console.error("DELETE CLIENT ERROR:", err);
-    safeAlert(err.message || "Ошибка удаления клиента");
-  }
-}
-
-function resetClientForm() {
-  state.editingClientId = null;
-  $("#clientForm")?.reset();
-  $("#cancelClientEdit")?.classList.add("hidden");
-  setText("#clientSubmitText", "Добавить");
 }
 
 // ==============================
 // INVENTORY
 // ==============================
 
-async function handleInventorySubmit(e) {
-  e.preventDefault();
+async function loadInventory() {
+  const el = document.getElementById("inventory");
+  el.innerHTML = `<div style="padding:16px;">Загрузка...</div>`;
 
-  const form = e.currentTarget;
-  const submitBtn = form.querySelector("button[type='submit']");
+  try {
+    const items = await api("get_inventory");
 
+    el.innerHTML = `
+      <div style="padding:16px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+          ${btn("+ Приход", "openAddStock()")}
+          ${btn("+ Товар", "openCreateInventoryItem()")}
+        </div>
+        ${(items || []).length ? items.map(i => `
+          <div onclick="openItem('${i.id}')" style="cursor:pointer;">
+            ${card(`
+              <div style="font-weight:700;">${escapeHtml(i.name || "")}</div>
+              <div style="font-size:13px; opacity:0.85;">Остаток: ${i.quantity}</div>
+              <div style="font-size:13px; opacity:0.85;">Резерв: ${i.reserved_quantity}</div>
+              <div style="font-size:13px; opacity:0.85;">Доступно: ${i.available_quantity}</div>
+            `)}
+          </div>
+        `).join("") : card("Склад пуст")}
+      </div>
+    `;
+  } catch (e) {
+    console.error(e);
+    el.innerHTML = `<div style="padding:16px;">Ошибка загрузки склада</div>`;
+  }
+}
+
+// ==============================
+// INVENTORY ITEM
+// ==============================
+
+async function openItem(id) {
+  try {
+    const item = await api("get_inventory_item", { id });
+    const movements = await api("get_inventory_movements", { item_id: id });
+
+    openModal(`
+      <h3 style="margin-top:0;">${escapeHtml(item.name || "")}</h3>
+      <p>Остаток: ${item.quantity}</p>
+      <p>Резерв: ${item.reserved_quantity}</p>
+      <p>Доступно: ${item.available_quantity}</p>
+      <p>Вход: ${item.purchase_price || 0}</p>
+      <p>Розница: ${item.retail_price || 0}</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
+        ${btn("🔒 Резерв", `reserveItem('${id}')`)}
+        ${btn("🔓 Снять резерв", `unreserveItem('${id}')`)}
+        ${btn("⚙️ Корректировка", `adjustItem('${id}')`)}
+      </div>
+      <hr style="border-color:#1f2937;">
+      <h4>История</h4>
+      <div style="max-height:220px; overflow:auto;">
+        ${(movements || []).length ? movements.map(m => `
+          <div style="border-bottom:1px solid #1f2937; padding:6px 0;">
+            <div><b>${escapeHtml(m.movement_type || "")}</b> — ${m.quantity}</div>
+            <div style="font-size:12px; opacity:0.75;">
+              ${escapeHtml(m.comment || "")}
+            </div>
+          </div>
+        `).join("") : `<div style="opacity:0.7;">Движений пока нет</div>`}
+      </div>
+    `);
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+// ==============================
+// CREATE INVENTORY ITEM
+// ==============================
+
+function openCreateInventoryItem() {
+  openModal(`
+    <h3 style="margin-top:0;">Новый товар</h3>
+    <input id="inv_category" placeholder="Категория (vinyl / ppf / tint / consumables)" style="width:100%; margin-bottom:8px;">
+    <input id="inv_brand" placeholder="Бренд" style="width:100%; margin-bottom:8px;">
+    <input id="inv_name" placeholder="Название" style="width:100%; margin-bottom:8px;">
+    <input id="inv_width" placeholder="Ширина, см" type="number" style="width:100%; margin-bottom:8px;">
+    <input id="inv_unit" placeholder="Ед. изм. (m / pcs / roll / l / set)" style="width:100%; margin-bottom:8px;">
+    <input id="inv_quantity" placeholder="Количество" type="number" step="0.1" style="width:100%; margin-bottom:8px;">
+    <input id="inv_purchase" placeholder="Входная цена" type="number" step="0.01" style="width:100%; margin-bottom:8px;">
+    <input id="inv_retail" placeholder="Розничная цена" type="number" step="0.01" style="width:100%; margin-bottom:8px;">
+    <input id="inv_currency" placeholder="Валюта (UAH / USD)" style="width:100%; margin-bottom:8px;">
+    <input id="inv_min" placeholder="Мин. остаток" type="number" step="0.1" style="width:100%; margin-bottom:8px;">
+    ${btn("Создать", "createInventoryItem()")}
+  `);
+}
+
+async function createInventoryItem() {
   const payload = {
-    category: val("#inventoryCategory") || "other",
-    brand: val("#inventoryBrand"),
-    name: val("#inventoryName"),
-    sku: val("#inventorySku"),
-    color: val("#inventoryColor"),
-    width_cm: num("#inventoryWidthCm"),
-    quantity: num("#inventoryQuantity"),
-    unit: val("#inventoryUnit") || "m",
-    purchase_price: num("#inventoryPurchasePrice"),
-    retail_price: num("#inventoryRetailPrice"),
-    currency: val("#inventoryCurrency") || "UAH",
-    supplier: val("#inventorySupplier"),
-    min_quantity: num("#inventoryMinQuantity"),
-    note: val("#inventoryNote"),
+    category: document.getElementById("inv_category").value.trim(),
+    brand: document.getElementById("inv_brand").value.trim(),
+    name: document.getElementById("inv_name").value.trim(),
+    width_cm: Number(document.getElementById("inv_width").value) || null,
+    unit: document.getElementById("inv_unit").value.trim() || "m",
+    quantity: Number(document.getElementById("inv_quantity").value) || 0,
+    purchase_price: Number(document.getElementById("inv_purchase").value) || 0,
+    retail_price: Number(document.getElementById("inv_retail").value) || 0,
+    currency: document.getElementById("inv_currency").value.trim() || "UAH",
+    min_quantity: Number(document.getElementById("inv_min").value) || 0
   };
 
-  if (!payload.name) {
-    safeAlert("Введите название товара");
+  if (!payload.category || !payload.name) {
+    safeAlert("Заполни категорию и название");
     return;
   }
-
-  toggleButtonLoading(submitBtn, true);
 
   try {
-    if (state.editingInventoryId) {
-      await api("update_inventory_item", {
-        id: state.editingInventoryId,
-        ...payload,
-      });
-      safeAlert("Товар обновлён");
-    } else {
-      await api("create_inventory_item", payload);
-      safeAlert("Товар добавлен");
-    }
-
-    resetInventoryForm();
-    await loadInventory();
-    renderInventory();
-    renderDashboard();
-    safeHaptic("success");
-  } catch (err) {
-    console.error("INVENTORY SUBMIT ERROR:", err);
-    safeAlert(err.message || "Ошибка сохранения товара");
-  } finally {
-    toggleButtonLoading(submitBtn, false);
-  }
-}
-
-function startEditInventory(id) {
-  const item = state.inventory.find((x) => String(x.id) === String(id));
-  if (!item) return;
-
-  state.editingInventoryId = item.id;
-
-  setVal("#inventoryCategory", item.category || "other");
-  setVal("#inventoryBrand", item.brand);
-  setVal("#inventoryName", item.name);
-  setVal("#inventorySku", item.sku);
-  setVal("#inventoryColor", item.color);
-  setVal("#inventoryWidthCm", item.width_cm);
-  setVal("#inventoryQuantity", item.quantity);
-  setVal("#inventoryUnit", item.unit || "m");
-  setVal("#inventoryPurchasePrice", item.purchase_price);
-  setVal("#inventoryRetailPrice", item.retail_price);
-  setVal("#inventoryCurrency", item.currency || "UAH");
-  setVal("#inventorySupplier", item.supplier);
-  setVal("#inventoryMinQuantity", item.min_quantity);
-  setVal("#inventoryNote", item.note);
-
-  $("#cancelInventoryEdit")?.classList.remove("hidden");
-  setText("#inventorySubmitText", "Сохранить");
-
-  scrollToElement("#inventoryFormCard");
-}
-
-async function deleteInventory(id) {
-  const ok = window.confirm("Удалить товар?");
-  if (!ok) return;
-
-  try {
-    await api("delete_inventory", { id });
-    state.inventory = state.inventory.filter((x) => String(x.id) !== String(id));
-    renderInventory();
-    renderDashboard();
-    safeHaptic("success");
-  } catch (err) {
-    console.error("DELETE INVENTORY ERROR:", err);
-    safeAlert(err.message || "Ошибка удаления товара");
-  }
-}
-
-function resetInventoryForm() {
-  state.editingInventoryId = null;
-  $("#inventoryForm")?.reset();
-  setVal("#inventoryCurrency", "UAH");
-  setVal("#inventoryUnit", "m");
-  $("#cancelInventoryEdit")?.classList.add("hidden");
-  setText("#inventorySubmitText", "Добавить");
-}
-
-function getFilteredInventory() {
-  return [...state.inventory]
-    .filter((item) => {
-      if (!state.inventorySearch) return true;
-
-      const text = [
-        item.brand,
-        item.name,
-        item.category,
-        item.note,
-        item.sku,
-        item.color,
-        item.supplier,
-      ]
-        .join(" ")
-        .toLowerCase();
-
-      return text.includes(state.inventorySearch);
-    })
-    .filter((item) => {
-      if (state.inventoryCategory === "all") return true;
-      return String(item.category || "").toLowerCase() === state.inventoryCategory.toLowerCase();
-    })
-    .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ru"));
-}
-
-// ==============================
-// RENDER
-// ==============================
-
-function renderAll() {
-  fillClientsDatalist();
-  renderUserInfo();
-  renderDashboard();
-  renderOrders();
-  renderClients();
-  renderInventory();
-}
-
-function renderUserInfo() {
-  const el = $("#userInfo");
-  if (!el) return;
-
-  const user = state.user || {};
-  const name = user.first_name || user.username || "Пользователь";
-  el.textContent = `👋 ${name}`;
-}
-
-function renderDashboard() {
-  setText("#statTotalOrders", String(state.orders.length));
-
-  const activeOrders = state.orders.filter((x) => {
-    const s = String(x.status || "").toLowerCase();
-    return !["done", "completed", "closed", "cancelled"].includes(s);
-  }).length;
-
-  setText("#statActiveOrders", String(activeOrders));
-  setText("#statTotalClients", String(state.clients.length));
-  setText("#statInventoryItems", String(state.inventory.length));
-
-  const recentBox = $("#recentOrders");
-  if (!recentBox) return;
-
-  const recent = [...state.orders]
-    .sort((a, b) => new Date(b.start_date || 0).getTime() - new Date(a.start_date || 0).getTime())
-    .slice(0, 5);
-
-  if (!recent.length) {
-    recentBox.innerHTML = `<div class="empty-state">Пока нет заказов</div>`;
-    return;
-  }
-
-  recentBox.innerHTML = recent
-    .map((item) => `
-      <div class="list-row">
-        <div class="list-row-main">
-          <div class="list-row-title">${escapeHtml(item.order_number || "Без номера")}</div>
-          <div class="list-row-sub">${escapeHtml(item.type || "-")} · ${formatMoney(item.total, item.currency)}</div>
-        </div>
-        <div class="list-row-side">
-          <div class="badge-status status-${safeStatusClass(item.status)}">${escapeHtml(item.status || "new")}</div>
-          <div class="list-row-date">${formatDate(item.start_date)}</div>
-        </div>
-      </div>
-    `)
-    .join("");
-}
-
-function renderOrders() {
-  const box = $("#ordersList");
-  if (!box) return;
-
-  const items = getFilteredOrders();
-
-  if (!items.length) {
-    box.innerHTML = `<div class="empty-state">Заказов не найдено</div>`;
-    return;
-  }
-
-  box.innerHTML = items
-    .map((item) => `
-      <div class="item-card">
-        <div class="item-head">
-          <div>
-            <div class="item-title">${escapeHtml(item.order_number || "Без номера")}</div>
-            <div class="item-subtitle">${escapeHtml(item.type || "-")}</div>
-          </div>
-          <div class="badge-status status-${safeStatusClass(item.status)}">${escapeHtml(item.status || "new")}</div>
-        </div>
-
-        <div class="item-body">
-          <div class="item-line"><b>Сумма:</b> ${formatMoney(item.total, item.currency)}</div>
-          <div class="item-line"><b>Оплачено:</b> ${formatMoney(item.paid, item.currency)}</div>
-          <div class="item-line"><b>Долг:</b> ${formatMoney(item.due, item.currency)}</div>
-          <div class="item-line"><b>Начало:</b> ${formatDate(item.start_date)}</div>
-          <div class="item-line"><b>Конец:</b> ${formatDate(item.end_date)}</div>
-          ${item.note ? `<div class="item-line"><b>Комментарий:</b> ${escapeHtml(item.note)}</div>` : ""}
-        </div>
-
-        <div class="item-actions">
-          <button class="action-btn edit-btn" data-action="edit-order" data-id="${escapeHtml(item.id)}">Редактировать</button>
-          <button class="action-btn delete-btn" data-action="delete-order" data-id="${escapeHtml(item.id)}">Удалить</button>
-        </div>
-      </div>
-    `)
-    .join("");
-}
-
-function renderClients() {
-  const box = $("#clientsList");
-  if (!box) return;
-
-  const items = [...state.clients].sort((a, b) =>
-    String(a.full_name || "").localeCompare(String(b.full_name || ""), "ru")
-  );
-
-  if (!items.length) {
-    box.innerHTML = `<div class="empty-state">Клиентов пока нет</div>`;
-    return;
-  }
-
-  box.innerHTML = items
-    .map((item) => `
-      <div class="item-card">
-        <div class="item-head">
-          <div>
-            <div class="item-title">${escapeHtml(item.full_name || "-")}</div>
-            <div class="item-subtitle">${escapeHtml(item.phone || "Без телефона")}</div>
-          </div>
-        </div>
-
-        <div class="item-body">
-          ${item.telegram_username ? `<div class="item-line"><b>Telegram:</b> ${escapeHtml(item.telegram_username)}</div>` : ""}
-          ${item.instagram ? `<div class="item-line"><b>Instagram:</b> ${escapeHtml(item.instagram)}</div>` : ""}
-          ${item.source ? `<div class="item-line"><b>Источник:</b> ${escapeHtml(item.source)}</div>` : ""}
-          ${item.note ? `<div class="item-line"><b>Заметка:</b> ${escapeHtml(item.note)}</div>` : ""}
-        </div>
-
-        <div class="item-actions">
-          <button class="action-btn edit-btn" data-action="edit-client" data-id="${escapeHtml(item.id)}">Редактировать</button>
-          <button class="action-btn delete-btn" data-action="delete-client" data-id="${escapeHtml(item.id)}">Удалить</button>
-        </div>
-      </div>
-    `)
-    .join("");
-}
-
-function renderInventory() {
-  const box = $("#inventoryList");
-  if (!box) return;
-
-  box.style.maxHeight = "70vh";
-  box.style.overflowY = "auto";
-  box.style.webkitOverflowScrolling = "touch";
-
-  const items = getFilteredInventory();
-
-  if (!items.length) {
-    box.innerHTML = `<div class="empty-state">Товаров не найдено</div>`;
-    return;
-  }
-
-  box.innerHTML = items
-    .map((item) => `
-      <div class="item-card">
-        <div class="item-head">
-          <div>
-            <div class="item-title">${escapeHtml(item.name || "-")}</div>
-            <div class="item-subtitle">${escapeHtml(item.brand || "-")}${item.sku ? " · " + escapeHtml(item.sku) : ""}</div>
-          </div>
-          <div class="badge-status">${escapeHtml(item.category || "other")}</div>
-        </div>
-
-        <div class="item-body">
-          <div class="item-line"><b>Количество:</b> ${escapeHtml(item.quantity ?? 0)} ${escapeHtml(item.unit || "")}</div>
-          <div class="item-line"><b>Вход:</b> ${formatMoney(item.purchase_price, item.currency)}</div>
-          <div class="item-line"><b>Розница:</b> ${formatMoney(item.retail_price, item.currency)}</div>
-          ${item.color ? `<div class="item-line"><b>Цвет:</b> ${escapeHtml(item.color)}</div>` : ""}
-          ${item.width_cm ? `<div class="item-line"><b>Ширина:</b> ${escapeHtml(item.width_cm)} см</div>` : ""}
-          ${item.supplier ? `<div class="item-line"><b>Поставщик:</b> ${escapeHtml(item.supplier)}</div>` : ""}
-          ${item.note ? `<div class="item-line"><b>Комментарий:</b> ${escapeHtml(item.note)}</div>` : ""}
-        </div>
-
-        <div class="item-actions">
-          <button class="action-btn edit-btn" data-action="edit-inventory" data-id="${escapeHtml(item.id)}">Редактировать</button>
-          <button class="action-btn delete-btn" data-action="delete-inventory" data-id="${escapeHtml(item.id)}">Удалить</button>
-        </div>
-      </div>
-    `)
-    .join("");
-}
-
-function fillClientsDatalist() {
-  const list = $("#clientsDatalist");
-  if (!list) return;
-
-  list.innerHTML = state.clients
-    .map((c) => `<option value="${escapeHtml(c.full_name || "")}"></option>`)
-    .join("");
-}
-
-// ==============================
-// HELPERS
-// ==============================
-
-function $(selector) {
-  return document.querySelector(selector);
-}
-
-function setText(selector, text) {
-  const el = $(selector);
-  if (el) el.textContent = text;
-}
-
-function val(selector) {
-  const el = $(selector);
-  return el ? String(el.value || "").trim() : "";
-}
-
-function setVal(selector, value) {
-  const el = $(selector);
-  if (el) el.value = value ?? "";
-}
-
-function num(selector) {
-  const raw = val(selector).replace(",", ".");
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function formatMoney(value, currency = "UAH") {
-  const n = Number(value || 0);
-  const formatted = Number.isFinite(n)
-    ? n.toLocaleString("ru-RU", { maximumFractionDigits: 2 })
-    : "0";
-
-  return currency === "USD" ? `$${formatted}` : `${formatted} грн`;
-}
-
-function formatDate(dateStr) {
-  if (!dateStr) return "-";
-
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) {
-    return escapeHtml(String(dateStr));
-  }
-
-  return date.toLocaleDateString("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-}
-
-function normalizeDateForInput(value) {
-  if (!value) return "";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "";
-
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-function fillDefaultDates() {
-  const start = $("#orderStartDate");
-  if (start && !start.value) {
-    start.value = normalizeDateForInput(new Date());
-  }
-}
-
-function showGlobalLoader(show) {
-  const el = $("#globalLoader");
-  if (!el) return;
-  el.style.display = show ? "flex" : "none";
-}
-
-function toggleButtonLoading(btn, loading) {
-  if (!btn) return;
-  btn.disabled = !!loading;
-
-  if (!btn.dataset.prevText) {
-    btn.dataset.prevText = btn.textContent || "";
-  }
-
-  btn.textContent = loading ? "Сохраняю..." : btn.dataset.prevText;
-}
-
-function safeAlert(text) {
-  try {
-    if (tg?.showAlert) tg.showAlert(String(text));
-    else alert(String(text));
-  } catch (err) {
-    alert(String(text));
-  }
-}
-
-function safeHaptic(type = "light") {
-  try {
-    if (!tg?.HapticFeedback) return;
-
-    if (type === "success") {
-      tg.HapticFeedback.notificationOccurred("success");
-      return;
-    }
-
-    if (type === "error") {
-      tg.HapticFeedback.notificationOccurred("error");
-      return;
-    }
-
-    tg.HapticFeedback.impactOccurred("light");
+    await api("create_inventory_item", payload);
+    closeModal();
+    loadInventory();
+    safeAlert("Товар создан");
   } catch (e) {
-    console.warn("HAPTIC ERROR:", e);
+    console.error(e);
   }
 }
 
-function scrollToElement(selector) {
-  const el = $(selector);
-  if (!el) return;
-  el.scrollIntoView({ behavior: "smooth", block: "start" });
+// ==============================
+// ADD STOCK
+// ==============================
+
+function openAddStock() {
+  openModal(`
+    <h3 style="margin-top:0;">Приход</h3>
+    <input id="item_id" placeholder="ID товара" style="width:100%; margin-bottom:10px;">
+    <input id="qty" placeholder="Количество" type="number" step="0.1" style="width:100%; margin-bottom:10px;">
+    <input id="purchase_price" placeholder="Входная цена" type="number" step="0.01" style="width:100%; margin-bottom:10px;">
+    ${btn("Добавить", "addStock()")}
+  `);
 }
 
-function escapeHtml(str = "") {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+async function addStock() {
+  const item_id = document.getElementById("item_id").value.trim();
+  const qty = Number(document.getElementById("qty").value);
+  const purchase_price = Number(document.getElementById("purchase_price").value) || 0;
+
+  if (!item_id) {
+    safeAlert("Укажи ID товара");
+    return;
+  }
+
+  if (!qty || qty <= 0) {
+    safeAlert("Укажи количество");
+    return;
+  }
+
+  try {
+    await api("add_stock", {
+      item_id,
+      quantity: qty,
+      purchase_price
+    });
+
+    closeModal();
+    loadInventory();
+    safeAlert("Приход добавлен");
+  } catch (e) {
+    console.error(e);
+  }
 }
 
-function safeStatusClass(status = "") {
-  const s = String(status || "").trim().toLowerCase();
+// ==============================
+// RESERVE / UNRESERVE / ADJUST
+// ==============================
 
-  if (["new", "новый"].includes(s)) return "new";
-  if (["in_progress", "progress", "work", "в работе"].includes(s)) return "in-progress";
-  if (["done", "completed", "finish", "готово"].includes(s)) return "done";
-  if (["cancelled", "canceled", "отмена"].includes(s)) return "cancelled";
-  if (["closed"].includes(s)) return "done";
+async function reserveItem(id) {
+  const qty = prompt("Сколько зарезервировать?");
+  if (!qty) return;
 
-  return s.replace(/[^a-z0-9-_]/g, "") || "default";
+  try {
+    await api("reserve_inventory", {
+      item_id: id,
+      quantity: Number(qty),
+      comment: "Резерв из приложения"
+    });
+
+    safeAlert("Зарезервировано");
+    openItem(id);
+    loadInventory();
+  } catch (e) {
+    console.error(e);
+  }
 }
+
+async function unreserveItem(id) {
+  const qty = prompt("Сколько снять с резерва?");
+  if (!qty) return;
+
+  try {
+    await api("unreserve_inventory", {
+      item_id: id,
+      quantity: Number(qty),
+      comment: "Снятие резерва"
+    });
+
+    safeAlert("Резерв снят");
+    openItem(id);
+    loadInventory();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function adjustItem(id) {
+  const qty = prompt("Изменение (+ или -)");
+  if (!qty) return;
+
+  try {
+    await api("adjust_inventory", {
+      item_id: id,
+      quantity_delta: Number(qty),
+      comment: "Корректировка"
+    });
+
+    safeAlert("Обновлено");
+    openItem(id);
+    loadInventory();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+// ==============================
+// SALES (заготовка)
+// ==============================
+
+function openCreateSale() {
+  openModal(`
+    <h3 style="margin-top:0;">Новая продажа</h3>
+    <input id="sale_client_id" placeholder="Client ID" style="width:100%; margin-bottom:10px;">
+    <input id="sale_comment" placeholder="Комментарий" style="width:100%; margin-bottom:10px;">
+    ${btn("Создать продажу", "createSale()")}
+  `);
+}
+
+async function createSale() {
+  const client_id = document.getElementById("sale_client_id").value.trim();
+  const comment = document.getElementById("sale_comment").value.trim();
+
+  try {
+    const sale = await api("create_sale", {
+      client_id: client_id || null,
+      comment,
+      currency: "UAH"
+    });
+
+    closeModal();
+    safeAlert(`Продажа создана: ${sale.sale_number || sale.id}`);
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+// ==============================
+// CLIENTS (заглушка)
+// ==============================
+
+function openCreateClient() {
+  safeAlert("Экран клиентов добавим следующим шагом");
+}
+
+// ==============================
+// MODAL
+// ==============================
+
+function openModal(html) {
+  document.getElementById("modal").innerHTML = `
+    <div style="
+      position:fixed; inset:0; background:rgba(0,0,0,0.7);
+      display:flex; align-items:flex-end; justify-content:center;
+      z-index:9999;
+    ">
+      <div style="
+        width:100%; max-width:700px; max-height:85vh; overflow:auto;
+        background:#0f172a; color:#fff; padding:16px;
+        border-top-left-radius:18px; border-top-right-radius:18px;
+        border:1px solid #1f2937;
+      ">
+        ${html}
+        <br><br>
+        ${btn("Закрыть", "closeModal()")}
+      </div>
+    </div>
+  `;
+}
+
+// ==============================
+// FINANCE
+// ==============================
+
+async function loadFinance() {
+  const el = document.getElementById("finance");
+  el.innerHTML = `<div style="padding:16px;">Загрузка...</div>`;
+
+  try {
+    const summary = await api("get_finance_summary");
+    const expenses = await api("get_expenses");
+
+    el.innerHTML = `
+      <div style="padding:16px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+          ${btn("+ Расход", "openCreateExpense()")}
+        </div>
+        ${card(`
+          <div style="font-weight:700; margin-bottom:8px;">Сводка за месяц</div>
+          <div>Выручка по заказам: ${summary.orders_revenue || 0}</div>
+          <div>Прибыль по заказам: ${summary.orders_profit || 0}</div>
+          <div>Выручка со склада: ${summary.sales_revenue || 0}</div>
+          <div>Прибыль со склада: ${summary.sales_profit || 0}</div>
+          <div>Расходы: ${summary.expenses_total || 0}</div>
+          <hr style="border-color:#1f2937;">
+          <div><b>Валовая прибыль: ${summary.gross_profit || 0}</b></div>
+          <div><b>Чистая прибыль: ${summary.net_profit || 0}</b></div>
+        `)}
+        <h3 style="margin:12px 0;">Расходы</h3>
+        ${(expenses || []).length ? expenses.map(x => `
+          ${card(`
+            <div style="font-weight:700;">${escapeHtml(x.category || "")}</div>
+            <div>${x.amount || 0} ${escapeHtml(x.currency || "UAH")}</div>
+            <div style="font-size:12px; opacity:0.7;">${escapeHtml(x.note || "")}</div>
+          `)}
+        `).join("") : card("Расходов пока нет")}
+      </div>
+    `;
+  } catch (e) {
+    console.error(e);
+    el.innerHTML = `<div style="padding:16px;">Ошибка загрузки финансов</div>`;
+  }
+}
+function openCreateExpense() {
+  openModal(`
+    <h3 style="margin-top:0;">Новый расход</h3>
+    <input id="exp_category" placeholder="Категория (rent / utilities / ads / salary / other)" style="width:100%; margin-bottom:10px;">
+    <input id="exp_amount" placeholder="Сумма" type="number" step="0.01" style="width:100%; margin-bottom:10px;">
+    <input id="exp_currency" placeholder="Валюта (UAH / USD)" style="width:100%; margin-bottom:10px;">
+    <input id="exp_supplier" placeholder="Поставщик" style="width:100%; margin-bottom:10px;">
+    <input id="exp_note" placeholder="Комментарий" style="width:100%; margin-bottom:10px;">
+    ${btn("Сохранить", "createExpense()")}
+  `);
+}
+
+async function createExpense() {
+  const category = document.getElementById("exp_category").value.trim();
+  const amount = Number(document.getElementById("exp_amount").value);
+  const currency = document.getElementById("exp_currency").value.trim() || "UAH";
+  const supplier = document.getElementById("exp_supplier").value.trim();
+  const note = document.getElementById("exp_note").value.trim();
+
+  if (!category) {
+    safeAlert("Укажи категорию");
+    return;
+  }
+
+  if (!amount || amount <= 0) {
+    safeAlert("Укажи сумму");
+    return;
+  }
+
+  try {
+    await api("create_expense", {
+      category,
+      amount,
+      currency,
+      supplier,
+      note
+    });
+
+    closeModal();
+    loadFinance();
+    safeAlert("Расход добавлен");
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function closeModal() {
+  document.getElementById("modal").innerHTML = "";
+}
+0 commit comments
+Comments
+0
+ (0)
+Comment
+You're not receiving notifications from this thread.
+
+Copied!
