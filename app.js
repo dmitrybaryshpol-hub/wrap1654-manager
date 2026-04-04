@@ -3,42 +3,65 @@ const tg = window.Telegram?.WebApp || null;
 const API_URL = "https://hbciwqgfccdfnzrhiops.supabase.co/functions/v1/smart-handler";
 async function initApp() {
   try {
+    // ❗ БЛОКИРОВКА ВНЕ TELEGRAM
     if (!tg || !tg.initData) {
-      document.body.innerHTML = "Открой через Telegram";
+      document.body.innerHTML = `
+        <div style="
+          min-height:100vh;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          background:#0b1120;
+          color:#fff;
+          font-family:Arial,sans-serif;
+          padding:24px;
+          text-align:center;
+        ">
+          <div>
+            <h2>Доступ только через Telegram</h2>
+            <p>Открой приложение из бота Wrap 1654 Manager</p>
+          </div>
+        </div>
+      `;
       return;
     }
+
+    tg.expand();
+    tg.ready();
+    tg.setHeaderColor("#0f172a");
+    tg.setBackgroundColor("#0b1120");
 
     const auth = await api("auth");
 
     if (!auth?.user) {
-      throw new Error("No user");
+      throw new Error("Unauthorized");
     }
 
-    state.user = auth.user;
+   
+   catch (e) {
+    console.error("INIT ERROR:", e);
 
-    renderLayout();
-    showTab("dashboard");
-
-  } catch (e) {
     document.body.innerHTML = `
       <div style="
-        height:100vh;
+        min-height:100vh;
         display:flex;
         align-items:center;
         justify-content:center;
         background:#0b1120;
         color:#fff;
+        font-family:Arial,sans-serif;
+        padding:24px;
+        text-align:center;
       ">
-        Ошибка авторизации
+        <div>
+          <h2>Ошибка авторизации</h2>
+          <p>У вас нет доступа</p>
+        </div>
       </div>
     `;
   }
-}
-    const auth = await api("auth");
-    state.user = auth.user;
+}    
 
-    renderLayout();
-    showTab("dashboard");
   } catch (e) {
     console.error(e);
     document.body.innerHTML = `
@@ -61,12 +84,9 @@ async function initApp() {
     `;
   }
 }
-    const auth = await api("auth");
-    state.user = auth.user;
-
-    renderLayout();
-    showTab("dashboard");
-  } catch (e) {
+  
+   
+ catch (e) {
     console.error(e);
     document.body.innerHTML = `
       <div style="
@@ -216,23 +236,6 @@ function renderLayout() {
 
     <div id="modal"></div>
   `;
-}
-
-async function initApp() {
-  try {
-    const auth = await api("auth");
-    state.user = auth.user;
-
-    renderLayout();
-    showTab("dashboard");
-  } catch (e) {
-    console.error(e);
-    document.body.innerHTML = `
-      <div style="padding:24px; color:#fff; background:#0b1120; min-height:100vh; font-family:Arial,sans-serif;">
-        Ошибка авторизации
-      </div>
-    `;
-  }
 }
 
 function showTab(tab) {
