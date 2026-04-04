@@ -16,12 +16,19 @@ function escapeHtml(str = "") {
     .replaceAll("'", "&#039;");
 }
 
+function formatMoney(value) {
+  return Number(value || 0).toLocaleString("uk-UA", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
+
 function safeAlert(text) {
   if (tg?.showAlert) tg.showAlert(String(text));
   else alert(String(text));
 }
 
-function renderBlockedScreen(title, text) {
+function renderBlockedScreen(title, text = "Открой приложение внутри Telegram") {
   document.body.innerHTML = `
     <div style="
       min-height:100vh;
@@ -154,9 +161,7 @@ function renderLayout() {
 async function initApp() {
   try {
     if (!tg || !tg.initData) {
-      renderBlockedScreen(
-        "Доступ закрыт",
-      );
+      renderBlockedScreen("Доступ закрыт");
       return;
     }
 
@@ -209,17 +214,17 @@ async function loadDashboard() {
       <div style="padding:16px;">
         ${card(`
           <div style="font-weight:700; margin-bottom:8px;">💰 Финансы</div>
-          <div>Выручка: ${(Number(f.orders_revenue || 0) + Number(f.sales_revenue || 0))}</div>
-          <div>Расходы: ${f.expenses_total || 0}</div>
+          <div>Выручка по заказам: ${formatMoney(f.orders_revenue || 0)}</div>
+          <div>Расходы: ${formatMoney(f.expenses_total || 0)}</div>
           <hr style="border-color:#1f2937;">
-          <div><b>Чистая прибыль: ${f.net_profit || 0}</b></div>
+          <div><b>Чистая прибыль: ${formatMoney(f.net_profit || 0)}</b></div>
         `)}
 
         ${card(`
           <div style="font-weight:700; margin-bottom:8px;">📊 Статистика</div>
           <div>Активных заказов: ${stats.active_count || 0}</div>
           <div>В работе: ${stats.total_in_work || 0}</div>
-          <div>Долги: ${stats.total_debt || 0}</div>
+          <div>Долги: ${formatMoney(stats.total_debt || 0)}</div>
           <div>Клиентов: ${data.clients_count || 0}</div>
           <div>Товаров: ${data.inventory_count || 0}</div>
         `)}
@@ -227,7 +232,6 @@ async function loadDashboard() {
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
           ${btn("+ Заказ", "openCreateOrder()")}
           ${btn("+ Клиент", "openCreateClient()")}
-          ${btn("+ Продажа", "openCreateSale()")}
           ${btn("+ Расход", "openCreateExpense()")}
         </div>
 
@@ -238,7 +242,7 @@ async function loadDashboard() {
                 ${card(`
                   <div style="font-weight:700;">${orderLabel(o)}</div>
                   <div style="font-size:14px; opacity:0.8;">Статус: ${escapeHtml(o.status || "")}</div>
-                  <div style="font-size:14px; opacity:0.8;">Сумма: ${o.total || 0} ${escapeHtml(o.currency || "UAH")}</div>
+                  <div style="font-size:14px; opacity:0.8;">Сумма: ${formatMoney(o.total || 0)} ${escapeHtml(o.currency || "UAH")}</div>
                 `)}
               </div>
             `).join("")
@@ -249,7 +253,7 @@ async function loadDashboard() {
           ? data.debts.map((d) => `
               ${card(`
                 <div style="font-weight:700;">${orderLabel(d)}</div>
-                <div>Долг: ${d.due || 0} ${escapeHtml(d.currency || "UAH")}</div>
+                <div>Долг: ${formatMoney(d.due || 0)} ${escapeHtml(d.currency || "UAH")}</div>
               `)}
             `).join("")
           : card("Долгов нет")}
@@ -259,7 +263,8 @@ async function loadDashboard() {
           ? data.low_stock.map((i) => `
               ${card(`
                 <b>${escapeHtml(i.name || "")}</b><br>
-                Остаток: ${i.quantity}
+                Остаток: ${formatMoney(i.quantity || 0)}<br>
+                Мин. остаток: ${formatMoney(i.min_quantity || 0)}
               `)}
             `).join("")
           : card("Склад в норме")}
@@ -290,12 +295,12 @@ async function loadOrders() {
                 ${card(`
                   <div style="font-weight:700;">${orderLabel(o)}</div>
                   <div>${escapeHtml(o.status || "")}</div>
-                  <div>${o.total || 0} ${escapeHtml(o.currency || "UAH")}</div>
+                  <div>${formatMoney(o.total || 0)} ${escapeHtml(o.currency || "UAH")}</div>
                   <div style="font-size:13px; opacity:0.7;">
                     Клиент: ${escapeHtml(o.client_name || "—")}
                   </div>
                   <div style="font-size:13px; opacity:0.7;">
-                    Оплачено: ${o.paid || 0} | Долг: ${o.due || 0}
+                    Оплачено: ${formatMoney(o.paid || 0)} | Долг: ${formatMoney(o.due || 0)}
                   </div>
                 `)}
               </div>
@@ -321,7 +326,7 @@ async function openOrder(id) {
         <div style="border-bottom:1px solid #1f2937; padding:6px 0;">
           <div><b>${escapeHtml(m.item_name || m.inventory_item_id || "Материал")}</b></div>
           <div style="font-size:13px; opacity:0.8;">
-            Кол-во: ${m.quantity} ${escapeHtml(m.unit || "")} | Себестоимость: ${m.total_cost || 0}
+            Кол-во: ${formatMoney(m.quantity)} ${escapeHtml(m.unit || "")} | Себестоимость: ${formatMoney(m.total_cost || 0)}
           </div>
         </div>
       `).join("");
@@ -330,9 +335,9 @@ async function openOrder(id) {
     openModal(`
       <h3 style="margin-top:0;">${orderLabel(order)}</h3>
       <p>Статус: ${escapeHtml(order.status || "")}</p>
-      <p>Сумма: ${order.total || 0} ${escapeHtml(order.currency || "UAH")}</p>
-      <p>Оплачено: ${order.paid || 0}</p>
-      <p>Долг: ${order.due || 0}</p>
+      <p>Сумма: ${formatMoney(order.total || 0)} ${escapeHtml(order.currency || "UAH")}</p>
+      <p>Оплачено: ${formatMoney(order.paid || 0)}</p>
+      <p>Долг: ${formatMoney(order.due || 0)}</p>
 
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
         ${btn("+ Оплата", `addPayment('${id}')`)}
@@ -376,6 +381,7 @@ async function createOrder() {
       client_id,
       total,
       currency: "UAH",
+      profit: total,
     });
 
     closeModal();
@@ -402,6 +408,7 @@ async function addPayment(order_id) {
     openOrder(order_id);
     loadOrders();
     loadDashboard();
+    loadFinance();
   } catch (e) {
     console.error(e);
   }
@@ -457,7 +464,7 @@ async function addMaterial(order_id) {
           >
             <b>${escapeHtml(i.name || "")}</b><br>
             <span style="font-size:13px; opacity:0.8;">
-              Остаток: ${i.quantity} | Резерв: ${i.reserved_quantity || 0} | Доступно: ${i.available_quantity ?? i.quantity}
+              Остаток: ${formatMoney(i.quantity)} | Резерв: ${formatMoney(i.reserved_quantity || 0)} | Доступно: ${formatMoney(i.available_quantity ?? i.quantity)}
             </span>
           </div>
         `).join("")}
@@ -514,6 +521,8 @@ async function submitMaterialToOrder(order_id) {
     openOrder(order_id);
     loadInventory();
     loadOrders();
+    loadDashboard();
+    loadFinance();
   } catch (e) {
     console.error(e);
   }
@@ -539,9 +548,10 @@ async function loadInventory() {
               <div onclick="openItem('${i.id}')" style="cursor:pointer;">
                 ${card(`
                   <div style="font-weight:700;">${escapeHtml(i.name || "")}</div>
-                  <div style="font-size:13px; opacity:0.85;">Остаток: ${i.quantity}</div>
-                  <div style="font-size:13px; opacity:0.85;">Резерв: ${i.reserved_quantity || 0}</div>
-                  <div style="font-size:13px; opacity:0.85;">Доступно: ${i.available_quantity ?? i.quantity}</div>
+                  <div style="font-size:13px; opacity:0.85;">Остаток: ${formatMoney(i.quantity)}</div>
+                  <div style="font-size:13px; opacity:0.85;">Резерв: ${formatMoney(i.reserved_quantity || 0)}</div>
+                  <div style="font-size:13px; opacity:0.85;">Доступно: ${formatMoney(i.available_quantity ?? i.quantity)}</div>
+                  <div style="font-size:13px; opacity:0.85;">Мин. остаток: ${formatMoney(i.min_quantity || 0)}</div>
                 `)}
               </div>
             `).join("")
@@ -564,11 +574,12 @@ async function openItem(id) {
 
     openModal(`
       <h3 style="margin-top:0;">${escapeHtml(item.name || "")}</h3>
-      <p>Остаток: ${item.quantity}</p>
-      <p>Резерв: ${item.reserved_quantity || 0}</p>
-      <p>Доступно: ${item.available_quantity ?? item.quantity}</p>
-      <p>Вход: ${item.purchase_price || 0}</p>
-      <p>Розница: ${item.retail_price || 0}</p>
+      <p>Остаток: ${formatMoney(item.quantity)}</p>
+      <p>Резерв: ${formatMoney(item.reserved_quantity || 0)}</p>
+      <p>Доступно: ${formatMoney(item.available_quantity ?? item.quantity)}</p>
+      <p>Мин. остаток: ${formatMoney(item.min_quantity || 0)}</p>
+      <p>Вход: ${formatMoney(item.purchase_price || 0)}</p>
+      <p>Розница: ${formatMoney(item.retail_price || 0)}</p>
 
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
         ${btn("🔒 Резерв", `reserveItem('${id}')`)}
@@ -582,7 +593,7 @@ async function openItem(id) {
         ${movements.length
           ? movements.map((m) => `
               <div style="border-bottom:1px solid #1f2937; padding:6px 0;">
-                <div><b>${escapeHtml(m.movement_type || "")}</b> — ${m.quantity}</div>
+                <div><b>${escapeHtml(m.movement_type || "")}</b> — ${formatMoney(m.quantity)}</div>
                 <div style="font-size:12px; opacity:0.75;">
                   ${escapeHtml(m.comment || "")}
                 </div>
@@ -636,6 +647,7 @@ async function createInventoryItem() {
     await api("create_inventory_item", payload);
     closeModal();
     loadInventory();
+    loadDashboard();
     safeAlert("Товар создан");
   } catch (e) {
     console.error(e);
@@ -676,6 +688,7 @@ async function addStock() {
 
     closeModal();
     loadInventory();
+    loadDashboard();
     safeAlert("Приход добавлен");
   } catch (e) {
     console.error(e);
@@ -696,6 +709,7 @@ async function reserveItem(id) {
     safeAlert("Зарезервировано");
     openItem(id);
     loadInventory();
+    loadDashboard();
   } catch (e) {
     console.error(e);
   }
@@ -715,6 +729,7 @@ async function unreserveItem(id) {
     safeAlert("Резерв снят");
     openItem(id);
     loadInventory();
+    loadDashboard();
   } catch (e) {
     console.error(e);
   }
@@ -734,33 +749,7 @@ async function adjustItem(id) {
     safeAlert("Обновлено");
     openItem(id);
     loadInventory();
-  } catch (e) {
-    console.error(e);
-  }
-}
-
-function openCreateSale() {
-  openModal(`
-    <h3 style="margin-top:0;">Новая продажа</h3>
-    <input id="sale_client_id" placeholder="Client ID" style="width:100%; margin-bottom:10px;">
-    <input id="sale_comment" placeholder="Комментарий" style="width:100%; margin-bottom:10px;">
-    ${btn("Создать продажу", "createSale()")}
-  `);
-}
-
-async function createSale() {
-  const client_id = document.getElementById("sale_client_id").value.trim();
-  const comment = document.getElementById("sale_comment").value.trim();
-
-  try {
-    const res = await api("create_sale", {
-      client_id: client_id || null,
-      comment,
-      currency: "UAH",
-    });
-
-    closeModal();
-    safeAlert(`Продажа создана: ${res.item?.sale_number || res.item?.id || ""}`);
+    loadDashboard();
   } catch (e) {
     console.error(e);
   }
@@ -857,14 +846,12 @@ async function loadFinance() {
 
         ${card(`
           <div style="font-weight:700; margin-bottom:8px;">Сводка</div>
-          <div>Выручка по заказам: ${summary.orders_revenue || 0}</div>
-          <div>Прибыль по заказам: ${summary.orders_profit || 0}</div>
-          <div>Выручка со склада: ${summary.sales_revenue || 0}</div>
-          <div>Прибыль со склада: ${summary.sales_profit || 0}</div>
-          <div>Расходы: ${summary.expenses_total || 0}</div>
+          <div>Выручка по заказам: ${formatMoney(summary.orders_revenue || 0)}</div>
+          <div>Прибыль по заказам: ${formatMoney(summary.orders_profit || 0)}</div>
+          <div>Расходы: ${formatMoney(summary.expenses_total || 0)}</div>
           <hr style="border-color:#1f2937;">
-          <div><b>Валовая прибыль: ${summary.gross_profit || 0}</b></div>
-          <div><b>Чистая прибыль: ${summary.net_profit || 0}</b></div>
+          <div><b>Валовая прибыль: ${formatMoney(summary.gross_profit || 0)}</b></div>
+          <div><b>Чистая прибыль: ${formatMoney(summary.net_profit || 0)}</b></div>
         `)}
 
         <h3 style="margin:12px 0;">Расходы</h3>
@@ -872,7 +859,7 @@ async function loadFinance() {
           ? expenses.map((x) => `
               ${card(`
                 <div style="font-weight:700;">${escapeHtml(x.category || "")}</div>
-                <div>${x.amount || 0} ${escapeHtml(x.currency || "UAH")}</div>
+                <div>${formatMoney(x.amount || 0)} ${escapeHtml(x.currency || "UAH")}</div>
                 <div style="font-size:12px; opacity:0.7;">${escapeHtml(x.note || "")}</div>
               `)}
             `).join("")
@@ -949,8 +936,6 @@ window.openItem = openItem;
 window.reserveItem = reserveItem;
 window.unreserveItem = unreserveItem;
 window.adjustItem = adjustItem;
-window.openCreateSale = openCreateSale;
-window.createSale = createSale;
 window.openCreateClient = openCreateClient;
 window.createClient = createClient;
 window.openCreateExpense = openCreateExpense;
