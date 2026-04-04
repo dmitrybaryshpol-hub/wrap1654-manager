@@ -1,120 +1,6 @@
 const tg = window.Telegram?.WebApp || null;
 
 const API_URL = "https://hbciwqgfccdfnzrhiops.supabase.co/functions/v1/smart-handler";
-async function initApp() {
-  try {
-    // ❗ БЛОКИРОВКА ВНЕ TELEGRAM
-    if (!tg || !tg.initData) {
-      document.body.innerHTML = `
-        <div style="
-          min-height:100vh;
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          background:#0b1120;
-          color:#fff;
-          font-family:Arial,sans-serif;
-          padding:24px;
-          text-align:center;
-        ">
-          <div>
-            <h2>Доступ только через Telegram</h2>
-            <p>Открой приложение из бота Wrap 1654 Manager</p>
-          </div>
-        </div>
-      `;
-      return;
-    }
-
-    tg.expand();
-    tg.ready();
-    tg.setHeaderColor("#0f172a");
-    tg.setBackgroundColor("#0b1120");
-
-    const auth = await api("auth");
-
-    if (!auth?.user) {
-      throw new Error("Unauthorized");
-    }
-
-   
-   catch (e) {
-    console.error("INIT ERROR:", e);
-
-    document.body.innerHTML = `
-      <div style="
-        min-height:100vh;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        background:#0b1120;
-        color:#fff;
-        font-family:Arial,sans-serif;
-        padding:24px;
-        text-align:center;
-      ">
-        <div>
-          <h2>Ошибка авторизации</h2>
-          <p>У вас нет доступа</p>
-        </div>
-      </div>
-    `;
-  }
-}    
-
-  } catch (e) {
-    console.error(e);
-    document.body.innerHTML = `
-      <div style="
-        min-height:100vh;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        background:#0b1120;
-        color:#fff;
-        font-family:Arial,sans-serif;
-        padding:24px;
-        text-align:center;
-      ">
-        <div>
-          <h2>Access denied</h2>
-          <p>У вас нет доступа к приложению.</p>
-        </div>
-      </div>
-    `;
-  }
-}
-  
-   
- catch (e) {
-    console.error(e);
-    document.body.innerHTML = `
-      <div style="
-        min-height:100vh;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        background:#0b1120;
-        color:#fff;
-        font-family:Arial,sans-serif;
-        padding:24px;
-        text-align:center;
-      ">
-        <div>
-          <h2>Access denied</h2>
-          <p>У вас нет доступа к приложению.</p>
-        </div>
-      </div>
-    `;
-  }
-}
-
-if (tg) {
-  tg.expand();
-  tg.ready();
-  tg.setHeaderColor("#0f172a");
-  tg.setBackgroundColor("#0b1120");
-}
 
 const state = {
   user: null,
@@ -135,6 +21,27 @@ function safeAlert(text) {
   else alert(String(text));
 }
 
+function renderBlockedScreen(title, text) {
+  document.body.innerHTML = `
+    <div style="
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:#0b1120;
+      color:#fff;
+      font-family:Arial,sans-serif;
+      padding:24px;
+      text-align:center;
+    ">
+      <div>
+        <h2 style="margin:0 0 10px 0;">${escapeHtml(title)}</h2>
+        <p style="margin:0; opacity:.8;">${escapeHtml(text)}</p>
+      </div>
+    </div>
+  `;
+}
+
 async function api(action, data = {}) {
   const res = await fetch(API_URL, {
     method: "POST",
@@ -148,11 +55,15 @@ async function api(action, data = {}) {
     }),
   });
 
-  const json = await res.json();
+  let json;
+  try {
+    json = await res.json();
+  } catch {
+    throw new Error("Invalid API response");
+  }
 
   if (!res.ok || json?.ok === false) {
     console.error("API error:", json);
-    safeAlert(json?.error || "Ошибка");
     throw new Error(json?.error || "API error");
   }
 
@@ -189,7 +100,9 @@ function btn(text, onclick, extra = "") {
 }
 
 function orderLabel(order) {
-  return escapeHtml(order?.order_number || (order?.id ? `Заказ ${String(order.id).slice(0, 8)}` : "Заказ"));
+  return escapeHtml(
+    order?.order_number || (order?.id ? `Заказ ${String(order.id).slice(0, 8)}` : "Заказ")
+  );
 }
 
 function renderLayout() {
@@ -236,6 +149,36 @@ function renderLayout() {
 
     <div id="modal"></div>
   `;
+}
+
+async function initApp() {
+  try {
+    if (!tg || !tg.initData) {
+      renderBlockedScreen(
+        "Доступ только через Telegram",
+        "Открой приложение из бота Wrap 1654 Manager"
+      );
+      return;
+    }
+
+    tg.expand();
+    tg.ready();
+    tg.setHeaderColor("#0f172a");
+    tg.setBackgroundColor("#0b1120");
+
+    const auth = await api("auth");
+
+    if (!auth?.user) {
+      throw new Error("Unauthorized");
+    }
+
+    state.user = auth.user;
+    renderLayout();
+    showTab("dashboard");
+  } catch (e) {
+    console.error("INIT ERROR:", e);
+    renderBlockedScreen("Ошибка авторизации", "У вас нет доступа");
+  }
 }
 
 function showTab(tab) {
