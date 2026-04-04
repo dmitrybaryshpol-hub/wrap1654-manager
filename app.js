@@ -156,7 +156,6 @@ async function initApp() {
     if (!tg || !tg.initData) {
       renderBlockedScreen(
         "Доступ только через Telegram",
-        "Открой приложение из бота Wrap 1654 Manager"
       );
       return;
     }
