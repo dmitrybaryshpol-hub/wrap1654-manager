@@ -155,7 +155,7 @@ async function initApp() {
   try {
     if (!tg || !tg.initData) {
       renderBlockedScreen(
-        "Доступ только через Telegram",
+        "Доступ закрыт",
       );
       return;
     }
