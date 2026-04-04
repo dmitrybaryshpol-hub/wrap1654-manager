@@ -5,6 +5,10 @@ const API_URL = "https://hbciwqgfccdfnzrhiops.supabase.co/functions/v1/smart-han
 const state = {
   user: null,
   currentTab: "dashboard",
+  fxRate: 0,
+  fxBase: "UAH",
+  fxQuote: "USD",
+  fxUpdatedAt: null,
 };
 
 function escapeHtml(str = "") {
@@ -21,6 +25,24 @@ function formatMoney(value) {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   });
+}
+
+function asNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function currencySymbol(cur) {
+  if (cur === "USD") return "$";
+  return "₴";
+}
+
+function convertToUAH(amount, currency) {
+  const n = asNumber(amount, 0);
+  if (currency === "USD" && state.fxRate > 0) {
+    return n * state.fxRate;
+  }
+  return n;
 }
 
 function safeAlert(text) {
@@ -75,6 +97,20 @@ async function api(action, data = {}) {
   }
 
   return json;
+}
+
+async function loadFxRate() {
+  try {
+    const res = await api("get_fx_rate", { base: "UAH", quote: "USD" });
+    state.fxRate = asNumber(res.rate, 0);
+    state.fxUpdatedAt = res.updated_at || null;
+    state.fxBase = res.base || "UAH";
+    state.fxQuote = res.quote || "USD";
+  } catch (e) {
+    console.warn("FX rate not available yet:", e?.message || e);
+    state.fxRate = 0;
+    state.fxUpdatedAt = null;
+  }
 }
 
 function card(html, extra = "") {
@@ -177,6 +213,7 @@ async function initApp() {
     }
 
     state.user = auth.user;
+    await loadFxRate();
     renderLayout();
     showTab("dashboard");
   } catch (e) {
@@ -210,6 +247,10 @@ async function loadDashboard() {
     const f = data.finance || {};
     const stats = data.stats || {};
 
+    const ordersRevenueUAH = convertToUAH(f.orders_revenue || 0, f.currency || "UAH");
+    const expensesUAH = convertToUAH(f.expenses_total || 0, "UAH");
+    const netUAH = convertToUAH(f.net_profit || 0, "UAH");
+
     el.innerHTML = `
       <div style="padding:16px;">
         ${card(`
@@ -218,6 +259,13 @@ async function loadDashboard() {
           <div>Расходы: ${formatMoney(f.expenses_total || 0)}</div>
           <hr style="border-color:#1f2937;">
           <div><b>Чистая прибыль: ${formatMoney(f.net_profit || 0)}</b></div>
+          ${
+            state.fxRate > 0
+              ? `<div style="font-size:12px; opacity:.7; margin-top:8px;">
+                   Курс USD: ${formatMoney(state.fxRate)} ₴
+                 </div>`
+              : ""
+          }
         `)}
 
         ${card(`
@@ -242,7 +290,7 @@ async function loadDashboard() {
                 ${card(`
                   <div style="font-weight:700;">${orderLabel(o)}</div>
                   <div style="font-size:14px; opacity:0.8;">Статус: ${escapeHtml(o.status || "")}</div>
-                  <div style="font-size:14px; opacity:0.8;">Сумма: ${formatMoney(o.total || 0)} ${escapeHtml(o.currency || "UAH")}</div>
+                  <div style="font-size:14px; opacity:0.8;">Сумма: ${formatMoney(o.total || 0)} ${currencySymbol(o.currency || "UAH")}</div>
                 `)}
               </div>
             `).join("")
@@ -253,7 +301,7 @@ async function loadDashboard() {
           ? data.debts.map((d) => `
               ${card(`
                 <div style="font-weight:700;">${orderLabel(d)}</div>
-                <div>Долг: ${formatMoney(d.due || 0)} ${escapeHtml(d.currency || "UAH")}</div>
+                <div>Долг: ${formatMoney(d.due || 0)} ${currencySymbol(d.currency || "UAH")}</div>
               `)}
             `).join("")
           : card("Долгов нет")}
@@ -295,12 +343,16 @@ async function loadOrders() {
                 ${card(`
                   <div style="font-weight:700;">${orderLabel(o)}</div>
                   <div>${escapeHtml(o.status || "")}</div>
-                  <div>${formatMoney(o.total || 0)} ${escapeHtml(o.currency || "UAH")}</div>
+                  <div>${formatMoney(o.total || 0)} ${currencySymbol(o.currency || "UAH")}</div>
                   <div style="font-size:13px; opacity:0.7;">
                     Клиент: ${escapeHtml(o.client_name || "—")}
                   </div>
                   <div style="font-size:13px; opacity:0.7;">
-                    Оплачено: ${formatMoney(o.paid || 0)} | Долг: ${formatMoney(o.due || 0)}
+                    Авто: ${escapeHtml(o.car_model || "—")}
+                  </div>
+                  <div style="font-size:13px; opacity:0.7;">
+                    Оплачено: ${formatMoney(o.paid || 0)} ${currencySymbol(o.currency || "UAH")} | 
+                    Долг: ${formatMoney(o.due || 0)} ${currencySymbol(o.currency || "UAH")}
                   </div>
                 `)}
               </div>
@@ -332,12 +384,45 @@ async function openOrder(id) {
       `).join("");
     }
 
+    let mediaHtml = "";
+    if (order.media_url) {
+      const url = String(order.media_url);
+      const lower = url.toLowerCase();
+
+      if (/\.(jpg|jpeg|png|webp|gif)$/i.test(lower)) {
+        mediaHtml = `
+          <div style="margin:12px 0;">
+            <img src="${escapeHtml(url)}" style="width:100%; border-radius:12px; border:1px solid #1f2937;">
+          </div>
+        `;
+      } else if (/\.(mp4|webm|mov)$/i.test(lower)) {
+        mediaHtml = `
+          <div style="margin:12px 0;">
+            <video src="${escapeHtml(url)}" controls style="width:100%; border-radius:12px; border:1px solid #1f2937;"></video>
+          </div>
+        `;
+      } else {
+        mediaHtml = `
+          <div style="margin:12px 0;">
+            <a href="${escapeHtml(url)}" target="_blank" style="color:#93c5fd;">Открыть медиа</a>
+          </div>
+        `;
+      }
+    }
+
     openModal(`
       <h3 style="margin-top:0;">${orderLabel(order)}</h3>
       <p>Статус: ${escapeHtml(order.status || "")}</p>
-      <p>Сумма: ${formatMoney(order.total || 0)} ${escapeHtml(order.currency || "UAH")}</p>
-      <p>Оплачено: ${formatMoney(order.paid || 0)}</p>
-      <p>Долг: ${formatMoney(order.due || 0)}</p>
+      <p>Клиент: ${escapeHtml(order.client_name || "—")}</p>
+      <p>Авто: ${escapeHtml(order.car_model || "—")}</p>
+      <p>Сумма: ${formatMoney(order.total || 0)} ${currencySymbol(order.currency || "UAH")}</p>
+      <p>Материалы: ${formatMoney(order.material_cost || 0)} ${currencySymbol(order.currency || "UAH")}</p>
+      <p>Себестоимость: ${formatMoney(order.total_cost || 0)} ${currencySymbol(order.currency || "UAH")}</p>
+      <p>Прибыль: ${formatMoney(order.profit || 0)} ${currencySymbol(order.currency || "UAH")}</p>
+      <p>Оплачено: ${formatMoney(order.paid || 0)} ${currencySymbol(order.currency || "UAH")}</p>
+      <p>Долг: ${formatMoney(order.due || 0)} ${currencySymbol(order.currency || "UAH")}</p>
+
+      ${mediaHtml}
 
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
         ${btn("+ Оплата", `addPayment('${id}')`)}
@@ -356,40 +441,267 @@ async function openOrder(id) {
 function openCreateOrder() {
   openModal(`
     <h3 style="margin-top:0;">Новый заказ</h3>
-    <input id="client" placeholder="Client ID" style="width:100%; margin-bottom:10px;">
-    <input id="total" placeholder="Сумма" type="number" style="width:100%; margin-bottom:10px;">
+
+    <input id="client_name" placeholder="Имя клиента" style="width:100%; margin-bottom:10px;">
+    <input id="car_model" placeholder="Модель авто" style="width:100%; margin-bottom:10px;">
+
+    <select id="order_type" style="width:100%; margin-bottom:10px;">
+      <option value="combined">combined</option>
+      <option value="service">service</option>
+      <option value="sale">sale</option>
+    </select>
+
+    <select id="order_status" style="width:100%; margin-bottom:10px;">
+      <option value="new">new</option>
+      <option value="in_progress">in_progress</option>
+      <option value="done">done</option>
+      <option value="cancelled">cancelled</option>
+    </select>
+
+    <label style="display:block; margin-bottom:4px; opacity:.8;">Дата приёмки</label>
+    <input id="intake_date" type="date" style="width:100%; margin-bottom:10px;">
+
+    <label style="display:block; margin-bottom:4px; opacity:.8;">Дата начала</label>
+    <input id="start_date" type="date" style="width:100%; margin-bottom:10px;">
+
+    <label style="display:block; margin-bottom:4px; opacity:.8;">Дата окончания</label>
+    <input id="end_date" type="date" style="width:100%; margin-bottom:10px;">
+
+    <input id="subtotal" placeholder="Subtotal" type="number" step="0.01" style="width:100%; margin-bottom:10px;">
+    <input id="discount" placeholder="Скидка" type="number" step="0.01" value="0" style="width:100%; margin-bottom:10px;">
+    <input id="total" placeholder="Итоговая сумма" type="number" step="0.01" style="width:100%; margin-bottom:10px;">
+
+    <input id="material_cost" placeholder="Материалы" type="number" step="0.01" value="0" style="width:100%; margin-bottom:10px;">
+    <input id="labor_cost" placeholder="Работа" type="number" step="0.01" value="0" style="width:100%; margin-bottom:10px;">
+    <input id="other_cost" placeholder="Прочие расходы" type="number" step="0.01" value="0" style="width:100%; margin-bottom:10px;">
+
+    <input id="total_cost" placeholder="Себестоимость" type="number" step="0.01" value="0" style="width:100%; margin-bottom:10px;" readonly>
+    <input id="profit" placeholder="Прибыль" type="number" step="0.01" value="0" style="width:100%; margin-bottom:10px;" readonly>
+
+    <input id="prepaid" placeholder="Предоплата" type="number" step="0.01" value="0" style="width:100%; margin-bottom:10px;">
+    <input id="paid" placeholder="Оплачено" type="number" step="0.01" value="0" style="width:100%; margin-bottom:10px;">
+    <input id="due" placeholder="Долг" type="number" step="0.01" value="0" style="width:100%; margin-bottom:10px;" readonly>
+
+    <select id="currency" style="width:100%; margin-bottom:10px;">
+      <option value="UAH">UAH ₴</option>
+      <option value="USD">USD $</option>
+    </select>
+
+    ${
+      state.fxRate > 0
+        ? `<div style="font-size:12px; opacity:.75; margin-bottom:10px;">
+             Курс USD: ${formatMoney(state.fxRate)} ₴
+           </div>`
+        : ""
+    }
+
+    <label style="display:block; margin-bottom:4px; opacity:.8;">Фото / видео</label>
+    <input id="order_media" type="file" accept="image/*,video/*" style="width:100%; margin-bottom:10px;">
+    <div id="order_media_preview" style="margin-bottom:10px;"></div>
+
+    <textarea id="order_note" placeholder="Комментарий" style="width:100%; margin-bottom:10px; min-height:90px;"></textarea>
+
     ${btn("Создать", "createOrder()")}
   `);
+
+  bindOrderFormRecalc();
+  bindOrderMediaPreview();
+  recalcOrderForm();
+}
+
+function bindOrderFormRecalc() {
+  [
+    "subtotal",
+    "discount",
+    "total",
+    "material_cost",
+    "labor_cost",
+    "other_cost",
+    "prepaid",
+    "paid",
+    "currency",
+  ].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener("input", recalcOrderForm);
+      el.addEventListener("change", recalcOrderForm);
+    }
+  });
+}
+
+function bindOrderMediaPreview() {
+  const input = document.getElementById("order_media");
+  if (!input) return;
+
+  input.addEventListener("change", () => {
+    const file = input.files?.[0];
+    const root = document.getElementById("order_media_preview");
+    if (!root) return;
+
+    if (!file) {
+      root.innerHTML = "";
+      return;
+    }
+
+    const url = URL.createObjectURL(file);
+
+    if (file.type.startsWith("image/")) {
+      root.innerHTML = `
+        <img src="${url}" style="width:100%; border-radius:12px; border:1px solid #1f2937;">
+      `;
+    } else if (file.type.startsWith("video/")) {
+      root.innerHTML = `
+        <video src="${url}" controls style="width:100%; border-radius:12px; border:1px solid #1f2937;"></video>
+      `;
+    } else {
+      root.innerHTML = `<div style="opacity:.7;">Выбран файл: ${escapeHtml(file.name)}</div>`;
+    }
+  });
+}
+
+function recalcOrderForm() {
+  const subtotal = asNumber(document.getElementById("subtotal")?.value, 0);
+  const discount = asNumber(document.getElementById("discount")?.value, 0);
+  const totalInput = document.getElementById("total");
+  const totalRaw = asNumber(totalInput?.value, 0);
+
+  const materialCost = asNumber(document.getElementById("material_cost")?.value, 0);
+  const laborCost = asNumber(document.getElementById("labor_cost")?.value, 0);
+  const otherCost = asNumber(document.getElementById("other_cost")?.value, 0);
+
+  const prepaid = asNumber(document.getElementById("prepaid")?.value, 0);
+  const paid = asNumber(document.getElementById("paid")?.value, 0);
+
+  let total = totalRaw;
+  if (!total && subtotal > 0) {
+    total = Math.max(subtotal - discount, 0);
+    if (totalInput) totalInput.value = String(total);
+  }
+
+  const totalCost = materialCost + laborCost + otherCost;
+  const profit = total - totalCost;
+  const due = Math.max(total - paid, 0);
+
+  const totalCostEl = document.getElementById("total_cost");
+  const profitEl = document.getElementById("profit");
+  const dueEl = document.getElementById("due");
+
+  if (totalCostEl) totalCostEl.value = String(totalCost);
+  if (profitEl) profitEl.value = String(profit);
+  if (dueEl) dueEl.value = String(due);
+}
+
+async function uploadOrderMediaIfNeeded() {
+  const input = document.getElementById("order_media");
+  const file = input?.files?.[0];
+  if (!file) return null;
+
+  const reader = new FileReader();
+
+  const base64 = await new Promise((resolve, reject) => {
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      const base64Data = result.includes(",") ? result.split(",")[1] : result;
+      resolve(base64Data);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const res = await api("upload_order_media", {
+    filename: file.name,
+    content_type: file.type || "application/octet-stream",
+    file_base64: base64,
+  });
+
+  return res.public_url || res.url || null;
 }
 
 async function createOrder() {
-  const client_id = document.getElementById("client").value.trim();
-  const total = Number(document.getElementById("total").value);
+  const client_name = document.getElementById("client_name").value.trim() || null;
+  const car_model = document.getElementById("car_model").value.trim() || null;
 
-  if (!client_id) {
-    safeAlert("Укажи client_id");
+  const type = document.getElementById("order_type").value.trim() || "combined";
+  const status = document.getElementById("order_status").value.trim() || "new";
+
+  const intake_date = document.getElementById("intake_date").value || null;
+  const start_date = document.getElementById("start_date").value || null;
+  const end_date = document.getElementById("end_date").value || null;
+
+  const subtotal = asNumber(document.getElementById("subtotal").value, 0);
+  const discount = asNumber(document.getElementById("discount").value, 0);
+  const total = asNumber(document.getElementById("total").value, 0);
+
+  const material_cost = asNumber(document.getElementById("material_cost").value, 0);
+  const labor_cost = asNumber(document.getElementById("labor_cost").value, 0);
+  const other_cost = asNumber(document.getElementById("other_cost").value, 0);
+
+  const total_cost = asNumber(document.getElementById("total_cost").value, 0);
+  const profit = asNumber(document.getElementById("profit").value, 0);
+
+  const prepaid = asNumber(document.getElementById("prepaid").value, 0);
+  const paid = asNumber(document.getElementById("paid").value, 0);
+  const due = asNumber(document.getElementById("due").value, 0);
+
+  const currency = document.getElementById("currency").value || "UAH";
+  const note = document.getElementById("order_note").value.trim() || null;
+
+  if (!client_name) {
+    safeAlert("Укажи имя клиента");
+    return;
+  }
+
+  if (!car_model) {
+    safeAlert("Укажи модель авто");
     return;
   }
 
   if (!total || total <= 0) {
-    safeAlert("Укажи сумму");
+    safeAlert("Укажи итоговую сумму");
     return;
   }
 
   try {
+    let media_url = null;
+
+    try {
+      media_url = await uploadOrderMediaIfNeeded();
+    } catch (e) {
+      console.warn("Media upload skipped:", e?.message || e);
+    }
+
     await api("create_order", {
-      client_id,
+      client_name,
+      car_model,
+      type,
+      status,
+      intake_date,
+      start_date,
+      end_date,
+      subtotal,
+      discount,
       total,
-      currency: "UAH",
-      profit: total,
+      material_cost,
+      labor_cost,
+      other_cost,
+      total_cost,
+      profit,
+      prepaid,
+      paid,
+      due,
+      currency,
+      note,
+      media_url,
     });
 
     closeModal();
     loadOrders();
     loadDashboard();
+    loadFinance();
     safeAlert("Заказ создан");
   } catch (e) {
     console.error(e);
+    safeAlert(e.message || "Ошибка создания заказа");
   }
 }
 
@@ -398,10 +710,13 @@ async function addPayment(order_id) {
   if (!amount) return;
 
   try {
+    const orderRes = await api("get_order", { id: order_id });
+    const order = orderRes.item;
+
     await api("add_payment", {
       order_id,
       amount: Number(amount),
-      currency: "UAH",
+      currency: order.currency || "UAH",
     });
 
     safeAlert("Оплата добавлена");
@@ -464,7 +779,7 @@ async function addMaterial(order_id) {
           >
             <b>${escapeHtml(i.name || "")}</b><br>
             <span style="font-size:13px; opacity:0.8;">
-              Остаток: ${formatMoney(i.quantity)} | Резерв: ${formatMoney(i.reserved_quantity || 0)} | Доступно: ${formatMoney(i.available_quantity ?? i.quantity)}
+              Остаток: ${formatMoney(i.quantity)} | Резерв: ${formatMoney(i.reserved_quantity || 0)} | Доступно: ${formatMoney(i.available_quantity ?? i.quantity)} | Цена: ${formatMoney(i.purchase_price || 0)} ${currencySymbol(i.currency || "UAH")}
             </span>
           </div>
         `).join("")}
@@ -552,6 +867,8 @@ async function loadInventory() {
                   <div style="font-size:13px; opacity:0.85;">Резерв: ${formatMoney(i.reserved_quantity || 0)}</div>
                   <div style="font-size:13px; opacity:0.85;">Доступно: ${formatMoney(i.available_quantity ?? i.quantity)}</div>
                   <div style="font-size:13px; opacity:0.85;">Мин. остаток: ${formatMoney(i.min_quantity || 0)}</div>
+                  <div style="font-size:13px; opacity:0.85;">Вход: ${formatMoney(i.purchase_price || 0)} ${currencySymbol(i.currency || "UAH")}</div>
+                  <div style="font-size:13px; opacity:0.85;">Розница: ${formatMoney(i.retail_price || 0)} ${currencySymbol(i.currency || "UAH")}</div>
                 `)}
               </div>
             `).join("")
@@ -578,8 +895,8 @@ async function openItem(id) {
       <p>Резерв: ${formatMoney(item.reserved_quantity || 0)}</p>
       <p>Доступно: ${formatMoney(item.available_quantity ?? item.quantity)}</p>
       <p>Мин. остаток: ${formatMoney(item.min_quantity || 0)}</p>
-      <p>Вход: ${formatMoney(item.purchase_price || 0)}</p>
-      <p>Розница: ${formatMoney(item.retail_price || 0)}</p>
+      <p>Вход: ${formatMoney(item.purchase_price || 0)} ${currencySymbol(item.currency || "UAH")}</p>
+      <p>Розница: ${formatMoney(item.retail_price || 0)} ${currencySymbol(item.currency || "UAH")}</p>
 
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
         ${btn("🔒 Резерв", `reserveItem('${id}')`)}
@@ -618,7 +935,10 @@ function openCreateInventoryItem() {
     <input id="inv_quantity" placeholder="Количество" type="number" step="0.1" style="width:100%; margin-bottom:8px;">
     <input id="inv_purchase" placeholder="Входная цена" type="number" step="0.01" style="width:100%; margin-bottom:8px;">
     <input id="inv_retail" placeholder="Розничная цена" type="number" step="0.01" style="width:100%; margin-bottom:8px;">
-    <input id="inv_currency" placeholder="Валюта (UAH / USD)" style="width:100%; margin-bottom:8px;">
+    <select id="inv_currency" style="width:100%; margin-bottom:8px;">
+      <option value="UAH">UAH ₴</option>
+      <option value="USD">USD $</option>
+    </select>
     <input id="inv_min" placeholder="Мин. остаток" type="number" step="0.1" style="width:100%; margin-bottom:8px;">
     ${btn("Создать", "createInventoryItem()")}
   `);
@@ -634,7 +954,7 @@ async function createInventoryItem() {
     quantity: Number(document.getElementById("inv_quantity").value) || 0,
     purchase_price: Number(document.getElementById("inv_purchase").value) || 0,
     retail_price: Number(document.getElementById("inv_retail").value) || 0,
-    currency: document.getElementById("inv_currency").value.trim() || "UAH",
+    currency: document.getElementById("inv_currency").value || "UAH",
     min_quantity: Number(document.getElementById("inv_min").value) || 0,
   };
 
@@ -859,7 +1179,7 @@ async function loadFinance() {
           ? expenses.map((x) => `
               ${card(`
                 <div style="font-weight:700;">${escapeHtml(x.category || "")}</div>
-                <div>${formatMoney(x.amount || 0)} ${escapeHtml(x.currency || "UAH")}</div>
+                <div>${formatMoney(x.amount || 0)} ${currencySymbol(x.currency || "UAH")}</div>
                 <div style="font-size:12px; opacity:0.7;">${escapeHtml(x.note || "")}</div>
               `)}
             `).join("")
@@ -877,7 +1197,10 @@ function openCreateExpense() {
     <h3 style="margin-top:0;">Новый расход</h3>
     <input id="exp_category" placeholder="Категория" style="width:100%; margin-bottom:10px;">
     <input id="exp_amount" placeholder="Сумма" type="number" step="0.01" style="width:100%; margin-bottom:10px;">
-    <input id="exp_currency" placeholder="Валюта (UAH / USD)" style="width:100%; margin-bottom:10px;">
+    <select id="exp_currency" style="width:100%; margin-bottom:10px;">
+      <option value="UAH">UAH ₴</option>
+      <option value="USD">USD $</option>
+    </select>
     <input id="exp_supplier" placeholder="Поставщик" style="width:100%; margin-bottom:10px;">
     <textarea id="exp_note" placeholder="Заметка" style="width:100%; margin-bottom:10px;"></textarea>
     ${btn("Создать", "createExpense()")}
@@ -887,7 +1210,7 @@ function openCreateExpense() {
 async function createExpense() {
   const category = document.getElementById("exp_category").value.trim();
   const amount = Number(document.getElementById("exp_amount").value);
-  const currency = document.getElementById("exp_currency").value.trim() || "UAH";
+  const currency = document.getElementById("exp_currency").value || "UAH";
   const supplier = document.getElementById("exp_supplier").value.trim();
   const note = document.getElementById("exp_note").value.trim();
 
