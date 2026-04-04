@@ -52,6 +52,33 @@ async function initApp() {
     `;
   }
 }
+    const auth = await api("auth");
+    state.user = auth.user;
+
+    renderLayout();
+    showTab("dashboard");
+  } catch (e) {
+    console.error(e);
+    document.body.innerHTML = `
+      <div style="
+        min-height:100vh;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        background:#0b1120;
+        color:#fff;
+        font-family:Arial,sans-serif;
+        padding:24px;
+        text-align:center;
+      ">
+        <div>
+          <h2>Access denied</h2>
+          <p>У вас нет доступа к приложению.</p>
+        </div>
+      </div>
+    `;
+  }
+}
 
 if (tg) {
   tg.expand();
