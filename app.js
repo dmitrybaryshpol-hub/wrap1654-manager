@@ -449,20 +449,35 @@ function openCreateOrder() {
     <label style="display:block; margin-bottom:4px; opacity:.8;">Дата окончания</label>
     <input id="end_date" type="date" style="width:100%; margin-bottom:10px;">
 
-    <input id="subtotal" placeholder="Subtotal" type="number" step="0.01" style="width:100%; margin-bottom:10px;">
-    <input id="discount" placeholder="Скидка" type="number" step="0.01" value="0" style="width:100%; margin-bottom:10px;">
-    <input id="total" placeholder="Итоговая сумма" type="number" step="0.01" style="width:100%; margin-bottom:10px;">
+    <label>Subtotal</label>
+<input id="subtotal" type="number" value="0">
 
-    <input id="material_cost" placeholder="Материалы" type="number" step="0.01" value="0" style="width:100%; margin-bottom:10px;">
-    <input id="labor_cost" placeholder="Работа" type="number" step="0.01" value="0" style="width:100%; margin-bottom:10px;">
-    <input id="other_cost" placeholder="Прочие расходы" type="number" step="0.01" value="0" style="width:100%; margin-bottom:10px;">
+<label>Скидка</label>
+<input id="discount" type="number" value="0">
 
-    <input id="total_cost" placeholder="Себестоимость" type="number" step="0.01" value="0" readonly style="width:100%; margin-bottom:10px;">
-    <input id="profit" placeholder="Прибыль" type="number" step="0.01" value="0" readonly style="width:100%; margin-bottom:10px;">
+<label>Итоговая сумма</label>
+<input id="total" type="number" value="0">
 
-    <input id="prepaid" placeholder="Предоплата" type="number" step="0.01" value="0" style="width:100%; margin-bottom:10px;">
-    <input id="paid" placeholder="Оплачено" type="number" step="0.01" value="0" style="width:100%; margin-bottom:10px;">
-    <input id="due" placeholder="Долг" type="number" step="0.01" value="0" readonly style="width:100%; margin-bottom:10px;">
+<label>Материалы</label>
+<input id="material_cost" type="number" value="0">
+
+<label>Работа</label>
+<input id="labor_cost" type="number" value="0">
+
+<label>Прочие расходы</label>
+<input id="other_cost" type="number" value="0">
+
+<label>Себестоимость</label>
+<input id="total_cost" type="number" readonly>
+
+<label>Прибыль</label>
+<input id="profit" type="number" readonly>
+
+<label>Оплачено</label>
+<input id="paid" type="number" value="0">
+
+<label>Долг</label>
+<input id="due" type="number" readonly>
 
     <select id="currency" style="width:100%; margin-bottom:10px;">
       <option value="UAH">UAH ₴</option>
