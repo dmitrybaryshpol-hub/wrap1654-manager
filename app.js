@@ -511,7 +511,41 @@ function openCreateOrder() {
     margin-bottom:14px;
     border:1px solid #1f2937;
   ">
-    <div style="font-weight:600; margin-bottom:10px;">📊 Результат</div>
+    <div style="
+  background:#020617;
+  padding:12px;
+  border-radius:12px;
+  margin-bottom:14px;
+  border:1px solid #1f2937;
+">
+  <div style="font-weight:600; margin-bottom:10px;">📊 Результат</div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+    <div style="background:#0f172a; border:1px solid #1f2937; border-radius:10px; padding:10px;">
+      <div style="font-size:12px; opacity:.6; margin-bottom:4px;">Себестоимость</div>
+      <input id="total_cost" readonly style="
+        width:100%;
+        background:transparent;
+        border:none;
+        color:#cbd5e1;
+        font-weight:700;
+        padding:0;
+      ">
+    </div>
+
+    <div style="background:#0f172a; border:1px solid #1f2937; border-radius:10px; padding:10px;">
+      <div style="font-size:12px; opacity:.6; margin-bottom:4px;">Прибыль</div>
+      <input id="profit" readonly style="
+        width:100%;
+        background:transparent;
+        border:none;
+        color:#f8fafc;
+        font-weight:700;
+        padding:0;
+      ">
+    </div>
+  </div>
+</div>
 
     <label style="font-size:12px; opacity:.6;">Прибыль</label>
     <input id="profit" readonly style="
@@ -521,27 +555,37 @@ function openCreateOrder() {
     ">
   </div>
 
-  <!-- 💳 Оплата -->
   <div style="
-    background:#020617;
-    padding:12px;
-    border-radius:12px;
-    margin-bottom:14px;
-    border:1px solid #1f2937;
-  ">
-    <div style="font-weight:600; margin-bottom:10px;">💳 Оплата</div>
+  background:#020617;
+  padding:12px;
+  border-radius:12px;
+  margin-bottom:14px;
+  border:1px solid #1f2937;
+">
+  <div style="font-weight:600; margin-bottom:10px;">💳 Оплата</div>
 
-    <label style="font-size:12px; opacity:.6;">Оплачено</label>
-    <input id="paid" type="number" value="0" style="width:100%; margin-bottom:8px;">
-
-    <label style="font-size:12px; opacity:.6;">Долг</label>
-    <input id="due" readonly style="
-      width:100%;
-      font-weight:bold;
-      text-align:center;
-    ">
+  <div style="display:flex; gap:8px; margin-bottom:10px;">
+    ${btn("0%", "setPaidPreset(0)", "flex:1;")}
+    ${btn("50%", "setPaidPreset(50)", "flex:1;")}
+    ${btn("100%", "setPaidPreset(100)", "flex:1;")}
   </div>
 
+  <label style="font-size:12px; opacity:.6;">Предоплата</label>
+  <input id="prepaid" type="number" value="0" style="width:100%; margin-bottom:8px;">
+
+  <label style="font-size:12px; opacity:.6;">Оплачено</label>
+  <input id="paid" type="number" value="0" style="width:100%; margin-bottom:8px;">
+
+  <label style="font-size:12px; opacity:.6;">Долг</label>
+  <input id="due" readonly style="
+    width:100%;
+    font-weight:bold;
+    text-align:center;
+    background:#020617;
+    border:1px solid #1f2937;
+    color:#f8fafc;
+  ">
+</div>
   <!-- 💱 Валюта -->
   <div style="margin-bottom:14px;">
     <label style="font-size:12px; opacity:.6;">Валюта</label>
@@ -565,6 +609,20 @@ function openCreateOrder() {
 `);
   bindOrderFormRecalc();
   bindOrderMediaPreview();
+  recalcOrderForm();
+}
+
+function setPaidPreset(percent) {
+  const totalEl = document.getElementById("total");
+  const paidEl = document.getElementById("paid");
+  const prepaidEl = document.getElementById("prepaid");
+
+  const total = asNumber(totalEl?.value, 0);
+  const value = Math.round((total * percent) / 100 * 100) / 100;
+
+  if (paidEl) paidEl.value = String(value);
+  if (prepaidEl) prepaidEl.value = String(value);
+
   recalcOrderForm();
 }
 
@@ -624,6 +682,7 @@ function recalcOrderForm() {
   const laborCostEl = document.getElementById("labor_cost");
   const otherCostEl = document.getElementById("other_cost");
   const paidEl = document.getElementById("paid");
+  const prepaidEl = document.getElementById("prepaid");
 
   const subtotal = asNumber(subtotalEl?.value, 0);
   const discount = asNumber(discountEl?.value, 0);
@@ -632,12 +691,43 @@ function recalcOrderForm() {
   const materialCost = asNumber(materialCostEl?.value, 0);
   const laborCost = asNumber(laborCostEl?.value, 0);
   const otherCost = asNumber(otherCostEl?.value, 0);
+
   const paid = asNumber(paidEl?.value, 0);
+  const prepaid = asNumber(prepaidEl?.value, 0);
 
   if (!total && subtotal > 0) {
     total = Math.max(subtotal - discount, 0);
     if (totalEl) totalEl.value = String(total);
   }
+
+  const totalCost = materialCost + laborCost + otherCost;
+  const profit = total - totalCost;
+  const due = Math.max(total - paid, 0);
+
+  const totalCostField = document.getElementById("total_cost");
+  const profitField = document.getElementById("profit");
+  const dueField = document.getElementById("due");
+
+  if (totalCostField) totalCostField.value = String(totalCost);
+  if (dueField) dueField.value = String(due);
+
+  if (profitField) {
+    profitField.value = String(profit);
+
+    if (profit > 0) {
+      profitField.style.color = "#22c55e";
+    } else if (profit < 0) {
+      profitField.style.color = "#ef4444";
+    } else {
+      profitField.style.color = "#f8fafc";
+    }
+  }
+
+  if (paidEl && prepaid > paid) {
+    paidEl.value = String(prepaid);
+    if (dueField) dueField.value = String(Math.max(total - prepaid, 0));
+  }
+}
 
   const totalCost = materialCost + laborCost + otherCost;
   const profit = total - totalCost;
@@ -1322,6 +1412,8 @@ async function createExpense() {
 window.showTab = showTab;
 window.openCreateOrder = openCreateOrder;
 window.createOrder = createOrder;
+window.showTab = showTab;
+window.setPaidPreset = setPaidPreset;
 window.openOrder = openOrder;
 window.addPayment = addPayment;
 window.addMaterial = addMaterial;
