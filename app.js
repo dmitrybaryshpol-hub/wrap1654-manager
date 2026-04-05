@@ -422,83 +422,147 @@ async function openOrder(id) {
 
 function openCreateOrder() {
   openModal(`
-    <h3 style="margin-top:0;">Новый заказ</h3>
+  <h3 style="margin-top:0;">Новый заказ</h3>
 
-    <input id="client_name" placeholder="Имя клиента" style="width:100%; margin-bottom:10px;">
-    <input id="car_model" placeholder="Модель авто" style="width:100%; margin-bottom:10px;">
+  <!-- 👤 Клиент -->
+  <div style="margin-bottom:14px;">
+    <div style="opacity:.6; font-size:12px; margin-bottom:6px;">Клиент</div>
+    <input id="client_name" placeholder="Имя клиента" style="width:100%; margin-bottom:8px;">
+    <input id="car_model" placeholder="Модель авто" style="width:100%;">
+  </div>
 
-    <select id="order_type" style="width:100%; margin-bottom:10px;">
+  <!-- ⚙️ Тип -->
+  <div style="margin-bottom:14px;">
+    <div style="opacity:.6; font-size:12px; margin-bottom:6px;">Тип и статус</div>
+    <select id="order_type" style="width:100%; margin-bottom:8px;">
       <option value="combined">combined</option>
       <option value="service">service</option>
       <option value="sale">sale</option>
     </select>
 
-    <select id="order_status" style="width:100%; margin-bottom:10px;">
+    <select id="order_status" style="width:100%;">
       <option value="new">new</option>
       <option value="in_progress">in_progress</option>
       <option value="done">done</option>
-      <option value="cancelled">cancelled</option>
     </select>
+  </div>
 
-    <label style="display:block; margin-bottom:4px; opacity:.8;">Дата приёмки</label>
-    <input id="intake_date" type="date" style="width:100%; margin-bottom:10px;">
+  <!-- 📅 Даты -->
+  <div style="margin-bottom:14px;">
+    <div style="opacity:.6; font-size:12px; margin-bottom:6px;">Даты</div>
+    <input id="intake_date" type="date" style="width:100%; margin-bottom:6px;">
+    <input id="start_date" type="date" style="width:100%; margin-bottom:6px;">
+    <input id="end_date" type="date" style="width:100%;">
+  </div>
 
-    <label style="display:block; margin-bottom:4px; opacity:.8;">Дата начала</label>
-    <input id="start_date" type="date" style="width:100%; margin-bottom:10px;">
+  <!-- 💰 Доход -->
+  <div style="
+    background:#020617;
+    padding:12px;
+    border-radius:12px;
+    margin-bottom:14px;
+    border:1px solid #1f2937;
+  ">
+    <div style="font-weight:600; margin-bottom:10px;">💰 Доход</div>
 
-    <label style="display:block; margin-bottom:4px; opacity:.8;">Дата окончания</label>
-    <input id="end_date" type="date" style="width:100%; margin-bottom:10px;">
+    <label style="font-size:12px; opacity:.6;">Subtotal</label>
+    <input id="subtotal" type="number" value="0" style="width:100%; margin-bottom:8px;">
 
-    <label>Subtotal</label>
-<input id="subtotal" type="number" value="0">
+    <label style="font-size:12px; opacity:.6;">Скидка</label>
+    <input id="discount" type="number" value="0" style="width:100%; margin-bottom:8px;">
 
-<label>Скидка</label>
-<input id="discount" type="number" value="0">
+    <label style="font-size:12px; opacity:.6;">Итог</label>
+    <input id="total" type="number" value="0" style="width:100%;">
+  </div>
 
-<label>Итоговая сумма</label>
-<input id="total" type="number" value="0">
+  <!-- 🧾 Себестоимость -->
+  <div style="
+    background:#020617;
+    padding:12px;
+    border-radius:12px;
+    margin-bottom:14px;
+    border:1px solid #1f2937;
+  ">
+    <div style="font-weight:600; margin-bottom:10px;">🧾 Себестоимость</div>
 
-<label>Материалы</label>
-<input id="material_cost" type="number" value="0">
+    <label style="font-size:12px; opacity:.6;">Материалы</label>
+    <input id="material_cost" type="number" value="0" style="width:100%; margin-bottom:8px;">
 
-<label>Работа</label>
-<input id="labor_cost" type="number" value="0">
+    <label style="font-size:12px; opacity:.6;">Работа</label>
+    <input id="labor_cost" type="number" value="0" style="width:100%; margin-bottom:8px;">
 
-<label>Прочие расходы</label>
-<input id="other_cost" type="number" value="0">
+    <label style="font-size:12px; opacity:.6;">Прочее</label>
+    <input id="other_cost" type="number" value="0" style="width:100%; margin-bottom:8px;">
 
-<label>Себестоимость</label>
-<input id="total_cost" type="number" readonly>
+    <label style="font-size:12px; opacity:.6;">Итого себестоимость</label>
+    <input id="total_cost" readonly style="
+      width:100%;
+      background:#020617;
+      border:1px solid #1f2937;
+      color:#9ca3af;
+    ">
+  </div>
 
-<label>Прибыль</label>
-<input id="profit" type="number" readonly>
+  <!-- 📊 Прибыль -->
+  <div style="
+    background:#020617;
+    padding:12px;
+    border-radius:12px;
+    margin-bottom:14px;
+    border:1px solid #1f2937;
+  ">
+    <div style="font-weight:600; margin-bottom:10px;">📊 Результат</div>
 
-<label>Оплачено</label>
-<input id="paid" type="number" value="0">
+    <label style="font-size:12px; opacity:.6;">Прибыль</label>
+    <input id="profit" readonly style="
+      width:100%;
+      font-weight:bold;
+      text-align:center;
+    ">
+  </div>
 
-<label>Долг</label>
-<input id="due" type="number" readonly>
+  <!-- 💳 Оплата -->
+  <div style="
+    background:#020617;
+    padding:12px;
+    border-radius:12px;
+    margin-bottom:14px;
+    border:1px solid #1f2937;
+  ">
+    <div style="font-weight:600; margin-bottom:10px;">💳 Оплата</div>
 
-    <select id="currency" style="width:100%; margin-bottom:10px;">
+    <label style="font-size:12px; opacity:.6;">Оплачено</label>
+    <input id="paid" type="number" value="0" style="width:100%; margin-bottom:8px;">
+
+    <label style="font-size:12px; opacity:.6;">Долг</label>
+    <input id="due" readonly style="
+      width:100%;
+      font-weight:bold;
+      text-align:center;
+    ">
+  </div>
+
+  <!-- 💱 Валюта -->
+  <div style="margin-bottom:14px;">
+    <label style="font-size:12px; opacity:.6;">Валюта</label>
+    <select id="currency" style="width:100%;">
       <option value="UAH">UAH ₴</option>
       <option value="USD">USD $</option>
     </select>
+  </div>
 
-    ${
-      state.fxRate > 0
-        ? `<div style="font-size:12px; opacity:.75; margin-bottom:10px;">Курс USD: ${formatMoney(state.fxRate)} ₴</div>`
-        : ""
-    }
+  <!-- 📸 Медиа -->
+  <div style="margin-bottom:14px;">
+    <label style="font-size:12px; opacity:.6;">Фото / видео</label>
+    <input id="order_media" type="file" accept="image/*,video/*" style="width:100%;">
+    <div id="order_media_preview" style="margin-top:8px;"></div>
+  </div>
 
-    <label style="display:block; margin-bottom:4px; opacity:.8;">Фото / видео</label>
-    <input id="order_media" type="file" accept="image/*,video/*" style="width:100%; margin-bottom:10px;">
-    <div id="order_media_preview" style="margin-bottom:10px;"></div>
+  <!-- 📝 Комментарий -->
+  <textarea id="order_note" placeholder="Комментарий" style="width:100%; min-height:80px; margin-bottom:12px;"></textarea>
 
-    <textarea id="order_note" placeholder="Комментарий" style="width:100%; margin-bottom:10px; min-height:90px;"></textarea>
-
-    ${btn("Создать", "createOrder()")}
-  `);
-
+  ${btn("Создать заказ", "createOrder()", "width:100%; background:#2563eb;")}
+`);
   bindOrderFormRecalc();
   bindOrderMediaPreview();
   recalcOrderForm();
@@ -581,6 +645,18 @@ function recalcOrderForm() {
 
   const totalCostField = document.getElementById("total_cost");
   const profitField = document.getElementById("profit");
+
+    if (profitField) {
+    profitField.value = profit;
+
+    if (profit > 0) {
+    profitField.style.color = "#22c55e"; // зелёный
+  } else if (profit < 0) {
+    profitField.style.color = "#ef4444"; // красный
+  } else {
+    profitField.style.color = "#fff";
+  }
+}
   const dueField = document.getElementById("due");
 
   if (totalCostField) totalCostField.value = String(totalCost);
