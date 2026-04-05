@@ -7,23 +7,19 @@
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
   />
   <title>Wrap 1654 Manager</title>
+
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
   <style>
     :root {
       --bg: #020817;
       --panel: #0f172a;
-      --panel-2: #111827;
       --line: rgba(255,255,255,0.08);
       --text: #f8fafc;
       --muted: #94a3b8;
       --accent: #2563eb;
       --accent-2: #1d4ed8;
-      --danger: #dc2626;
-      --success: #16a34a;
-      --warning: #f59e0b;
       --radius: 18px;
-      --shadow: 0 10px 30px rgba(0,0,0,0.25);
     }
 
     * {
@@ -31,16 +27,11 @@
       -webkit-tap-highlight-color: transparent;
     }
 
-    html, body {
+    body {
       margin: 0;
-      padding: 0;
       background: linear-gradient(180deg, #020617 0%, #020b1d 100%);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
-    }
-
-    body {
-      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
     .app {
@@ -54,14 +45,12 @@
       border: 1px solid var(--line);
       border-radius: 24px;
       padding: 18px;
-      box-shadow: var(--shadow);
       margin-bottom: 14px;
     }
 
     .topbar-title {
-      font-size: 28px;
+      font-size: 26px;
       font-weight: 800;
-      letter-spacing: -0.03em;
       margin: 0 0 6px;
     }
 
@@ -70,23 +59,11 @@
       font-size: 14px;
     }
 
-    .user-info {
-      margin-top: 12px;
-      font-size: 14px;
-      color: #cbd5e1;
-    }
-
     .tabs {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
       gap: 8px;
       margin-bottom: 14px;
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      padding-top: 6px;
-      background: linear-gradient(180deg, rgba(2,8,23,0.98), rgba(2,8,23,0.85));
-      backdrop-filter: blur(8px);
     }
 
     .tab-btn {
@@ -94,8 +71,7 @@
       background: rgba(15, 23, 42, 0.9);
       color: #cbd5e1;
       border-radius: 16px;
-      padding: 12px 8px;
-      font-size: 13px;
+      padding: 12px;
       font-weight: 700;
       cursor: pointer;
     }
@@ -103,7 +79,6 @@
     .tab-btn.active {
       background: linear-gradient(180deg, var(--accent), var(--accent-2));
       color: white;
-      border-color: transparent;
     }
 
     .tab-content {
@@ -116,122 +91,37 @@
       border-radius: 22px;
       padding: 16px;
       margin-bottom: 14px;
-      box-shadow: var(--shadow);
     }
 
     .card-title {
-      margin: 0 0 14px;
       font-size: 18px;
       font-weight: 800;
-      letter-spacing: -0.02em;
+      margin-bottom: 12px;
     }
 
-    .grid-stats {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 10px;
-    }
-
-    .stat-box {
-      background: rgba(255,255,255,0.03);
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      padding: 14px;
-    }
-
-    .stat-label {
-      color: var(--muted);
-      font-size: 12px;
-      margin-bottom: 8px;
-    }
-
-    .stat-value {
-      font-size: 26px;
-      font-weight: 800;
-    }
-
-    .form-grid {
-      display: grid;
-      gap: 10px;
-    }
-
-    .form-row-2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-
-    .form-row-3 {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 10px;
-    }
-
-    input,
-    select,
-    textarea,
-    button {
-      font: inherit;
-    }
-
-    input,
-    select,
-    textarea {
+    input, select, textarea {
       width: 100%;
       background: rgba(255,255,255,0.04);
       color: white;
       border: 1px solid rgba(255,255,255,0.08);
       border-radius: 14px;
-      padding: 14px 14px;
-      outline: none;
-    }
-
-    input::placeholder,
-    textarea::placeholder {
-      color: #64748b;
+      padding: 12px;
+      margin-bottom: 8px;
     }
 
     textarea {
-      min-height: 96px;
-      resize: vertical;
-    }
-
-    .btn-row {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .primary-btn,
-    .secondary-btn,
-    .action-btn {
-      border: none;
-      border-radius: 14px;
-      padding: 13px 16px;
-      font-weight: 800;
-      cursor: pointer;
+      min-height: 80px;
     }
 
     .primary-btn {
+      width: 100%;
+      border: none;
+      border-radius: 14px;
+      padding: 14px;
+      font-weight: 800;
       background: linear-gradient(180deg, var(--accent), var(--accent-2));
       color: white;
-      flex: 1;
-    }
-
-    .secondary-btn {
-      background: rgba(255,255,255,0.06);
-      color: white;
-    }
-
-    .hidden {
-      display: none !important;
-    }
-
-    .filters {
-      display: grid;
-      grid-template-columns: 1fr 160px;
-      gap: 10px;
-      margin-bottom: 12px;
+      cursor: pointer;
     }
 
     .list {
@@ -246,178 +136,21 @@
       padding: 14px;
     }
 
-    .item-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 12px;
-      margin-bottom: 10px;
-    }
-
-    .item-title {
-      font-size: 17px;
-      font-weight: 800;
-      line-height: 1.2;
-    }
-
-    .item-subtitle {
-      color: var(--muted);
-      font-size: 13px;
-      margin-top: 3px;
-    }
-
-    .item-body {
-      display: grid;
-      gap: 8px;
-    }
-
-    .item-line {
-      font-size: 14px;
-      color: #e5e7eb;
-      line-height: 1.35;
-      word-break: break-word;
-    }
-
-    .item-actions {
-      display: flex;
-      gap: 8px;
-      margin-top: 12px;
-    }
-
-    .edit-btn {
-      flex: 1;
-      background: rgba(37, 99, 235, 0.18);
-      color: #dbeafe;
-      border: 1px solid rgba(37, 99, 235, 0.28);
-    }
-
-    .delete-btn {
-      flex: 1;
-      background: rgba(220, 38, 38, 0.14);
-      color: #fecaca;
-      border: 1px solid rgba(220, 38, 38, 0.24);
-    }
-
-    .badge-status {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 28px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 800;
-      background: rgba(255,255,255,0.08);
-      color: white;
-      white-space: nowrap;
-    }
-
-    .status-new {
-      background: rgba(59,130,246,0.18);
-      color: #bfdbfe;
-    }
-
-    .status-in-progress {
-      background: rgba(245,158,11,0.18);
-      color: #fde68a;
-    }
-
-    .status-done {
-      background: rgba(34,197,94,0.18);
-      color: #bbf7d0;
-    }
-
-    .status-cancelled {
-      background: rgba(239,68,68,0.18);
-      color: #fecaca;
-    }
-
-    .list-row {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 12px 0;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-    }
-
-    .list-row:last-child {
-      border-bottom: none;
-    }
-
-    .list-row-title {
-      font-weight: 700;
-      margin-bottom: 4px;
-    }
-
-    .list-row-sub,
-    .list-row-date {
-      color: var(--muted);
-      font-size: 13px;
-    }
-
-    .list-row-side {
-      display: grid;
-      gap: 8px;
-      justify-items: end;
-    }
-
-    .empty-state {
-      color: var(--muted);
-      text-align: center;
-      padding: 18px;
-      border: 1px dashed rgba(255,255,255,0.08);
-      border-radius: 16px;
-    }
-
-    .global-loader {
-      position: fixed;
-      inset: 0;
-      background: rgba(2, 6, 23, 0.82);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 100;
-      backdrop-filter: blur(6px);
-    }
-
-    .loader-box {
-      background: #0f172a;
-      border: 1px solid var(--line);
-      padding: 18px 22px;
-      border-radius: 18px;
-      font-weight: 700;
-      box-shadow: var(--shadow);
-    }
-
     @media (max-width: 640px) {
       .tabs {
         grid-template-columns: repeat(2, 1fr);
-      }
-
-      .form-row-2,
-      .form-row-3,
-      .filters,
-      .grid-stats {
-        grid-template-columns: 1fr;
-      }
-
-      .topbar-title {
-        font-size: 22px;
       }
     }
   </style>
 </head>
 
 <body>
-  <div id="globalLoader" class="global-loader">
-    <div class="loader-box">Загрузка...</div>
-  </div>
-
   <div class="app">
+
     <div class="topbar">
       <h1 class="topbar-title">Wrap 1654 Manager</h1>
       <div class="topbar-sub">Управление заказами, клиентами и складом</div>
-      <div id="userInfo" class="user-info">👋 Загрузка...</div>
+      <div id="userInfo">👋 Загрузка...</div>
     </div>
 
     <div class="tabs">
@@ -427,196 +160,53 @@
       <button class="tab-btn" data-tab="inventory">Склад</button>
     </div>
 
-    <!-- DASHBOARD -->
     <section class="tab-content" data-tab-content="dashboard">
       <div class="card">
-        <h2 class="card-title">Статистика</h2>
-        <div class="grid-stats">
-          <div class="stat-box">
-            <div class="stat-label">Всего заказов</div>
-            <div id="statTotalOrders" class="stat-value">0</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">Активные</div>
-            <div id="statActiveOrders" class="stat-value">0</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">Клиенты</div>
-            <div id="statTotalClients" class="stat-value">0</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">Товаров на складе</div>
-            <div id="statInventoryItems" class="stat-value">0</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2 class="card-title">Последние заказы</h2>
-        <div id="recentOrders"></div>
+        <div class="card-title">Статистика</div>
+        <div id="dashboardStats">Загрузка...</div>
       </div>
     </section>
 
-    <!-- ORDERS -->
     <section class="tab-content" data-tab-content="orders">
-      <div class="card" id="orderFormCard">
-        <h2 class="card-title">Добавить / редактировать заказ</h2>
+      <div class="card">
+        <div class="card-title">Новый заказ</div>
 
-        <form id="orderForm" class="form-grid">
-          <input id="orderClientName" list="clientsDatalist" placeholder="Имя клиента" />
-          <datalist id="clientsDatalist"></datalist>
+        <input id="orderClientName" placeholder="Клиент">
+        <input id="orderCarModel" placeholder="Авто">
+        <textarea id="orderServices" placeholder="Услуги"></textarea>
 
-          <input id="orderCarModel" placeholder="Машина / модель" />
-          <textarea id="orderServices" placeholder="Услуги"></textarea>
+        <input id="orderAmount" type="number" placeholder="Сумма">
 
-          <div class="form-row-3">
-            <input id="orderAmount" type="number" step="0.01" placeholder="Сумма" />
-            <select id="orderCurrency">
-              <option value="UAH">Гривна</option>
-              <option value="USD">Доллар</option>
-            </select>
-            <select id="orderStatus">
-              <option value="new">Новый</option>
-              <option value="in_progress">В работе</option>
-              <option value="done">Готово</option>
-              <option value="cancelled">Отменён</option>
-            </select>
-          </div>
+        <select id="orderCurrency">
+          <option value="UAH">UAH</option>
+          <option value="USD">USD</option>
+        </select>
 
-          <input id="orderDay" type="date" />
-          <textarea id="orderComment" placeholder="Комментарий"></textarea>
-
-          <div class="btn-row">
-            <button class="primary-btn" type="submit">
-              <span id="orderSubmitText">Добавить</span>
-            </button>
-            <button class="secondary-btn hidden" id="cancelOrderEdit" type="button">Отмена</button>
-          </div>
-        </form>
+        <button class="primary-btn">Создать заказ</button>
       </div>
 
       <div class="card">
-        <h2 class="card-title">Список заказов</h2>
-
-        <div class="filters">
-          <input id="orderSearch" placeholder="Поиск заказа..." />
-          <select id="orderStatusFilter">
-            <option value="all">Все статусы</option>
-            <option value="new">Новый</option>
-            <option value="in_progress">В работе</option>
-            <option value="done">Готово</option>
-            <option value="cancelled">Отменён</option>
-          </select>
-        </div>
-
+        <div class="card-title">Заказы</div>
         <div id="ordersList" class="list"></div>
       </div>
     </section>
 
-    <!-- CLIENTS -->
     <section class="tab-content" data-tab-content="clients">
-      <div class="card" id="clientFormCard">
-        <h2 class="card-title">Добавить / редактировать клиента</h2>
-
-        <form id="clientForm" class="form-grid">
-          <input id="clientName" placeholder="Имя клиента" />
-          <input id="clientPhone" placeholder="Телефон" />
-          <input id="clientTelegram" placeholder="Telegram ID" />
-          <textarea id="clientNote" placeholder="Заметка"></textarea>
-
-          <div class="btn-row">
-            <button class="primary-btn" type="submit">
-              <span id="clientSubmitText">Добавить</span>
-            </button>
-            <button class="secondary-btn hidden" id="cancelClientEdit" type="button">Отмена</button>
-          </div>
-        </form>
-      </div>
-
       <div class="card">
-        <h2 class="card-title">Список клиентов</h2>
-        <div id="clientsList" class="list"></div>
+        <div class="card-title">Клиенты</div>
+        <div id="clientsList"></div>
       </div>
     </section>
 
-    <!-- INVENTORY -->
     <section class="tab-content" data-tab-content="inventory">
-      <div class="card" id="inventoryFormCard">
-        <h2 class="card-title">Добавить / редактировать товар</h2>
-
-        <form id="inventoryForm" class="form-grid">
-          <div class="form-row-2">
-            <select id="inventoryCategory">
-              <option value="film">Плёнка</option>
-              <option value="ppf">PPF</option>
-              <option value="tool">Инструмент</option>
-              <option value="chemistry">Химия</option>
-              <option value="other">Другое</option>
-            </select>
-            <input id="inventoryBrand" placeholder="Бренд" />
-          </div>
-
-          <input id="inventoryName" placeholder="Название товара" />
-          <input id="inventoryCode" placeholder="Код / артикул" />
-
-          <div class="form-row-3">
-            <input id="inventoryQuantity" type="number" step="0.01" placeholder="Количество" />
-            <select id="inventoryUnit">
-              <option value="м">м</option>
-              <option value="шт">шт</option>
-              <option value="л">л</option>
-            </select>
-            <select id="inventoryCurrency">
-              <option value="UAH">Гривна</option>
-              <option value="USD">Доллар</option>
-            </select>
-          </div>
-
-          <div class="form-row-2">
-            <input id="inventoryPurchasePrice" type="number" step="0.01" placeholder="Вход" />
-            <input id="inventoryRetailPrice" type="number" step="0.01" placeholder="Розница" />
-            <input id="inventoryPrice" type="number" step="0.01" placeholder="Цена" />
-          </div>
-
-          <textarea id="inventoryComment" placeholder="Комментарий"></textarea>
-
-          <div class="btn-row">
-            <button class="primary-btn" type="submit">
-              <span id="inventorySubmitText">Добавить</span>
-            </button>
-            <button class="secondary-btn hidden" id="cancelInventoryEdit" type="button">Отмена</button>
-          </div>
-        </form>
-      </div>
-
       <div class="card">
-        <h2 class="card-title">Склад</h2>
-
-        <div class="filters">
-          <input id="inventorySearch" placeholder="Поиск товара..." />
-          <select id="inventoryCategoryFilter">
-            <option value="all">Все категории</option>
-            <option value="film">Плёнка</option>
-            <option value="ppf">PPF</option>
-            <option value="tool">Инструмент</option>
-            <option value="chemistry">Химия</option>
-            <option value="other">Другое</option>
-          </select>
-        </div>
-
-        <div id="inventoryList" class="list"></div>
+        <div class="card-title">Склад</div>
+        <div id="inventoryList"></div>
       </div>
     </section>
+
   </div>
 
-  <script src="app.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>
-</html>
-0 commit comments
-Comments
-0
- (0)
-Comment
-You're not receiving notifications from this thread.
-
