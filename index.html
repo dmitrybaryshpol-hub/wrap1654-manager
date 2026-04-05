@@ -171,8 +171,13 @@
       <div class="card">
         <div class="card-title">Новый заказ</div>
 
-        <input id="orderClientName" placeholder="Клиент">
-        <input id="orderCarModel" placeholder="Авто">
+<div class="form-group">
+  <label>Клиент</label>
+  <div class="input-row">
+    <select id="orderClientId"></select>
+    <button type="button" class="secondary-btn" id="openQuickClientBtn">+ Клиент</button>
+  </div>
+</div>        <input id="orderCarModel" placeholder="Авто">
         <textarea id="orderServices" placeholder="Услуги"></textarea>
 
         <input id="orderAmount" type="number" placeholder="Сумма">
