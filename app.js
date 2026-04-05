@@ -418,6 +418,34 @@ async function openOrder(id) {
   }
 }
 
+function renderClientOptions() {
+  const select = document.getElementById("orderClientId");
+  if (!select) return;
+
+  const clients = state.clients || [];
+
+  select.innerHTML = `
+    <option value="">Выберите клиента</option>
+    ${clients.map(client => `
+      <option value="${client.id}">
+        ${escapeHtml(client.name || "Без имени")}
+        ${client.phone ? " — " + escapeHtml(client.phone) : ""}
+      </option>
+    `).join("")}
+  `;
+}
+
+function syncSelectedClientToOrderForm() {
+  const select = document.getElementById("orderClientId");
+  const nameInput = document.getElementById("orderClientName");
+  if (!select || !nameInput) return;
+
+  const client = state.clients.find(c => String(c.id) === String(select.value));
+  if (!client) return;
+
+  nameInput.value = client.name || "";
+}
+
 function openCreateOrder() {
   openModal(`
     <h3 style="margin-top:0;">Новый заказ</h3>
@@ -578,6 +606,29 @@ function openCreateOrder() {
   bindOrderFormRecalc();
   bindOrderMediaPreview();
   recalcOrderForm();
+}
+
+function startEditOrder(orderId) {
+  const order = state.orders.find(o => String(o.id) === String(orderId));
+  if (!order) return;
+
+  state.editingOrderId = order.id;
+
+  document.getElementById("orderClientId").value = order.client_id || "";
+  document.getElementById("orderCarModel").value = order.car_model || "";
+  document.getElementById("orderAmount").value = order.amount || "";
+  document.getElementById("orderCost").value = order.cost || "";
+  document.getElementById("orderStartDate").value = order.start_date || "";
+  document.getElementById("orderEndDate").value = order.end_date || "";
+  document.getElementById("orderStatus").value = order.status || "new";
+  document.getElementById("orderServices").value = order.services || "";
+  document.getElementById("orderFilmUsed").value = order.film_used || "";
+  document.getElementById("orderFilmAmount").value = order.film_amount || "";
+
+  const submitBtn = document.getElementById("orderSubmitBtn");
+  if (submitBtn) submitBtn.textContent = "Сохранить изменения";
+
+  openOrderModal?.();
 }
 
 function setPaidPreset(percent) {
@@ -917,6 +968,38 @@ function filterMaterialList() {
     const name = row.dataset.name || "";
     row.style.display = name.includes(q) ? "block" : "none";
   });
+}
+
+function resetOrderForm() {
+  state.editingOrderId = null;
+
+  document.getElementById("orderForm")?.reset();
+
+  const submitBtn = document.getElementById("orderSubmitBtn");
+  if (submitBtn) submitBtn.textContent = "Создать заказ";
+
+  clearMediaPreview();
+}
+
+async function handleOrderSubmit(e) {
+  e.preventDefault();
+
+  const payload = collectOrderFormData();
+
+  if (state.editingOrderId) {
+    await api("update_order", {
+      id: state.editingOrderId,
+      ...payload,
+    });
+    safeAlert("Заказ обновлён");
+  } else {
+    await api("create_order", payload);
+    safeAlert("Заказ создан");
+  }
+
+  resetOrderForm();
+  await loadOrders();
+  renderOrders();
 }
 
 async function submitMaterialToOrder(order_id) {
