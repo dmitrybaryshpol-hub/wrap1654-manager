@@ -226,6 +226,7 @@ function showTab(tab) {
 
 async function loadDashboard() {
   const el = document.getElementById("dashboard");
+  if (!el) return;
   el.innerHTML = `<div style="padding:16px;">Загрузка...</div>`;
 
   try {
@@ -241,11 +242,7 @@ async function loadDashboard() {
           <div>Расходы: ${formatMoney(f.expenses_total || 0)} ₴</div>
           <hr style="border-color:#1f2937;">
           <div><b>Чистая прибыль: ${formatMoney(f.net_profit || 0)} ₴</b></div>
-          ${
-            state.fxRate > 0
-              ? `<div style="font-size:12px; opacity:.7; margin-top:8px;">USD курс: ${formatMoney(state.fxRate)} ₴</div>`
-              : ""
-          }
+          ${state.fxRate > 0 ? `<div style="font-size:12px; opacity:.7; margin-top:8px;">USD курс: ${formatMoney(state.fxRate)} ₴</div>` : ""}
         `)}
 
         ${card(`
@@ -306,6 +303,7 @@ async function loadDashboard() {
 
 async function loadOrders() {
   const el = document.getElementById("orders");
+  if (!el) return;
   el.innerHTML = `<div style="padding:16px;">Загрузка...</div>`;
 
   try {
@@ -422,191 +420,161 @@ async function openOrder(id) {
 
 function openCreateOrder() {
   openModal(`
-  <h3 style="margin-top:0;">Новый заказ</h3>
+    <h3 style="margin-top:0;">Новый заказ</h3>
 
-  <!-- 👤 Клиент -->
-  <div style="margin-bottom:14px;">
-    <div style="opacity:.6; font-size:12px; margin-bottom:6px;">Клиент</div>
-    <input id="client_name" placeholder="Имя клиента" style="width:100%; margin-bottom:8px;">
-    <input id="car_model" placeholder="Модель авто" style="width:100%;">
-  </div>
+    <div style="margin-bottom:14px;">
+      <div style="opacity:.6; font-size:12px; margin-bottom:6px;">Клиент</div>
+      <input id="client_name" placeholder="Имя клиента" style="width:100%; margin-bottom:8px;">
+      <input id="car_model" placeholder="Модель авто" style="width:100%;">
+    </div>
 
-  <!-- ⚙️ Тип -->
-  <div style="margin-bottom:14px;">
-    <div style="opacity:.6; font-size:12px; margin-bottom:6px;">Тип и статус</div>
-    <select id="order_type" style="width:100%; margin-bottom:8px;">
-      <option value="combined">combined</option>
-      <option value="service">service</option>
-      <option value="sale">sale</option>
-    </select>
+    <div style="margin-bottom:14px;">
+      <div style="opacity:.6; font-size:12px; margin-bottom:6px;">Тип и статус</div>
+      <select id="order_type" style="width:100%; margin-bottom:8px;">
+        <option value="combined">combined</option>
+        <option value="service">service</option>
+        <option value="sale">sale</option>
+      </select>
 
-    <select id="order_status" style="width:100%;">
-      <option value="new">new</option>
-      <option value="in_progress">in_progress</option>
-      <option value="done">done</option>
-    </select>
-  </div>
+      <select id="order_status" style="width:100%;">
+        <option value="new">new</option>
+        <option value="in_progress">in_progress</option>
+        <option value="done">done</option>
+      </select>
+    </div>
 
-  <!-- 📅 Даты -->
-  <div style="margin-bottom:14px;">
-    <div style="opacity:.6; font-size:12px; margin-bottom:6px;">Даты</div>
-    <input id="intake_date" type="date" style="width:100%; margin-bottom:6px;">
-    <input id="start_date" type="date" style="width:100%; margin-bottom:6px;">
-    <input id="end_date" type="date" style="width:100%;">
-  </div>
+    <div style="margin-bottom:14px;">
+      <div style="opacity:.6; font-size:12px; margin-bottom:6px;">Даты</div>
+      <input id="intake_date" type="date" style="width:100%; margin-bottom:6px;">
+      <input id="start_date" type="date" style="width:100%; margin-bottom:6px;">
+      <input id="end_date" type="date" style="width:100%;">
+    </div>
 
-  <!-- 💰 Доход -->
-  <div style="
-    background:#020617;
-    padding:12px;
-    border-radius:12px;
-    margin-bottom:14px;
-    border:1px solid #1f2937;
-  ">
-    <div style="font-weight:600; margin-bottom:10px;">💰 Доход</div>
-
-    <label style="font-size:12px; opacity:.6;">Subtotal</label>
-    <input id="subtotal" type="number" value="0" style="width:100%; margin-bottom:8px;">
-
-    <label style="font-size:12px; opacity:.6;">Скидка</label>
-    <input id="discount" type="number" value="0" style="width:100%; margin-bottom:8px;">
-
-    <label style="font-size:12px; opacity:.6;">Итог</label>
-    <input id="total" type="number" value="0" style="width:100%;">
-  </div>
-
-  <!-- 🧾 Себестоимость -->
-  <div style="
-    background:#020617;
-    padding:12px;
-    border-radius:12px;
-    margin-bottom:14px;
-    border:1px solid #1f2937;
-  ">
-    <div style="font-weight:600; margin-bottom:10px;">🧾 Себестоимость</div>
-
-    <label style="font-size:12px; opacity:.6;">Материалы</label>
-    <input id="material_cost" type="number" value="0" style="width:100%; margin-bottom:8px;">
-
-    <label style="font-size:12px; opacity:.6;">Работа</label>
-    <input id="labor_cost" type="number" value="0" style="width:100%; margin-bottom:8px;">
-
-    <label style="font-size:12px; opacity:.6;">Прочее</label>
-    <input id="other_cost" type="number" value="0" style="width:100%; margin-bottom:8px;">
-
-    <label style="font-size:12px; opacity:.6;">Итого себестоимость</label>
-    <input id="total_cost" readonly style="
-      width:100%;
-      background:#020617;
-      border:1px solid #1f2937;
-      color:#9ca3af;
-    ">
-  </div>
-
-  <!-- 📊 Прибыль -->
-  <div style="
-    background:#020617;
-    padding:12px;
-    border-radius:12px;
-    margin-bottom:14px;
-    border:1px solid #1f2937;
-  ">
     <div style="
-  background:#020617;
-  padding:12px;
-  border-radius:12px;
-  margin-bottom:14px;
-  border:1px solid #1f2937;
-">
-  <div style="font-weight:600; margin-bottom:10px;">📊 Результат</div>
-
-  <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-    <div style="background:#0f172a; border:1px solid #1f2937; border-radius:10px; padding:10px;">
-      <div style="font-size:12px; opacity:.6; margin-bottom:4px;">Себестоимость</div>
-      <input id="total_cost" readonly style="
-        width:100%;
-        background:transparent;
-        border:none;
-        color:#cbd5e1;
-        font-weight:700;
-        padding:0;
-      ">
-    </div>
-
-    <div style="background:#0f172a; border:1px solid #1f2937; border-radius:10px; padding:10px;">
-      <div style="font-size:12px; opacity:.6; margin-bottom:4px;">Прибыль</div>
-      <input id="profit" readonly style="
-        width:100%;
-        background:transparent;
-        border:none;
-        color:#f8fafc;
-        font-weight:700;
-        padding:0;
-      ">
-    </div>
-  </div>
-</div>
-
-    <label style="font-size:12px; opacity:.6;">Прибыль</label>
-    <input id="profit" readonly style="
-      width:100%;
-      font-weight:bold;
-      text-align:center;
+      background:#020617;
+      padding:12px;
+      border-radius:12px;
+      margin-bottom:14px;
+      border:1px solid #1f2937;
     ">
-  </div>
+      <div style="font-weight:600; margin-bottom:10px;">💰 Доход</div>
 
-  <div style="
-  background:#020617;
-  padding:12px;
-  border-radius:12px;
-  margin-bottom:14px;
-  border:1px solid #1f2937;
-">
-  <div style="font-weight:600; margin-bottom:10px;">💳 Оплата</div>
+      <label style="font-size:12px; opacity:.6;">Subtotal</label>
+      <input id="subtotal" type="number" value="0" style="width:100%; margin-bottom:8px;">
 
-  <div style="display:flex; gap:8px; margin-bottom:10px;">
-    ${btn("0%", "setPaidPreset(0)", "flex:1;")}
-    ${btn("50%", "setPaidPreset(50)", "flex:1;")}
-    ${btn("100%", "setPaidPreset(100)", "flex:1;")}
-  </div>
+      <label style="font-size:12px; opacity:.6;">Скидка</label>
+      <input id="discount" type="number" value="0" style="width:100%; margin-bottom:8px;">
 
-  <label style="font-size:12px; opacity:.6;">Предоплата</label>
-  <input id="prepaid" type="number" value="0" style="width:100%; margin-bottom:8px;">
+      <label style="font-size:12px; opacity:.6;">Итог</label>
+      <input id="total" type="number" value="0" style="width:100%;">
+    </div>
 
-  <label style="font-size:12px; opacity:.6;">Оплачено</label>
-  <input id="paid" type="number" value="0" style="width:100%; margin-bottom:8px;">
+    <div style="
+      background:#020617;
+      padding:12px;
+      border-radius:12px;
+      margin-bottom:14px;
+      border:1px solid #1f2937;
+    ">
+      <div style="font-weight:600; margin-bottom:10px;">🧾 Себестоимость</div>
 
-  <label style="font-size:12px; opacity:.6;">Долг</label>
-  <input id="due" readonly style="
-    width:100%;
-    font-weight:bold;
-    text-align:center;
-    background:#020617;
-    border:1px solid #1f2937;
-    color:#f8fafc;
-  ">
-</div>
-  <!-- 💱 Валюта -->
-  <div style="margin-bottom:14px;">
-    <label style="font-size:12px; opacity:.6;">Валюта</label>
-    <select id="currency" style="width:100%;">
-      <option value="UAH">UAH ₴</option>
-      <option value="USD">USD $</option>
-    </select>
-  </div>
+      <label style="font-size:12px; opacity:.6;">Материалы</label>
+      <input id="material_cost" type="number" value="0" style="width:100%; margin-bottom:8px;">
 
-  <!-- 📸 Медиа -->
-  <div style="margin-bottom:14px;">
-    <label style="font-size:12px; opacity:.6;">Фото / видео</label>
-    <input id="order_media" type="file" accept="image/*,video/*" style="width:100%;">
-    <div id="order_media_preview" style="margin-top:8px;"></div>
-  </div>
+      <label style="font-size:12px; opacity:.6;">Работа</label>
+      <input id="labor_cost" type="number" value="0" style="width:100%; margin-bottom:8px;">
 
-  <!-- 📝 Комментарий -->
-  <textarea id="order_note" placeholder="Комментарий" style="width:100%; min-height:80px; margin-bottom:12px;"></textarea>
+      <label style="font-size:12px; opacity:.6;">Прочее</label>
+      <input id="other_cost" type="number" value="0" style="width:100%; margin-bottom:8px;">
+    </div>
 
-  ${btn("Создать заказ", "createOrder()", "width:100%; background:#2563eb;")}
-`);
+    <div style="
+      background:#020617;
+      padding:12px;
+      border-radius:12px;
+      margin-bottom:14px;
+      border:1px solid #1f2937;
+    ">
+      <div style="font-weight:600; margin-bottom:10px;">📊 Результат</div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <div style="background:#0f172a; border:1px solid #1f2937; border-radius:10px; padding:10px;">
+          <div style="font-size:12px; opacity:.6; margin-bottom:4px;">Себестоимость</div>
+          <input id="total_cost" readonly style="
+            width:100%;
+            background:transparent;
+            border:none;
+            color:#cbd5e1;
+            font-weight:700;
+            padding:0;
+          ">
+        </div>
+
+        <div style="background:#0f172a; border:1px solid #1f2937; border-radius:10px; padding:10px;">
+          <div style="font-size:12px; opacity:.6; margin-bottom:4px;">Прибыль</div>
+          <input id="profit" readonly style="
+            width:100%;
+            background:transparent;
+            border:none;
+            color:#f8fafc;
+            font-weight:700;
+            padding:0;
+          ">
+        </div>
+      </div>
+    </div>
+
+    <div style="
+      background:#020617;
+      padding:12px;
+      border-radius:12px;
+      margin-bottom:14px;
+      border:1px solid #1f2937;
+    ">
+      <div style="font-weight:600; margin-bottom:10px;">💳 Оплата</div>
+
+      <div style="display:flex; gap:8px; margin-bottom:10px;">
+        ${btn("0%", "setPaidPreset(0)", "flex:1;")}
+        ${btn("50%", "setPaidPreset(50)", "flex:1;")}
+        ${btn("100%", "setPaidPreset(100)", "flex:1;")}
+      </div>
+
+      <label style="font-size:12px; opacity:.6;">Предоплата</label>
+      <input id="prepaid" type="number" value="0" style="width:100%; margin-bottom:8px;">
+
+      <label style="font-size:12px; opacity:.6;">Оплачено</label>
+      <input id="paid" type="number" value="0" style="width:100%; margin-bottom:8px;">
+
+      <label style="font-size:12px; opacity:.6;">Долг</label>
+      <input id="due" readonly style="
+        width:100%;
+        font-weight:bold;
+        text-align:center;
+        background:#020617;
+        border:1px solid #1f2937;
+        color:#f8fafc;
+      ">
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <label style="font-size:12px; opacity:.6;">Валюта</label>
+      <select id="currency" style="width:100%;">
+        <option value="UAH">UAH ₴</option>
+        <option value="USD">USD $</option>
+      </select>
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <label style="font-size:12px; opacity:.6;">Фото / видео</label>
+      <input id="order_media" type="file" accept="image/*,video/*" style="width:100%;">
+      <div id="order_media_preview" style="margin-top:8px;"></div>
+    </div>
+
+    <textarea id="order_note" placeholder="Комментарий" style="width:100%; min-height:80px; margin-bottom:12px;"></textarea>
+
+    ${btn("Создать заказ", "createOrder()", "width:100%; background:#2563eb;")}
+  `);
+
   bindOrderFormRecalc();
   bindOrderMediaPreview();
   recalcOrderForm();
@@ -713,7 +681,6 @@ function recalcOrderForm() {
 
   if (profitField) {
     profitField.value = String(profit);
-
     if (profit > 0) {
       profitField.style.color = "#22c55e";
     } else if (profit < 0) {
@@ -727,31 +694,6 @@ function recalcOrderForm() {
     paidEl.value = String(prepaid);
     if (dueField) dueField.value = String(Math.max(total - prepaid, 0));
   }
-}
-
-  const totalCost = materialCost + laborCost + otherCost;
-  const profit = total - totalCost;
-  const due = Math.max(total - paid, 0);
-
-  const totalCostField = document.getElementById("total_cost");
-  const profitField = document.getElementById("profit");
-
-    if (profitField) {
-    profitField.value = profit;
-
-    if (profit > 0) {
-    profitField.style.color = "#22c55e"; // зелёный
-  } else if (profit < 0) {
-    profitField.style.color = "#ef4444"; // красный
-  } else {
-    profitField.style.color = "#fff";
-  }
-}
-  const dueField = document.getElementById("due");
-
-  if (totalCostField) totalCostField.value = String(totalCost);
-  if (profitField) profitField.value = String(profit);
-  if (dueField) dueField.value = String(due);
 }
 
 async function uploadOrderMediaIfNeeded() {
@@ -782,33 +724,33 @@ async function uploadOrderMediaIfNeeded() {
 }
 
 async function createOrder() {
-  const client_name = document.getElementById("client_name").value.trim() || null;
-  const car_model = document.getElementById("car_model").value.trim() || null;
+  const client_name = document.getElementById("client_name")?.value.trim() || null;
+  const car_model = document.getElementById("car_model")?.value.trim() || null;
 
-  const type = document.getElementById("order_type").value || "combined";
-  const status = document.getElementById("order_status").value || "new";
+  const type = document.getElementById("order_type")?.value || "combined";
+  const status = document.getElementById("order_status")?.value || "new";
 
-  const intake_date = document.getElementById("intake_date").value || null;
-  const start_date = document.getElementById("start_date").value || null;
-  const end_date = document.getElementById("end_date").value || null;
+  const intake_date = document.getElementById("intake_date")?.value || null;
+  const start_date = document.getElementById("start_date")?.value || null;
+  const end_date = document.getElementById("end_date")?.value || null;
 
-  const subtotal = asNumber(document.getElementById("subtotal").value, 0);
-  const discount = asNumber(document.getElementById("discount").value, 0);
-  const total = asNumber(document.getElementById("total").value, 0);
+  const subtotal = asNumber(document.getElementById("subtotal")?.value, 0);
+  const discount = asNumber(document.getElementById("discount")?.value, 0);
+  const total = asNumber(document.getElementById("total")?.value, 0);
 
-  const material_cost = asNumber(document.getElementById("material_cost").value, 0);
-  const labor_cost = asNumber(document.getElementById("labor_cost").value, 0);
-  const other_cost = asNumber(document.getElementById("other_cost").value, 0);
+  const material_cost = asNumber(document.getElementById("material_cost")?.value, 0);
+  const labor_cost = asNumber(document.getElementById("labor_cost")?.value, 0);
+  const other_cost = asNumber(document.getElementById("other_cost")?.value, 0);
 
-  const total_cost = asNumber(document.getElementById("total_cost").value, 0);
-  const profit = asNumber(document.getElementById("profit").value, 0);
+  const total_cost = asNumber(document.getElementById("total_cost")?.value, 0);
+  const profit = asNumber(document.getElementById("profit")?.value, 0);
 
-  const prepaid = asNumber(document.getElementById("prepaid").value, 0);
-  const paid = asNumber(document.getElementById("paid").value, 0);
-  const due = asNumber(document.getElementById("due").value, 0);
+  const prepaid = asNumber(document.getElementById("prepaid")?.value, 0);
+  const paid = asNumber(document.getElementById("paid")?.value, 0);
+  const due = asNumber(document.getElementById("due")?.value, 0);
 
-  const currency = document.getElementById("currency").value || "UAH";
-  const note = document.getElementById("order_note").value.trim() || null;
+  const currency = document.getElementById("currency")?.value || "UAH";
+  const note = document.getElementById("order_note")?.value.trim() || null;
 
   if (!client_name) {
     safeAlert("Укажи имя клиента");
@@ -1012,6 +954,7 @@ async function submitMaterialToOrder(order_id) {
 
 async function loadInventory() {
   const el = document.getElementById("inventory");
+  if (!el) return;
   el.innerHTML = `<div style="padding:16px;">Загрузка...</div>`;
 
   try {
@@ -1113,16 +1056,16 @@ function openCreateInventoryItem() {
 
 async function createInventoryItem() {
   const payload = {
-    category: document.getElementById("inv_category").value.trim(),
-    brand: document.getElementById("inv_brand").value.trim(),
-    name: document.getElementById("inv_name").value.trim(),
-    width_cm: Number(document.getElementById("inv_width").value) || null,
-    unit: document.getElementById("inv_unit").value.trim() || "m",
-    quantity: Number(document.getElementById("inv_quantity").value) || 0,
-    purchase_price: Number(document.getElementById("inv_purchase").value) || 0,
-    retail_price: Number(document.getElementById("inv_retail").value) || 0,
-    currency: document.getElementById("inv_currency").value || "UAH",
-    min_quantity: Number(document.getElementById("inv_min").value) || 0,
+    category: document.getElementById("inv_category")?.value.trim(),
+    brand: document.getElementById("inv_brand")?.value.trim(),
+    name: document.getElementById("inv_name")?.value.trim(),
+    width_cm: Number(document.getElementById("inv_width")?.value) || null,
+    unit: document.getElementById("inv_unit")?.value.trim() || "m",
+    quantity: Number(document.getElementById("inv_quantity")?.value) || 0,
+    purchase_price: Number(document.getElementById("inv_purchase")?.value) || 0,
+    retail_price: Number(document.getElementById("inv_retail")?.value) || 0,
+    currency: document.getElementById("inv_currency")?.value || "UAH",
+    min_quantity: Number(document.getElementById("inv_min")?.value) || 0,
   };
 
   if (!payload.category || !payload.name) {
@@ -1152,9 +1095,9 @@ function openAddStock() {
 }
 
 async function addStock() {
-  const item_id = document.getElementById("item_id").value.trim();
-  const qty = Number(document.getElementById("qty").value);
-  const purchase_price = Number(document.getElementById("purchase_price").value) || 0;
+  const item_id = document.getElementById("item_id")?.value.trim();
+  const qty = Number(document.getElementById("qty")?.value);
+  const purchase_price = Number(document.getElementById("purchase_price")?.value) || 0;
 
   if (!item_id) {
     safeAlert("Укажи ID товара");
@@ -1254,10 +1197,10 @@ function openCreateClient() {
 }
 
 async function createClient() {
-  const full_name = document.getElementById("client_form_name").value.trim();
-  const phone = document.getElementById("client_phone").value.trim();
-  const instagram = document.getElementById("client_instagram").value.trim();
-  const note = document.getElementById("client_note").value.trim();
+  const full_name = document.getElementById("client_form_name")?.value.trim();
+  const phone = document.getElementById("client_phone")?.value.trim();
+  const instagram = document.getElementById("client_instagram")?.value.trim();
+  const note = document.getElementById("client_note")?.value.trim();
 
   if (!full_name) {
     safeAlert("Укажи имя клиента");
@@ -1281,7 +1224,10 @@ async function createClient() {
 }
 
 function openModal(html) {
-  document.getElementById("modal").innerHTML = `
+  const modal = document.getElementById("modal");
+  if (!modal) return;
+
+  modal.innerHTML = `
     <div style="
       position:fixed;
       inset:0;
@@ -1318,6 +1264,7 @@ function closeModal() {
 
 async function loadFinance() {
   const el = document.getElementById("finance");
+  if (!el) return;
   el.innerHTML = `<div style="padding:16px;">Загрузка...</div>`;
 
   try {
@@ -1375,11 +1322,11 @@ function openCreateExpense() {
 }
 
 async function createExpense() {
-  const category = document.getElementById("exp_category").value.trim();
-  const amount = Number(document.getElementById("exp_amount").value);
-  const currency = document.getElementById("exp_currency").value || "UAH";
-  const supplier = document.getElementById("exp_supplier").value.trim();
-  const note = document.getElementById("exp_note").value.trim();
+  const category = document.getElementById("exp_category")?.value.trim();
+  const amount = Number(document.getElementById("exp_amount")?.value);
+  const currency = document.getElementById("exp_currency")?.value || "UAH";
+  const supplier = document.getElementById("exp_supplier")?.value.trim();
+  const note = document.getElementById("exp_note")?.value.trim();
 
   if (!category) {
     safeAlert("Укажи категорию");
@@ -1412,7 +1359,6 @@ async function createExpense() {
 window.showTab = showTab;
 window.openCreateOrder = openCreateOrder;
 window.createOrder = createOrder;
-window.showTab = showTab;
 window.setPaidPreset = setPaidPreset;
 window.openOrder = openOrder;
 window.addPayment = addPayment;
