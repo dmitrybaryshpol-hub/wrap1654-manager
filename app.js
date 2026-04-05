@@ -747,6 +747,21 @@ function recalcOrderForm() {
   }
 }
 
+async function handleDeleteOrder(orderId) {
+  const ok = confirm("Удалить этот заказ?");
+  if (!ok) return;
+
+  try {
+    await api("delete_order", { id: orderId });
+    state.orders = state.orders.filter(o => String(o.id) !== String(orderId));
+    renderOrders();
+    safeAlert("Заказ удалён");
+  } catch (err) {
+    console.error(err);
+    safeAlert("Ошибка удаления заказа");
+  }
+}
+
 async function uploadOrderMediaIfNeeded() {
   const input = document.getElementById("order_media");
   const file = input?.files?.[0];
