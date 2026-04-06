@@ -7,8 +7,13 @@ const state = {
   currentTab: "dashboard",
   fxRate: 0,
   fxUpdatedAt: null,
-};
 
+  orders: [],
+  clients: [],
+  inventory: [],
+
+  editingOrderId: null,
+};
 function escapeHtml(str = "") {
   return String(str)
     .replaceAll("&", "&amp;")
@@ -98,6 +103,44 @@ async function loadFxRate() {
     state.fxRate = 0;
     state.fxUpdatedAt = null;
   }
+}
+
+async function loadClientsToState() {
+  try {
+    const res = await api("get_clients");
+    state.clients = Array.isArray(res.items) ? res.items : [];
+  } catch (e) {
+    console.error("LOAD CLIENTS ERROR:", e);
+    state.clients = [];
+  }
+}
+
+function renderClientOptions(selectedId = "") {
+  const select = document.getElementById("client_id");
+  if (!select) return;
+
+  const clients = state.clients || [];
+
+  select.innerHTML = `
+    <option value="">Выберите клиента</option>
+    ${clients.map((client) => `
+      <option value="${client.id}" ${String(client.id) === String(selectedId) ? "selected" : ""}>
+        ${escapeHtml(client.full_name || "Без имени")}
+        ${client.phone ? " — " + escapeHtml(client.phone) : ""}
+      </option>
+    `).join("")}
+  `;
+}
+
+function syncSelectedClientToOrderForm() {
+  const select = document.getElementById("client_id");
+  const nameInput = document.getElementById("client_name");
+  if (!select || !nameInput) return;
+
+  const client = (state.clients || []).find(c => String(c.id) === String(select.value));
+  if (!client) return;
+
+  nameInput.value = client.full_name || "";
 }
 
 function card(html, extra = "") {
@@ -199,6 +242,7 @@ async function initApp() {
     }
 
     state.user = auth.user;
+    await loadClientsToState();
     await loadFxRate();
     renderLayout();
     showTab("dashboard");
@@ -309,7 +353,8 @@ async function loadOrders() {
   try {
     const res = await api("get_orders");
     const orders = res.items || [];
-
+    state.orders = orders;
+    
     el.innerHTML = `
       <div style="padding:16px;">
         <div style="display:flex; gap:8px; margin-bottom:14px;">
@@ -319,18 +364,37 @@ async function loadOrders() {
           ? orders.map((o) => `
               <div onclick="openOrder('${o.id}')" style="cursor:pointer;">
                 ${card(`
-                  <div style="font-weight:700;">${orderLabel(o)}</div>
-                  <div>${escapeHtml(o.status || "")}</div>
-                  <div>${formatMoney(o.total || 0)} ${currencySymbol(o.currency || "UAH")}</div>
-                  <div style="font-size:13px; opacity:0.7;">Клиент: ${escapeHtml(o.client_name || "—")}</div>
-                  <div style="font-size:13px; opacity:0.7;">Авто: ${escapeHtml(o.car_model || "—")}</div>
-                  <div style="font-size:13px; opacity:0.7;">
-                    Оплачено: ${formatMoney(o.paid || 0)} ${currencySymbol(o.currency || "UAH")}
-                    |
-                    Долг: ${formatMoney(o.due || 0)} ${currencySymbol(o.currency || "UAH")}
-                  </div>
-                `)}
-              </div>
+  <div style="font-weight:700;">${orderLabel(o)}</div>
+  <div>${escapeHtml(o.status || "")}</div>
+  <div>${formatMoney(o.total || 0)} ${currencySymbol(o.currency || "UAH")}</div>
+  <div style="font-size:13px; opacity:0.7;">Клиент: ${escapeHtml(o.client_name || "—")}</div>
+  <div style="font-size:13px; opacity:0.7;">Авто: ${escapeHtml(o.car_model || "—")}</div>
+  <div style="font-size:13px; opacity:0.7;">
+    Оплачено: ${formatMoney(o.paid || 0)} ${currencySymbol(o.currency || "UAH")}
+    |
+    Долг: ${formatMoney(o.due || 0)} ${currencySymbol(o.currency || "UAH")}
+  </div>
+
+  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+    <button onclick="event.stopPropagation(); startEditOrder('${o.id}')" style="
+      padding:10px 12px;
+      border-radius:10px;
+      border:1px solid #374151;
+      background:#1f2937;
+      color:#fff;
+      cursor:pointer;
+    ">Редактировать</button>
+
+    <button onclick="event.stopPropagation(); handleDeleteOrder('${o.id}')" style="
+      padding:10px 12px;
+      border-radius:10px;
+      border:1px solid rgba(239,68,68,.35);
+      background:rgba(239,68,68,.15);
+      color:#fecaca;
+      cursor:pointer;
+    ">Удалить</button>
+  </div>
+`)}              </div>
             `).join("")
           : card("Заказов пока нет")}
       </div>
@@ -405,10 +469,11 @@ async function openOrder(id) {
       ${renderOrderMedia(order)}
 
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
-        ${btn("+ Оплата", `addPayment('${id}')`)}
-        ${btn("+ Материал", `addMaterial('${id}')`)}
-      </div>
-
+  ${btn("+ Оплата", `addPayment('${id}')`)}
+  ${btn("+ Материал", `addMaterial('${id}')`)}
+  ${btn("Редактировать", `closeModal(); startEditOrder('${id}')`)}
+  ${btn("Удалить", `handleDeleteOrder('${id}')`, "background:rgba(239,68,68,.15); color:#fecaca; border-color:rgba(239,68,68,.35);")}
+</div>
       <hr style="border-color:#1f2937;">
       <h4>Материалы</h4>
       <div style="max-height:220px; overflow:auto;">${materialsHtml}</div>
@@ -446,12 +511,19 @@ function syncSelectedClientToOrderForm() {
   nameInput.value = client.name || "";
 }
 
-function openCreateOrder() {
+function openCreateOrder(order = null) {
+  const isEdit = !!order;
+
   openModal(`
-    <h3 style="margin-top:0;">Новый заказ</h3>
+    <h3 style="margin-top:0;">${isEdit ? "Редактировать заказ" : "Новый заказ"}</h3>
 
     <div style="margin-bottom:14px;">
       <div style="opacity:.6; font-size:12px; margin-bottom:6px;">Клиент</div>
+
+      <select id="client_id" style="width:100%; margin-bottom:8px;">
+        <option value="">Выберите клиента</option>
+      </select>
+
       <input id="client_name" placeholder="Имя клиента" style="width:100%; margin-bottom:8px;">
       <input id="car_model" placeholder="Модель авто" style="width:100%;">
     </div>
@@ -600,35 +672,65 @@ function openCreateOrder() {
 
     <textarea id="order_note" placeholder="Комментарий" style="width:100%; min-height:80px; margin-bottom:12px;"></textarea>
 
-    ${btn("Создать заказ", "createOrder()", "width:100%; background:#2563eb;")}
+    ${btn(isEdit ? "Сохранить изменения" : "Создать заказ", "createOrder()", "width:100%; background:#2563eb;")}
   `);
+
+  renderClientOptions(order?.client_id || "");
+
+  const clientSelect = document.getElementById("client_id");
+  if (clientSelect) {
+    clientSelect.addEventListener("change", syncSelectedClientToOrderForm);
+  }
 
   bindOrderFormRecalc();
   bindOrderMediaPreview();
+
+  if (order) {
+    document.getElementById("client_name").value = order.client_name || "";
+    document.getElementById("car_model").value = order.car_model || "";
+    document.getElementById("order_type").value = order.type || "combined";
+    document.getElementById("order_status").value = order.status || "new";
+    document.getElementById("intake_date").value = order.intake_date || "";
+    document.getElementById("start_date").value = order.start_date || "";
+    document.getElementById("end_date").value = order.end_date || "";
+    document.getElementById("subtotal").value = String(order.subtotal ?? 0);
+    document.getElementById("discount").value = String(order.discount ?? 0);
+    document.getElementById("total").value = String(order.total ?? 0);
+    document.getElementById("material_cost").value = String(order.material_cost ?? 0);
+    document.getElementById("labor_cost").value = String(order.labor_cost ?? 0);
+    document.getElementById("other_cost").value = String(order.other_cost ?? 0);
+    document.getElementById("prepaid").value = String(order.prepaid ?? 0);
+    document.getElementById("paid").value = String(order.paid ?? 0);
+    document.getElementById("currency").value = order.currency || "UAH";
+    document.getElementById("order_note").value = order.note || "";
+
+    if (order.media_url) {
+      const root = document.getElementById("order_media_preview");
+      if (root) {
+        const url = String(order.media_url);
+        if (/\.(jpg|jpeg|png|webp|gif)$/i.test(url)) {
+          root.innerHTML = `<img src="${escapeHtml(url)}" style="width:100%; border-radius:12px; border:1px solid #1f2937;">`;
+        } else if (/\.(mp4|webm|mov|m4v)$/i.test(url)) {
+          root.innerHTML = `<video src="${escapeHtml(url)}" controls style="width:100%; border-radius:12px; border:1px solid #1f2937;"></video>`;
+        } else {
+          root.innerHTML = `<a href="${escapeHtml(url)}" target="_blank" style="color:#93c5fd;">Открыть текущее медиа</a>`;
+        }
+      }
+    }
+  }
+
   recalcOrderForm();
 }
 
 function startEditOrder(orderId) {
-  const order = state.orders.find(o => String(o.id) === String(orderId));
-  if (!order) return;
+  const order = (state.orders || []).find(o => String(o.id) === String(orderId));
+  if (!order) {
+    safeAlert("Заказ не найден");
+    return;
+  }
 
   state.editingOrderId = order.id;
-
-  document.getElementById("orderClientId").value = order.client_id || "";
-  document.getElementById("orderCarModel").value = order.car_model || "";
-  document.getElementById("orderAmount").value = order.amount || "";
-  document.getElementById("orderCost").value = order.cost || "";
-  document.getElementById("orderStartDate").value = order.start_date || "";
-  document.getElementById("orderEndDate").value = order.end_date || "";
-  document.getElementById("orderStatus").value = order.status || "new";
-  document.getElementById("orderServices").value = order.services || "";
-  document.getElementById("orderFilmUsed").value = order.film_used || "";
-  document.getElementById("orderFilmAmount").value = order.film_amount || "";
-
-  const submitBtn = document.getElementById("orderSubmitBtn");
-  if (submitBtn) submitBtn.textContent = "Сохранить изменения";
-
-  openOrderModal?.();
+  openCreateOrder(order);
 }
 
 function setPaidPreset(percent) {
@@ -790,6 +892,7 @@ async function uploadOrderMediaIfNeeded() {
 }
 
 async function createOrder() {
+  const client_id = document.getElementById("client_id")?.value || null;
   const client_name = document.getElementById("client_name")?.value.trim() || null;
   const car_model = document.getElementById("car_model")?.value.trim() || null;
 
@@ -836,13 +939,22 @@ async function createOrder() {
   try {
     let media_url = null;
 
+    const existingOrder = state.editingOrderId
+      ? (state.orders || []).find(o => String(o.id) === String(state.editingOrderId))
+      : null;
+
     try {
       media_url = await uploadOrderMediaIfNeeded();
     } catch (e) {
       console.warn("Media upload skipped:", e?.message || e);
     }
 
-    await api("create_order", {
+    if (!media_url && existingOrder?.media_url) {
+      media_url = existingOrder.media_url;
+    }
+
+    const payload = {
+      client_id,
       client_name,
       car_model,
       type,
@@ -864,19 +976,31 @@ async function createOrder() {
       currency,
       note,
       media_url,
-    });
+    };
 
+    if (state.editingOrderId) {
+      await api("update_order", {
+        id: state.editingOrderId,
+        ...payload,
+      });
+
+      safeAlert("Заказ обновлён");
+    } else {
+      await api("create_order", payload);
+      safeAlert("Заказ создан");
+    }
+
+    state.editingOrderId = null;
     closeModal();
+    await loadClientsToState();
     loadOrders();
     loadDashboard();
     loadFinance();
-    safeAlert("Заказ создан");
   } catch (e) {
     console.error(e);
-    safeAlert(e.message || "Ошибка создания заказа");
+    safeAlert(e.message || "Ошибка сохранения заказа");
   }
 }
-
 async function addPayment(order_id) {
   const amount = prompt("Сумма");
   if (!amount) return;
