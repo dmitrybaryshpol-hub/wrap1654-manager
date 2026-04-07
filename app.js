@@ -36,7 +36,7 @@ function formatMoney(value) {
 }
 
 function currencySymbol(cur) {
-  return cur === "USD" ? "$" : "₴";
+  return cur "$" :
 }
 
 function safeAlert(text) {
@@ -95,7 +95,7 @@ async function api(action, data = {}) {
 
 async function loadFxRate() {
   try {
-    const res = await api("get_fx_rate", { base: "UAH", quote: "USD" });
+    const res = await api("get_fx_rate", { base: "USD", quote: "USD" });
     state.fxRate = asNumber(res.rate, 0);
     state.fxUpdatedAt = res.updated_at || null;
   } catch (e) {
@@ -311,7 +311,7 @@ async function loadDashboard() {
                 ${card(`
                   <div style="font-weight:700;">${orderLabel(o)}</div>
                   <div style="font-size:14px; opacity:0.8;">Статус: ${escapeHtml(o.status || "")}</div>
-                  <div style="font-size:14px; opacity:0.8;">Сумма: ${formatMoney(o.total || 0)} ${currencySymbol(o.currency || "UAH")}</div>
+                  <div style="font-size:14px; opacity:0.8;">Сумма: ${formatMoney(o.total || 0)} ${currencySymbol(o.currency || "USD")}</div>
                 `)}
               </div>
             `).join("")
@@ -322,7 +322,7 @@ async function loadDashboard() {
           ? data.debts.map((d) => `
               ${card(`
                 <div style="font-weight:700;">${orderLabel(d)}</div>
-                <div>Долг: ${formatMoney(d.due || 0)} ${currencySymbol(d.currency || "UAH")}</div>
+                <div>Долг: ${formatMoney(d.due || 0)} ${currencySymbol(d.currency || "USD")}</div>
               `)}
             `).join("")
           : card("Долгов нет")}
@@ -366,13 +366,13 @@ async function loadOrders() {
                 ${card(`
   <div style="font-weight:700;">${orderLabel(o)}</div>
   <div>${escapeHtml(o.status || "")}</div>
-  <div>${formatMoney(o.total || 0)} ${currencySymbol(o.currency || "UAH")}</div>
+  <div>${formatMoney(o.total || 0)} ${currencySymbol(o.currency || "USD")}</div>
   <div style="font-size:13px; opacity:0.7;">Клиент: ${escapeHtml(o.client_name || "—")}</div>
   <div style="font-size:13px; opacity:0.7;">Авто: ${escapeHtml(o.car_model || "—")}</div>
   <div style="font-size:13px; opacity:0.7;">
-    Оплачено: ${formatMoney(o.paid || 0)} ${currencySymbol(o.currency || "UAH")}
+    Оплачено: ${formatMoney(o.paid || 0)} ${currencySymbol(o.currency || "USD")}
     |
-    Долг: ${formatMoney(o.due || 0)} ${currencySymbol(o.currency || "UAH")}
+    Долг: ${formatMoney(o.due || 0)} ${currencySymbol(o.currency || "USD")}
   </div>
 
   <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
@@ -448,7 +448,7 @@ async function openOrder(id) {
           <div style="font-size:13px; opacity:0.8;">
             Кол-во: ${formatMoney(m.quantity)} ${escapeHtml(m.unit || "")}
             |
-            Себестоимость: ${formatMoney(m.total_cost || 0)} ${currencySymbol(m.currency || order.currency || "UAH")}
+            Себестоимость: ${formatMoney(m.total_cost || 0)} ${currencySymbol(m.currency || order.currency || "USD")}
           </div>
         </div>
       `).join("");
@@ -459,12 +459,12 @@ async function openOrder(id) {
       <p>Статус: ${escapeHtml(order.status || "")}</p>
       <p>Клиент: ${escapeHtml(order.client_name || "—")}</p>
       <p>Авто: ${escapeHtml(order.car_model || "—")}</p>
-      <p>Сумма: ${formatMoney(order.total || 0)} ${currencySymbol(order.currency || "UAH")}</p>
-      <p>Материалы: ${formatMoney(order.material_cost || 0)} ${currencySymbol(order.currency || "UAH")}</p>
-      <p>Себестоимость: ${formatMoney(order.total_cost || 0)} ${currencySymbol(order.currency || "UAH")}</p>
-      <p>Прибыль: ${formatMoney(order.profit || 0)} ${currencySymbol(order.currency || "UAH")}</p>
-      <p>Оплачено: ${formatMoney(order.paid || 0)} ${currencySymbol(order.currency || "UAH")}</p>
-      <p>Долг: ${formatMoney(order.due || 0)} ${currencySymbol(order.currency || "UAH")}</p>
+      <p>Сумма: ${formatMoney(order.total || 0)} ${currencySymbol(order.currency || "USD")}</p>
+      <p>Материалы: ${formatMoney(order.material_cost || 0)} ${currencySymbol(order.currency || "USD")}</p>
+      <p>Себестоимость: ${formatMoney(order.total_cost || 0)} ${currencySymbol(order.currency || "USD")}</p>
+      <p>Прибыль: ${formatMoney(order.profit || 0)} ${currencySymbol(order.currency || "USD")}</p>
+      <p>Оплачено: ${formatMoney(order.paid || 0)} ${currencySymbol(order.currency || "USD")}</p>
+      <p>Долг: ${formatMoney(order.due || 0)} ${currencySymbol(order.currency || "USD")}</p>
 
       ${renderOrderGallery(order)}
 
@@ -679,7 +679,7 @@ function openCreateOrder(order = null) {
     <div style="margin-bottom:14px;">
       <label style="font-size:12px; opacity:.6;">Валюта</label>
       <select id="currency" style="width:100%;">
-        <option value="UAH">UAH ₴</option>
+        <option value="USD">USD ₴</option>
         <option value="USD">USD $</option>
       </select>
     </div>
@@ -721,7 +721,7 @@ function openCreateOrder(order = null) {
     document.getElementById("other_cost").value = String(order.other_cost ?? 0);
     document.getElementById("prepaid").value = String(order.prepaid ?? 0);
     document.getElementById("paid").value = String(order.paid ?? 0);
-    document.getElementById("currency").value = order.currency || "UAH";
+    document.getElementById("currency").value = order.currency || "USD";
     document.getElementById("order_note").value = order.note || "";
 
     if (order.media_url) {
@@ -972,7 +972,7 @@ async function createOrder() {
   const paid = asNumber(document.getElementById("paid")?.value, 0);
   const due = asNumber(document.getElementById("due")?.value, 0);
 
-  const currency = document.getElementById("currency")?.value || "UAH";
+  const currency = document.getElementById("currency")?.value || "USD";
   const note = document.getElementById("order_note")?.value.trim() || null;
 
   if (!client_name) {
@@ -1076,7 +1076,7 @@ async function addPayment(order_id) {
     await api("add_payment", {
       order_id,
       amount: Number(amount),
-      currency: order.currency || "UAH",
+      currency: order.currency || "USD",
     });
 
     safeAlert("Оплата добавлена");
@@ -1142,7 +1142,7 @@ async function addMaterial(order_id) {
               Остаток: ${formatMoney(i.quantity)}
               | Резерв: ${formatMoney(i.reserved_quantity || 0)}
               | Доступно: ${formatMoney(i.available_quantity ?? i.quantity)}
-              | Цена: ${formatMoney(i.purchase_price || 0)} ${currencySymbol(i.currency || "UAH")}
+              | Цена: ${formatMoney(i.purchase_price || 0)} ${currencySymbol(i.currency || "USD")}
             </span>
           </div>
         `).join("")}
@@ -1263,8 +1263,8 @@ async function loadInventory() {
                   <div style="font-size:13px; opacity:0.85;">Резерв: ${formatMoney(i.reserved_quantity || 0)}</div>
                   <div style="font-size:13px; opacity:0.85;">Доступно: ${formatMoney(i.available_quantity ?? i.quantity)}</div>
                   <div style="font-size:13px; opacity:0.85;">Мин. остаток: ${formatMoney(i.min_quantity || 0)}</div>
-                  <div style="font-size:13px; opacity:0.85;">Вход: ${formatMoney(i.purchase_price || 0)} ${currencySymbol(i.currency || "UAH")}</div>
-                  <div style="font-size:13px; opacity:0.85;">Розница: ${formatMoney(i.retail_price || 0)} ${currencySymbol(i.currency || "UAH")}</div>
+                  <div style="font-size:13px; opacity:0.85;">Вход: ${formatMoney(i.purchase_price || 0)} ${currencySymbol(i.currency || "USD")}</div>
+                  <div style="font-size:13px; opacity:0.85;">Розница: ${formatMoney(i.retail_price || 0)} ${currencySymbol(i.currency || "USD")}</div>
                 `)}
               </div>
             `).join("")
@@ -1291,8 +1291,8 @@ async function openItem(id) {
       <p>Резерв: ${formatMoney(item.reserved_quantity || 0)}</p>
       <p>Доступно: ${formatMoney(item.available_quantity ?? item.quantity)}</p>
       <p>Мин. остаток: ${formatMoney(item.min_quantity || 0)}</p>
-      <p>Вход: ${formatMoney(item.purchase_price || 0)} ${currencySymbol(item.currency || "UAH")}</p>
-      <p>Розница: ${formatMoney(item.retail_price || 0)} ${currencySymbol(item.currency || "UAH")}</p>
+      <p>Вход: ${formatMoney(item.purchase_price || 0)} ${currencySymbol(item.currency || "USD")}</p>
+      <p>Розница: ${formatMoney(item.retail_price || 0)} ${currencySymbol(item.currency || "USD")}</p>
 
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
         ${btn("🔒 Резерв", `reserveItem('${id}')`)}
@@ -1332,7 +1332,7 @@ function openCreateInventoryItem() {
     <input id="inv_purchase" placeholder="Входная цена" type="number" step="0.01" style="width:100%; margin-bottom:8px;">
     <input id="inv_retail" placeholder="Розничная цена" type="number" step="0.01" style="width:100%; margin-bottom:8px;">
     <select id="inv_currency" style="width:100%; margin-bottom:8px;">
-      <option value="UAH">UAH ₴</option>
+      <option value="USD">USD ₴</option>
       <option value="USD">USD $</option>
     </select>
     <input id="inv_min" placeholder="Мин. остаток" type="number" step="0.1" style="width:100%; margin-bottom:8px;">
@@ -1350,7 +1350,7 @@ async function createInventoryItem() {
     quantity: Number(document.getElementById("inv_quantity")?.value) || 0,
     purchase_price: Number(document.getElementById("inv_purchase")?.value) || 0,
     retail_price: Number(document.getElementById("inv_retail")?.value) || 0,
-    currency: document.getElementById("inv_currency")?.value || "UAH",
+    currency: document.getElementById("inv_currency")?.value || "USD",
     min_quantity: Number(document.getElementById("inv_min")?.value) || 0,
   };
 
@@ -1579,7 +1579,7 @@ async function loadFinance() {
           ? expenses.map((x) => `
               ${card(`
                 <div style="font-weight:700;">${escapeHtml(x.category || "")}</div>
-                <div>${formatMoney(x.amount || 0)} ${currencySymbol(x.currency || "UAH")}</div>
+                <div>${formatMoney(x.amount || 0)} ${currencySymbol(x.currency || "USD")}</div>
                 <div style="font-size:12px; opacity:0.7;">${escapeHtml(x.note || "")}</div>
               `)}
             `).join("")
@@ -1598,7 +1598,7 @@ function openCreateExpense() {
     <input id="exp_category" placeholder="Категория" style="width:100%; margin-bottom:10px;">
     <input id="exp_amount" placeholder="Сумма" type="number" step="0.01" style="width:100%; margin-bottom:10px;">
     <select id="exp_currency" style="width:100%; margin-bottom:10px;">
-      <option value="UAH">UAH ₴</option>
+      <option value="USD">USD ₴</option>
       <option value="USD">USD $</option>
     </select>
     <input id="exp_supplier" placeholder="Поставщик" style="width:100%; margin-bottom:10px;">
@@ -1610,7 +1610,7 @@ function openCreateExpense() {
 async function createExpense() {
   const category = document.getElementById("exp_category")?.value.trim();
   const amount = Number(document.getElementById("exp_amount")?.value);
-  const currency = document.getElementById("exp_currency")?.value || "UAH";
+  const currency = document.getElementById("exp_currency")?.value || "USD";
   const supplier = document.getElementById("exp_supplier")?.value.trim();
   const note = document.getElementById("exp_note")?.value.trim();
 
