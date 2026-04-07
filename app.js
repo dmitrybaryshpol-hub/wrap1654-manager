@@ -466,7 +466,7 @@ async function openOrder(id) {
       <p>Оплачено: ${formatMoney(order.paid || 0)} ${currencySymbol(order.currency || "UAH")}</p>
       <p>Долг: ${formatMoney(order.due || 0)} ${currencySymbol(order.currency || "UAH")}</p>
 
-      ${renderOrderMedia(order)}
+      ${renderOrderGallery(order)}
 
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
   ${btn("+ Оплата", `addPayment('${id}')`)}
@@ -478,7 +478,27 @@ async function openOrder(id) {
       <h4>Материалы</h4>
       <div style="max-height:220px; overflow:auto;">${materialsHtml}</div>
     `);
-  } catch (e) {
+  } 
+    function renderOrderGallery(order) {
+  const urls = Array.isArray(order?.media_urls)
+    ? order.media_urls
+    : (order?.media_url ? [order.media_url] : []);
+
+  if (!urls.length) return "";
+
+  return `
+    <div style="margin:12px 0; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+      ${urls.map((url) => {
+        const safe = escapeHtml(String(url));
+        const isVideo = /\.(mp4|webm|mov|m4v)$/i.test(String(url));
+        return isVideo
+          ? `<video src="${safe}" controls style="width:100%; border-radius:12px; border:1px solid #1f2937;"></video>`
+          : `<img src="${safe}" style="width:100%; border-radius:12px; border:1px solid #1f2937;">`;
+      }).join("")}
+    </div>
+  `;
+}
+  catch (e) {
     console.error(e);
   }
 }
@@ -666,7 +686,7 @@ function openCreateOrder(order = null) {
 
     <div style="margin-bottom:14px;">
       <label style="font-size:12px; opacity:.6;">Фото / видео</label>
-      <input id="order_media" type="file" accept="image/*,video/*" style="width:100%;">
+      <input id="order_media" type="file" accept="image/*,video/*" multiple style="width:100%;">
       <div id="order_media_preview" style="margin-top:8px;"></div>
     </div>
 
@@ -683,8 +703,8 @@ function openCreateOrder(order = null) {
   }
 
   bindOrderFormRecalc();
-  bindOrderMediaPreview();
-
+  bindOrderMediaPreview(Array.isArray(order?.media_urls) ? order.media_urls : (order?.media_url ? [order.media_url] : []));
+  
   if (order) {
     document.getElementById("client_name").value = order.client_name || "";
     document.getElementById("car_model").value = order.car_model || "";
@@ -765,36 +785,63 @@ function bindOrderFormRecalc() {
   });
 }
 
-function bindOrderMediaPreview() {
+function bindOrderMediaPreview(existingUrls = []) {
   const input = document.getElementById("order_media");
-  if (!input) return;
+  const root = document.getElementById("order_media_preview");
+  if (!root) return;
 
-  input.addEventListener("change", () => {
-    const file = input.files?.[0];
-    const root = document.getElementById("order_media_preview");
-    if (!root) return;
-
-    if (!file) {
+  function renderUrls(urls = []) {
+    if (!urls.length) {
       root.innerHTML = "";
       return;
     }
 
-    const url = URL.createObjectURL(file);
+    root.innerHTML = `
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        ${urls.map((url) => {
+          const safe = escapeHtml(url);
+          const isVideo = /\.(mp4|webm|mov|m4v)$/i.test(url);
+          return isVideo
+            ? `<video src="${safe}" controls style="width:100%; border-radius:12px; border:1px solid #1f2937;"></video>`
+            : `<img src="${safe}" style="width:100%; border-radius:12px; border:1px solid #1f2937;">`;
+        }).join("")}
+      </div>
+    `;
+  }
 
-    if (file.type.startsWith("image/")) {
-      root.innerHTML = `<img src="${url}" style="width:100%; border-radius:12px; border:1px solid #1f2937;">`;
+  if (existingUrls.length) {
+    renderUrls(existingUrls);
+  } else {
+    root.innerHTML = "";
+  }
+
+  if (!input) return;
+
+  input.addEventListener("change", () => {
+    const files = Array.from(input.files || []);
+    if (!files.length) {
+      renderUrls(existingUrls);
       return;
     }
 
-    if (file.type.startsWith("video/")) {
-      root.innerHTML = `<video src="${url}" controls style="width:100%; border-radius:12px; border:1px solid #1f2937;"></video>`;
-      return;
-    }
+    const urls = files.map((file) => URL.createObjectURL(file));
 
-    root.innerHTML = `<div style="opacity:.7;">Выбран файл: ${escapeHtml(file.name)}</div>`;
+    root.innerHTML = `
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        ${files.map((file, index) => {
+          const url = urls[index];
+          if (file.type.startsWith("image/")) {
+            return `<img src="${url}" style="width:100%; border-radius:12px; border:1px solid #1f2937;">`;
+          }
+          if (file.type.startsWith("video/")) {
+            return `<video src="${url}" controls style="width:100%; border-radius:12px; border:1px solid #1f2937;"></video>`;
+          }
+          return `<div style="opacity:.7; padding:10px; border:1px solid #1f2937; border-radius:12px;">${escapeHtml(file.name)}</div>`;
+        }).join("")}
+      </div>
+    `;
   });
 }
-
 function recalcOrderForm() {
   const subtotalEl = document.getElementById("subtotal");
   const discountEl = document.getElementById("discount");
@@ -866,29 +913,36 @@ async function handleDeleteOrder(orderId) {
 
 async function uploadOrderMediaIfNeeded() {
   const input = document.getElementById("order_media");
-  const file = input?.files?.[0];
-  if (!file) return null;
+  const files = Array.from(input?.files || []);
+  if (!files.length) return [];
 
-  const base64 = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
+  const uploadedUrls = [];
 
-    reader.onload = () => {
-      const result = String(reader.result || "");
-      const base64Data = result.includes(",") ? result.split(",")[1] : result;
-      resolve(base64Data);
-    };
+  for (const file of files) {
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
 
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+      reader.onload = () => {
+        const result = String(reader.result || "");
+        const base64Data = result.includes(",") ? result.split(",")[1] : result;
+        resolve(base64Data);
+      };
 
-  const res = await api("upload_order_media", {
-    filename: file.name,
-    content_type: file.type || "application/octet-stream",
-    file_base64: base64,
-  });
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
 
-  return res.public_url || res.url || null;
+    const res = await api("upload_order_media", {
+      filename: file.name,
+      content_type: file.type || "application/octet-stream",
+      file_base64: base64,
+    });
+
+    const url = res.public_url || res.url || null;
+    if (url) uploadedUrls.push(url);
+  }
+
+  return uploadedUrls;
 }
 
 async function createOrder() {
@@ -943,10 +997,20 @@ async function createOrder() {
       ? (state.orders || []).find(o => String(o.id) === String(state.editingOrderId))
       : null;
 
+    let media_urls = [];
+
+    const existingOrder = state.editingOrderId
+    ? (state.orders || []).find(o => String(o.id) === String(state.editingOrderId))
+    : null;
+
     try {
-      media_url = await uploadOrderMediaIfNeeded();
+    media_urls = await uploadOrderMediaIfNeeded();
     } catch (e) {
-      console.warn("Media upload skipped:", e?.message || e);
+    console.warn("Media upload skipped:", e?.message || e);
+    }
+
+    if (!media_urls.length && Array.isArray(existingOrder?.media_urls)) {
+    media_urls = existingOrder.media_urls;
     }
 
     if (!media_url && existingOrder?.media_url) {
@@ -975,7 +1039,7 @@ async function createOrder() {
       due,
       currency,
       note,
-      media_url,
+      media_urls, media_url: media_urls[0] || null,
     };
 
     if (state.editingOrderId) {
