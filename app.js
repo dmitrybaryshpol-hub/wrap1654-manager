@@ -246,12 +246,15 @@ async function initApp() {
 
     state.user = auth.user;
     await loadClientsToState();
-    await loadFxRate();
+    // await loadFxRate();
     renderLayout();
     showTab("dashboard");
   } catch (e) {
     console.error("INIT ERROR:", e);
-    renderBlockedScreen("Ошибка авторизации", "У вас нет доступа");
+    renderBlockedScreen(
+      "Ошибка авторизации",
+      e instanceof Error ? e.message : "Unknown error"
+    );
   }
 }
 
