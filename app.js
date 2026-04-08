@@ -13,6 +13,7 @@ const state = {
   inventory: [],
 
   editingOrderId: null,
+  orderServices: [],
 };
 function escapeHtml(str = "") {
   return String(str)
@@ -169,6 +170,138 @@ function orderLabel(order) {
   );
 }
 
+const SERVICES_MARKER = "[services]";
+
+function normalizeServiceName(value = "") {
+  return String(value || "").trim().replace(/\s+/g, " ");
+}
+
+function parseServicesFromNote(note = "") {
+  const source = String(note || "");
+  const lines = source.split("\n");
+  const markerIndex = lines.findIndex((line) => line.trim().toLowerCase() === SERVICES_MARKER);
+
+  if (markerIndex === -1) {
+    return { services: [], cleanNote: source.trim() };
+  }
+
+  const bodyLines = lines.slice(markerIndex + 1);
+  const services = bodyLines
+    .map((line) => line.replace(/^[-•*]\s*/, ""))
+    .map(normalizeServiceName)
+    .filter(Boolean);
+
+  const cleanNote = lines.slice(0, markerIndex).join("\n").trim();
+  return { services, cleanNote };
+}
+
+function composeNoteWithServices(note = "", services = []) {
+  const cleanNote = String(note || "").trim();
+  const normalizedServices = (services || [])
+    .map(normalizeServiceName)
+    .filter(Boolean);
+
+  if (!normalizedServices.length) return cleanNote || null;
+
+  const servicesBlock = [
+    SERVICES_MARKER,
+    ...normalizedServices.map((service) => `- ${service}`),
+  ].join("\n");
+
+  return cleanNote ? `${cleanNote}\n\n${servicesBlock}` : servicesBlock;
+}
+
+function collectServiceSuggestions() {
+  const all = new Set();
+  (state.orders || []).forEach((order) => {
+    const parsed = parseServicesFromNote(order?.note || "");
+    parsed.services.forEach((service) => all.add(service));
+  });
+  return Array.from(all).sort((a, b) => a.localeCompare(b, "uk"));
+}
+
+async function ensureOrdersLoadedForSuggestions() {
+  if ((state.orders || []).length) return;
+  try {
+    const res = await api("get_orders");
+    state.orders = Array.isArray(res.items) ? res.items : [];
+  } catch (e) {
+    console.warn("Could not pre-load orders for service suggestions:", e?.message || e);
+  }
+}
+
+function renderServicesList() {
+  const listRoot = document.getElementById("services_list");
+  if (!listRoot) return;
+
+  const services = Array.isArray(state.orderServices) ? state.orderServices : [];
+  if (!services.length) {
+    listRoot.innerHTML = `<div style="opacity:.6; font-size:13px;">Добавьте хотя бы одну услугу</div>`;
+    return;
+  }
+
+  listRoot.innerHTML = services.map((service, index) => `
+    <div style="
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      padding:8px 10px;
+      border:1px solid #1f2937;
+      border-radius:10px;
+      margin-bottom:8px;
+      background:#0b1120;
+    ">
+      <div style="font-size:14px;">${escapeHtml(service)}</div>
+      <button
+        onclick="removeOrderService(${index})"
+        style="padding:6px 8px; border-radius:8px; border:1px solid rgba(239,68,68,.35); background:rgba(239,68,68,.15); color:#fecaca;"
+      >Удалить</button>
+    </div>
+  `).join("");
+}
+
+function addOrderService() {
+  const input = document.getElementById("service_input");
+  if (!input) return;
+
+  const value = normalizeServiceName(input.value);
+  if (!value) return;
+
+  const hasSame = (state.orderServices || []).some((s) => s.toLowerCase() === value.toLowerCase());
+  if (!hasSame) {
+    state.orderServices = [...(state.orderServices || []), value];
+    renderServicesList();
+  }
+  input.value = "";
+}
+
+function removeOrderService(index) {
+  state.orderServices = (state.orderServices || []).filter((_, i) => i !== Number(index));
+  renderServicesList();
+}
+
+function bindServicesEditor(initialServices = []) {
+  state.orderServices = Array.isArray(initialServices)
+    ? initialServices.map(normalizeServiceName).filter(Boolean)
+    : [];
+
+  renderServicesList();
+
+  const input = document.getElementById("service_input");
+  const addBtn = document.getElementById("service_add_btn");
+
+  if (addBtn) addBtn.addEventListener("click", addOrderService);
+  if (input) {
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        addOrderService();
+      }
+    });
+  }
+}
+
 function renderLayout() {
   document.body.innerHTML = `
     <div id="app-shell" style="
@@ -283,7 +416,6 @@ async function loadDashboard() {
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
           ${btn("+ Заказ", "openCreateOrder()")}
           ${btn("+ Клиент", "openCreateClient()")}
-          ${btn("+ Расход", "openCreateExpense()")}
         </div>
 
         <h3 style="margin:12px 0;">📦 Активные заказы</h3>
@@ -475,8 +607,11 @@ async function openOrder(id) {
   }
 }
 
-function openCreateOrder(order = null) {
+async function openCreateOrder(order = null) {
   const isEdit = !!order;
+  await ensureOrdersLoadedForSuggestions();
+  const serviceSuggestions = collectServiceSuggestions();
+  const parsedNote = parseServicesFromNote(order?.note || "");
 
   openModal(`
     <h3 style="margin-top:0;">${isEdit ? "Редактировать заказ" : "Новый заказ"}</h3>
@@ -533,71 +668,101 @@ function openCreateOrder(order = null) {
       margin-bottom:14px;
       border:1px solid #1f2937;
     ">
-      <div style="font-weight:600; margin-bottom:10px;">💰 Доход</div>
+      <div style="font-weight:600; margin-bottom:10px;">🧰 Услуги</div>
 
-      <label style="font-size:12px; opacity:.6;">Subtotal</label>
-      <input id="subtotal" type="number" value="0" style="width:100%; margin-bottom:8px;">
+      <div style="display:flex; gap:8px; margin-bottom:8px;">
+        <input id="service_input" list="service_suggestions" placeholder="Например: Полная оклейка" style="width:100%;">
+        <button id="service_add_btn" style="padding:10px 12px; border-radius:10px; border:1px solid #374151; background:#1f2937; color:#fff;">Добавить</button>
+      </div>
+      <datalist id="service_suggestions">
+        ${serviceSuggestions.map((item) => `<option value="${escapeHtml(item)}"></option>`).join("")}
+      </datalist>
 
-      <label style="font-size:12px; opacity:.6;">Скидка</label>
-      <input id="discount" type="number" value="0" style="width:100%; margin-bottom:8px;">
-
-      <label style="font-size:12px; opacity:.6;">Итог</label>
-      <input id="total" type="number" value="0" style="width:100%;">
+      <div id="services_list"></div>
     </div>
 
-    <div style="
-      background:#020617;
-      padding:12px;
-      border-radius:12px;
-      margin-bottom:14px;
-      border:1px solid #1f2937;
-    ">
-      <div style="font-weight:600; margin-bottom:10px;">🧾 Себестоимость</div>
+    ${isEdit ? `
+      <div style="
+        background:#020617;
+        padding:12px;
+        border-radius:12px;
+        margin-bottom:14px;
+        border:1px solid #1f2937;
+      ">
+        <div style="font-weight:600; margin-bottom:10px;">💰 Доход</div>
 
-      <label style="font-size:12px; opacity:.6;">Материалы</label>
-      <input id="material_cost" type="number" value="0" style="width:100%; margin-bottom:8px;">
+        <label style="font-size:12px; opacity:.6;">Subtotal</label>
+        <input id="subtotal" type="number" value="0" style="width:100%; margin-bottom:8px;">
 
-      <label style="font-size:12px; opacity:.6;">Работа</label>
-      <input id="labor_cost" type="number" value="0" style="width:100%; margin-bottom:8px;">
+        <label style="font-size:12px; opacity:.6;">Скидка</label>
+        <input id="discount" type="number" value="0" style="width:100%; margin-bottom:8px;">
+      </div>
 
-      <label style="font-size:12px; opacity:.6;">Прочее</label>
-      <input id="other_cost" type="number" value="0" style="width:100%; margin-bottom:8px;">
-    </div>
+      <div style="
+        background:#020617;
+        padding:12px;
+        border-radius:12px;
+        margin-bottom:14px;
+        border:1px solid #1f2937;
+      ">
+        <div style="font-weight:600; margin-bottom:10px;">🧾 Себестоимость</div>
 
-    <div style="
-      background:#020617;
-      padding:12px;
-      border-radius:12px;
-      margin-bottom:14px;
-      border:1px solid #1f2937;
-    ">
-      <div style="font-weight:600; margin-bottom:10px;">📊 Результат</div>
+        <label style="font-size:12px; opacity:.6;">Материалы</label>
+        <input id="material_cost" type="number" value="0" style="width:100%; margin-bottom:8px;">
 
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-        <div style="background:#0f172a; border:1px solid #1f2937; border-radius:10px; padding:10px;">
-          <div style="font-size:12px; opacity:.6; margin-bottom:4px;">Себестоимость</div>
-          <input id="total_cost" readonly style="
-            width:100%;
-            background:transparent;
-            border:none;
-            color:#cbd5e1;
-            font-weight:700;
-            padding:0;
-          ">
-        </div>
+        <label style="font-size:12px; opacity:.6;">Работа</label>
+        <input id="labor_cost" type="number" value="0" style="width:100%; margin-bottom:8px;">
 
-        <div style="background:#0f172a; border:1px solid #1f2937; border-radius:10px; padding:10px;">
-          <div style="font-size:12px; opacity:.6; margin-bottom:4px;">Прибыль</div>
-          <input id="profit" readonly style="
-            width:100%;
-            background:transparent;
-            border:none;
-            color:#f8fafc;
-            font-weight:700;
-            padding:0;
-          ">
+        <label style="font-size:12px; opacity:.6;">Прочее</label>
+        <input id="other_cost" type="number" value="0" style="width:100%; margin-bottom:8px;">
+      </div>
+
+      <div style="
+        background:#020617;
+        padding:12px;
+        border-radius:12px;
+        margin-bottom:14px;
+        border:1px solid #1f2937;
+      ">
+        <div style="font-weight:600; margin-bottom:10px;">📊 Результат</div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div style="background:#0f172a; border:1px solid #1f2937; border-radius:10px; padding:10px;">
+            <div style="font-size:12px; opacity:.6; margin-bottom:4px;">Себестоимость</div>
+            <input id="total_cost" readonly style="
+              width:100%;
+              background:transparent;
+              border:none;
+              color:#cbd5e1;
+              font-weight:700;
+              padding:0;
+            ">
+          </div>
+
+          <div style="background:#0f172a; border:1px solid #1f2937; border-radius:10px; padding:10px;">
+            <div style="font-size:12px; opacity:.6; margin-bottom:4px;">Прибыль</div>
+            <input id="profit" readonly style="
+              width:100%;
+              background:transparent;
+              border:none;
+              color:#f8fafc;
+              font-weight:700;
+              padding:0;
+            ">
+          </div>
         </div>
       </div>
+    ` : ""}
+
+    <div style="
+      background:#020617;
+      padding:12px;
+      border-radius:12px;
+      margin-bottom:14px;
+      border:1px solid #1f2937;
+    ">
+      <label style="font-size:12px; opacity:.6;">Итоговая сумма</label>
+      <input id="total" type="number" value="0" style="width:100%;">
     </div>
 
     <div style="
@@ -669,16 +834,18 @@ function openCreateOrder(order = null) {
     document.getElementById("intake_date").value = order.intake_date || "";
     document.getElementById("start_date").value = order.start_date || "";
     document.getElementById("end_date").value = order.end_date || "";
-    document.getElementById("subtotal").value = String(order.subtotal ?? 0);
-    document.getElementById("discount").value = String(order.discount ?? 0);
     document.getElementById("total").value = String(order.total ?? 0);
-    document.getElementById("material_cost").value = String(order.material_cost ?? 0);
-    document.getElementById("labor_cost").value = String(order.labor_cost ?? 0);
-    document.getElementById("other_cost").value = String(order.other_cost ?? 0);
+    if (isEdit) {
+      document.getElementById("subtotal").value = String(order.subtotal ?? 0);
+      document.getElementById("discount").value = String(order.discount ?? 0);
+      document.getElementById("material_cost").value = String(order.material_cost ?? 0);
+      document.getElementById("labor_cost").value = String(order.labor_cost ?? 0);
+      document.getElementById("other_cost").value = String(order.other_cost ?? 0);
+    }
     document.getElementById("prepaid").value = String(order.prepaid ?? 0);
     document.getElementById("paid").value = String(order.paid ?? 0);
     document.getElementById("currency").value = order.currency || "USD";
-    document.getElementById("order_note").value = order.note || "";
+    document.getElementById("order_note").value = parsedNote.cleanNote || "";
 
     if (order.media_url) {
       const root = document.getElementById("order_media_preview");
@@ -695,6 +862,7 @@ function openCreateOrder(order = null) {
     }
   }
 
+  bindServicesEditor(parsedNote.services);
   recalcOrderForm();
 }
 
@@ -904,6 +1072,7 @@ async function uploadOrderMediaIfNeeded() {
 }
 
 async function createOrder() {
+  const isEdit = !!state.editingOrderId;
   const client_id = document.getElementById("client_id")?.value || null;
   const client_name = document.getElementById("client_name")?.value.trim() || null;
   const car_model = document.getElementById("car_model")?.value.trim() || null;
@@ -915,23 +1084,39 @@ async function createOrder() {
   const start_date = document.getElementById("start_date")?.value || null;
   const end_date = document.getElementById("end_date")?.value || null;
 
-  const subtotal = asNumber(document.getElementById("subtotal")?.value, 0);
-  const discount = asNumber(document.getElementById("discount")?.value, 0);
   const total = asNumber(document.getElementById("total")?.value, 0);
+  const subtotal = isEdit
+    ? asNumber(document.getElementById("subtotal")?.value, 0)
+    : total;
+  const discount = isEdit
+    ? asNumber(document.getElementById("discount")?.value, 0)
+    : 0;
 
-  const material_cost = asNumber(document.getElementById("material_cost")?.value, 0);
-  const labor_cost = asNumber(document.getElementById("labor_cost")?.value, 0);
-  const other_cost = asNumber(document.getElementById("other_cost")?.value, 0);
+  const material_cost = isEdit
+    ? asNumber(document.getElementById("material_cost")?.value, 0)
+    : 0;
+  const labor_cost = isEdit
+    ? asNumber(document.getElementById("labor_cost")?.value, 0)
+    : 0;
+  const other_cost = isEdit
+    ? asNumber(document.getElementById("other_cost")?.value, 0)
+    : 0;
 
-  const total_cost = asNumber(document.getElementById("total_cost")?.value, 0);
-  const profit = asNumber(document.getElementById("profit")?.value, 0);
+  const total_cost = isEdit
+    ? asNumber(document.getElementById("total_cost")?.value, 0)
+    : material_cost + labor_cost + other_cost;
+  const profit = isEdit
+    ? asNumber(document.getElementById("profit")?.value, 0)
+    : total - total_cost;
 
   const prepaid = asNumber(document.getElementById("prepaid")?.value, 0);
   const paid = asNumber(document.getElementById("paid")?.value, 0);
   const due = asNumber(document.getElementById("due")?.value, 0);
 
   const currency = document.getElementById("currency")?.value || "USD";
-  const note = document.getElementById("order_note")?.value.trim() || null;
+  const baseNote = document.getElementById("order_note")?.value.trim() || null;
+  const services = (state.orderServices || []).map(normalizeServiceName).filter(Boolean);
+  const note = composeNoteWithServices(baseNote, services);
 
   if (!client_name) {
     safeAlert("Укажи имя клиента");
@@ -1318,6 +1503,8 @@ window.showTab = showTab;
 window.openCreateOrder = openCreateOrder;
 window.createOrder = createOrder;
 window.setPaidPreset = setPaidPreset;
+window.addOrderService = addOrderService;
+window.removeOrderService = removeOrderService;
 window.openOrder = openOrder;
 window.startEditOrder = startEditOrder;
 window.handleDeleteOrder = handleDeleteOrder;
