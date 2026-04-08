@@ -36,7 +36,10 @@ function formatMoney(value) {
 }
 
 function currencySymbol(cur) {
-  return cur "$" :
+  const code = String(cur || "").toUpperCase();
+  if (code === "UAH") return "₴";
+  if (code === "EUR") return "€";
+  return "$";
 }
 
 function safeAlert(text) {
@@ -434,6 +437,26 @@ function renderOrderMedia(order) {
   `;
 }
 
+function renderOrderGallery(order) {
+  const urls = Array.isArray(order?.media_urls)
+    ? order.media_urls
+    : (order?.media_url ? [order.media_url] : []);
+
+  if (!urls.length) return "";
+
+  return `
+    <div style="margin:12px 0; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+      ${urls.map((url) => {
+        const safe = escapeHtml(String(url));
+        const isVideo = /\.(mp4|webm|mov|m4v)$/i.test(String(url));
+        return isVideo
+          ? `<video src="${safe}" controls style="width:100%; border-radius:12px; border:1px solid #1f2937;"></video>`
+          : `<img src="${safe}" style="width:100%; border-radius:12px; border:1px solid #1f2937;">`;
+      }).join("")}
+    </div>
+  `;
+}
+
 async function openOrder(id) {
   try {
     const res = await api("get_order", { id });
@@ -478,57 +501,9 @@ async function openOrder(id) {
       <h4>Материалы</h4>
       <div style="max-height:220px; overflow:auto;">${materialsHtml}</div>
     `);
-  } 
-    function renderOrderGallery(order) {
-  const urls = Array.isArray(order?.media_urls)
-    ? order.media_urls
-    : (order?.media_url ? [order.media_url] : []);
-
-  if (!urls.length) return "";
-
-  return `
-    <div style="margin:12px 0; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-      ${urls.map((url) => {
-        const safe = escapeHtml(String(url));
-        const isVideo = /\.(mp4|webm|mov|m4v)$/i.test(String(url));
-        return isVideo
-          ? `<video src="${safe}" controls style="width:100%; border-radius:12px; border:1px solid #1f2937;"></video>`
-          : `<img src="${safe}" style="width:100%; border-radius:12px; border:1px solid #1f2937;">`;
-      }).join("")}
-    </div>
-  `;
-}
-  catch (e) {
+  } catch (e) {
     console.error(e);
   }
-}
-
-function renderClientOptions() {
-  const select = document.getElementById("orderClientId");
-  if (!select) return;
-
-  const clients = state.clients || [];
-
-  select.innerHTML = `
-    <option value="">Выберите клиента</option>
-    ${clients.map(client => `
-      <option value="${client.id}">
-        ${escapeHtml(client.name || "Без имени")}
-        ${client.phone ? " — " + escapeHtml(client.phone) : ""}
-      </option>
-    `).join("")}
-  `;
-}
-
-function syncSelectedClientToOrderForm() {
-  const select = document.getElementById("orderClientId");
-  const nameInput = document.getElementById("orderClientName");
-  if (!select || !nameInput) return;
-
-  const client = state.clients.find(c => String(c.id) === String(select.value));
-  if (!client) return;
-
-  nameInput.value = client.name || "";
 }
 
 function openCreateOrder(order = null) {
@@ -903,7 +878,9 @@ async function handleDeleteOrder(orderId) {
   try {
     await api("delete_order", { id: orderId });
     state.orders = state.orders.filter(o => String(o.id) !== String(orderId));
-    renderOrders();
+    loadOrders();
+    loadDashboard();
+    loadFinance();
     safeAlert("Заказ удалён");
   } catch (err) {
     console.error(err);
@@ -992,25 +969,20 @@ async function createOrder() {
 
   try {
     let media_url = null;
+    let media_urls = [];
 
     const existingOrder = state.editingOrderId
       ? (state.orders || []).find(o => String(o.id) === String(state.editingOrderId))
       : null;
 
-    let media_urls = [];
-
-    const existingOrder = state.editingOrderId
-    ? (state.orders || []).find(o => String(o.id) === String(state.editingOrderId))
-    : null;
-
     try {
-    media_urls = await uploadOrderMediaIfNeeded();
+      media_urls = await uploadOrderMediaIfNeeded();
     } catch (e) {
-    console.warn("Media upload skipped:", e?.message || e);
+      console.warn("Media upload skipped:", e?.message || e);
     }
 
     if (!media_urls.length && Array.isArray(existingOrder?.media_urls)) {
-    media_urls = existingOrder.media_urls;
+      media_urls = existingOrder.media_urls;
     }
 
     if (!media_url && existingOrder?.media_url) {
@@ -1173,37 +1145,6 @@ function filterMaterialList() {
   });
 }
 
-function resetOrderForm() {
-  state.editingOrderId = null;
-
-  document.getElementById("orderForm")?.reset();
-
-  const submitBtn = document.getElementById("orderSubmitBtn");
-  if (submitBtn) submitBtn.textContent = "Создать заказ";
-
-  clearMediaPreview();
-}
-
-async function handleOrderSubmit(e) {
-  e.preventDefault();
-
-  const payload = collectOrderFormData();
-
-  if (state.editingOrderId) {
-    await api("update_order", {
-      id: state.editingOrderId,
-      ...payload,
-    });
-    safeAlert("Заказ обновлён");
-  } else {
-    await api("create_order", payload);
-    safeAlert("Заказ создан");
-  }
-
-  resetOrderForm();
-  await loadOrders();
-  renderOrders();
-}
 
 async function submitMaterialToOrder(order_id) {
   const item_id = document.getElementById("selected_item_id")?.value;
