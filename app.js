@@ -73,6 +73,16 @@ function safeAlert(text) {
   else alert(String(text));
 }
 
+function safeConfirm(text) {
+  return new Promise((resolve) => {
+    if (tg?.showConfirm) {
+      tg.showConfirm(String(text), (ok) => resolve(Boolean(ok)));
+      return;
+    }
+    resolve(confirm(String(text)));
+  });
+}
+
 function renderBlockedScreen(title, text = "Открой приложение внутри Telegram") {
   document.body.innerHTML = `
     <div style="
@@ -1271,11 +1281,16 @@ async function loadInventory() {
       normalized_category: normalizeInventoryCategory(item.category),
       normalized_group: inventoryCategoryGroup(item.category),
     }));
+    state.inventory = normalizedItems;
     const filmItems = normalizedItems.filter((i) => i.normalized_group === "film");
     const productItems = normalizedItems.filter((i) => i.normalized_group === "product");
 
     const renderInventoryCard = (i, type) => card(`
       <div style="font-weight:700;">${escapeHtml(i.name || "")}</div>
+      <div style="font-size:12px; opacity:0.7;">Бренд: ${escapeHtml(i.brand || "—")}</div>
+      ${type === "film" ? `<div style="font-size:12px; opacity:0.7;">Цвет: ${escapeHtml(i.color || "—")}</div>` : ""}
+      ${type === "film" ? `<div style="font-size:12px; opacity:0.7;">Ширина: ${formatMoney(i.width_cm || 0)} см</div>` : ""}
+      <div style="font-size:12px; opacity:0.7;">Ед.: ${escapeHtml(i.unit || "pcs")}</div>
       <div style="font-size:13px; opacity:0.85;">Остаток: ${formatMoney(i.quantity)}</div>
       <div style="font-size:13px; opacity:0.85;">Резерв: ${formatMoney(i.reserved_quantity || 0)}</div>
       <div style="font-size:13px; opacity:0.85;">Доступно: ${formatMoney(i.available_quantity ?? i.quantity)}</div>
@@ -1287,6 +1302,11 @@ async function loadInventory() {
           <div style="font-size:13px; opacity:0.85;">Вход: ${formatMoney(i.purchase_price || 0)} ${currencySymbol(i.currency || "USD")}</div>
           <div style="font-size:13px; opacity:0.85;">Розница: ${formatMoney(i.retail_price || 0)} ${currencySymbol(i.currency || "USD")}</div>
         `}
+      ${i.note ? `<div style="font-size:12px; opacity:0.75; margin-top:6px;">Заметка: ${escapeHtml(i.note)}</div>` : ""}
+      <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+        ${btn("Редактировать", `openEditInventoryItem('${i.id}', '${type}')`)}
+        ${btn("Удалить", `deleteInventoryItem('${i.id}')`, "background:#3b0f15; border-color:#7f1d1d;")}
+      </div>
     `);
 
     el.innerHTML = `
@@ -1315,32 +1335,63 @@ async function loadInventory() {
 
 
 function openCreateInventoryItem(type = "product") {
+  openInventoryItemForm({
+    mode: "create",
+    type,
+  });
+}
+
+function openEditInventoryItem(id, type = "product") {
+  const item = (state.inventory || []).find((x) => String(x.id) === String(id));
+  if (!item) {
+    safeAlert("Позиция не найдена");
+    return;
+  }
+  openInventoryItemForm({
+    mode: "edit",
+    type,
+    item,
+  });
+}
+
+function openInventoryItemForm({ mode = "create", type = "product", item = null } = {}) {
   const isFilm = type === "film";
   const allowedCategories = isFilm ? FILM_CATEGORIES : PRODUCT_CATEGORIES;
+  const normalizedCategory = normalizeInventoryCategory(item?.category);
+  const selectedCategory = allowedCategories.includes(normalizedCategory)
+    ? normalizedCategory
+    : defaultCategoryByType(type);
+  const title = mode === "edit"
+    ? (isFilm ? "Редактировать плёнку" : "Редактировать товар")
+    : (isFilm ? "Новая плёнка" : "Новый товар");
+  const actionLabel = mode === "edit" ? "Сохранить" : "Создать";
+
   openModal(`
-    <h3 style="margin-top:0;">${isFilm ? "Новая плёнка" : "Новый товар"}</h3>
+    <h3 style="margin-top:0;">${title}</h3>
     <select id="inv_category" style="width:100%; margin-bottom:8px;">
       ${allowedCategories.map((category) => `
-        <option value="${category}">${category}</option>
+        <option value="${category}" ${category === selectedCategory ? "selected" : ""}>${category}</option>
       `).join("")}
     </select>
-    <input id="inv_brand" placeholder="Бренд" style="width:100%; margin-bottom:8px;">
-    <input id="inv_name" placeholder="Название" style="width:100%; margin-bottom:8px;">
-    <input id="inv_width" placeholder="Ширина, см" type="number" style="width:100%; margin-bottom:8px;">
-    <input id="inv_unit" placeholder="Ед. изм. (m / pcs / roll / l / set)" style="width:100%; margin-bottom:8px;">
-    <input id="inv_quantity" placeholder="Количество" type="number" step="0.1" style="width:100%; margin-bottom:8px;">
+    <input id="inv_brand" placeholder="Бренд" value="${escapeHtml(item?.brand || "")}" style="width:100%; margin-bottom:8px;">
+    <input id="inv_name" placeholder="Название" value="${escapeHtml(item?.name || "")}" style="width:100%; margin-bottom:8px;">
+    ${isFilm ? `<input id="inv_color" placeholder="Цвет" value="${escapeHtml(item?.color || "")}" style="width:100%; margin-bottom:8px;">` : ""}
+    ${isFilm ? `<input id="inv_width" placeholder="Ширина, см" value="${escapeHtml(item?.width_cm ?? "")}" type="number" step="0.1" style="width:100%; margin-bottom:8px;">` : ""}
+    <input id="inv_unit" placeholder="Ед. изм. (m / pcs / roll / l / set)" value="${escapeHtml(item?.unit || (isFilm ? "m" : "pcs"))}" style="width:100%; margin-bottom:8px;">
+    <input id="inv_quantity" placeholder="Количество" value="${escapeHtml(item?.quantity ?? 0)}" type="number" step="0.1" style="width:100%; margin-bottom:8px;">
     ${isFilm
-      ? `<input id="inv_price" placeholder="Цена" type="number" step="0.01" style="width:100%; margin-bottom:8px;">`
+      ? `<input id="inv_price" placeholder="Цена" value="${escapeHtml(item?.retail_price ?? item?.purchase_price ?? 0)}" type="number" step="0.01" style="width:100%; margin-bottom:8px;">`
       : `
-        <input id="inv_purchase" placeholder="Входная цена" type="number" step="0.01" style="width:100%; margin-bottom:8px;">
-        <input id="inv_retail" placeholder="Розничная цена" type="number" step="0.01" style="width:100%; margin-bottom:8px;">
+        <input id="inv_purchase" placeholder="Входная цена" value="${escapeHtml(item?.purchase_price ?? 0)}" type="number" step="0.01" style="width:100%; margin-bottom:8px;">
+        <input id="inv_retail" placeholder="Розничная цена" value="${escapeHtml(item?.retail_price ?? 0)}" type="number" step="0.01" style="width:100%; margin-bottom:8px;">
       `}
     <select id="inv_currency" style="width:100%; margin-bottom:8px;">
-      <option value="USD">USD $</option>
-      <option value="UAH">UAH ₴</option>
+      <option value="USD" ${String(item?.currency || "USD").toUpperCase() === "USD" ? "selected" : ""}>USD $</option>
+      <option value="UAH" ${String(item?.currency || "").toUpperCase() === "UAH" ? "selected" : ""}>UAH ₴</option>
     </select>
-    <input id="inv_min" placeholder="Мин. остаток" type="number" step="0.1" style="width:100%; margin-bottom:8px;">
-    ${btn("Создать", `createInventoryItem('${type}')`)}
+    <input id="inv_min" placeholder="Мин. остаток" value="${escapeHtml(item?.min_quantity ?? 0)}" type="number" step="0.1" style="width:100%; margin-bottom:8px;">
+    <textarea id="inv_note" placeholder="Заметка" style="width:100%; margin-bottom:8px; min-height:68px;">${escapeHtml(item?.note || "")}</textarea>
+    ${btn(actionLabel, mode === "edit" ? `updateInventoryItem('${item?.id}', '${type}')` : `createInventoryItem('${type}')`)}
   `);
 }
 
@@ -1364,6 +1415,8 @@ async function createInventoryItem(type = "product") {
     retail_price: isFilm ? rawPrice : Number(document.getElementById("inv_retail")?.value) || 0,
     currency: document.getElementById("inv_currency")?.value || "USD",
     min_quantity: Number(document.getElementById("inv_min")?.value) || 0,
+    color: isFilm ? document.getElementById("inv_color")?.value.trim() || null : null,
+    note: document.getElementById("inv_note")?.value.trim() || null,
   };
 
   if (!payload.name) {
@@ -1387,6 +1440,73 @@ async function createInventoryItem(type = "product") {
     safeAlert(isFilm ? "Плёнка создана" : "Товар создан");
   } catch (e) {
     console.error(e);
+  }
+}
+
+async function updateInventoryItem(id, type = "product") {
+  const isFilm = type === "film";
+  const rawPrice = Number(document.getElementById("inv_price")?.value) || 0;
+  const selectedCategory = normalizeInventoryCategory(document.getElementById("inv_category")?.value);
+  const fallbackCategory = defaultCategoryByType(type);
+  const allowedCategories = isFilm ? FILM_CATEGORIES : PRODUCT_CATEGORIES;
+  const category = allowedCategories.includes(selectedCategory) ? selectedCategory : fallbackCategory;
+
+  const payload = {
+    id,
+    item_type: isFilm ? "film" : "product",
+    category,
+    brand: document.getElementById("inv_brand")?.value.trim(),
+    name: document.getElementById("inv_name")?.value.trim(),
+    width_cm: isFilm ? Number(document.getElementById("inv_width")?.value) || null : null,
+    unit: document.getElementById("inv_unit")?.value.trim() || (isFilm ? "m" : "pcs"),
+    quantity: Number(document.getElementById("inv_quantity")?.value) || 0,
+    purchase_price: isFilm ? rawPrice : Number(document.getElementById("inv_purchase")?.value) || 0,
+    retail_price: isFilm ? rawPrice : Number(document.getElementById("inv_retail")?.value) || 0,
+    currency: document.getElementById("inv_currency")?.value || "USD",
+    min_quantity: Number(document.getElementById("inv_min")?.value) || 0,
+    color: isFilm ? document.getElementById("inv_color")?.value.trim() || null : null,
+    note: document.getElementById("inv_note")?.value.trim() || null,
+  };
+
+  if (!payload.name) {
+    safeAlert("Заполни название");
+    return;
+  }
+  if (isFilm && !FILM_CATEGORIES.includes(payload.category)) {
+    safeAlert("Для плёнки выбери категорию: vinyl, ppf или tint");
+    return;
+  }
+  if (!isFilm && !PRODUCT_CATEGORIES.includes(payload.category)) {
+    safeAlert("Для товара выбери категорию: consumables, chemicals, tools, accessories или other");
+    return;
+  }
+
+  try {
+    await api("update_inventory_item", payload);
+    closeModal();
+    await loadInventory();
+    loadDashboard();
+    safeAlert(isFilm ? "Плёнка обновлена" : "Товар обновлён");
+  } catch (e) {
+    console.error(e);
+    safeAlert(e.message || "Ошибка обновления позиции");
+  }
+}
+
+async function deleteInventoryItem(id) {
+  const item = (state.inventory || []).find((x) => String(x.id) === String(id));
+  const label = item?.name ? `«${item.name}»` : "эту позицию";
+  const ok = await safeConfirm(`Удалить ${label}?`);
+  if (!ok) return;
+
+  try {
+    await api("delete_inventory_item", { id });
+    await loadInventory();
+    loadDashboard();
+    safeAlert("Позиция удалена");
+  } catch (e) {
+    console.error(e);
+    safeAlert(e.message || "Ошибка удаления позиции");
   }
 }
 
