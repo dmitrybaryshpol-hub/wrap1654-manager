@@ -158,9 +158,9 @@ function card(html, extra = "") {
   `;
 }
 
-function btn(text, onclick, extra = "") {
+function btn(text, onclick, extra = "", id = "") {
   return `
-    <button onclick="${onclick}" style="
+    <button ${id ? `id="${id}"` : ""} onclick="${onclick}" style="
       padding:10px 12px;
       border-radius:10px;
       border:1px solid #374151;
@@ -692,7 +692,7 @@ function openCreateOrder(order = null) {
 
     <textarea id="order_note" placeholder="Комментарий" style="width:100%; min-height:80px; margin-bottom:12px;"></textarea>
 
-    ${btn(isEdit ? "Сохранить изменения" : "Создать заказ", "createOrder()", "width:100%; background:#2563eb;")}
+    ${btn(isEdit ? "Сохранить изменения" : "Создать заказ", "createOrder()", "width:100%; background:#2563eb;", "order_submit_btn")}
   `);
 
   renderClientOptions(order?.client_id || "");
@@ -946,79 +946,65 @@ async function uploadOrderMediaIfNeeded() {
 }
 
 async function createOrder() {
-  const client_id = document.getElementById("client_id")?.value || null;
-  const client_name = document.getElementById("client_name")?.value.trim() || null;
-  const car_model = document.getElementById("car_model")?.value.trim() || null;
+  const submitBtn = document.getElementById("order_submit_btn");
 
-  const type = document.getElementById("order_type")?.value || "combined";
-  const status = document.getElementById("order_status")?.value || "new";
-
-  const intake_date = document.getElementById("intake_date")?.value || null;
-  const start_date = document.getElementById("start_date")?.value || null;
-  const end_date = document.getElementById("end_date")?.value || null;
-
-  const subtotal = asNumber(document.getElementById("subtotal")?.value, 0);
-  const discount = asNumber(document.getElementById("discount")?.value, 0);
-  const total = asNumber(document.getElementById("total")?.value, 0);
-
-  const material_cost = asNumber(document.getElementById("material_cost")?.value, 0);
-  const labor_cost = asNumber(document.getElementById("labor_cost")?.value, 0);
-  const other_cost = asNumber(document.getElementById("other_cost")?.value, 0);
-
-  const total_cost = asNumber(document.getElementById("total_cost")?.value, 0);
-  const profit = asNumber(document.getElementById("profit")?.value, 0);
-
-  const prepaid = asNumber(document.getElementById("prepaid")?.value, 0);
-  const paid = asNumber(document.getElementById("paid")?.value, 0);
-  const due = asNumber(document.getElementById("due")?.value, 0);
-
-  const currency = document.getElementById("currency")?.value || "USD";
-  const note = document.getElementById("order_note")?.value.trim() || null;
-
-  if (!client_name) {
-    safeAlert("Укажи имя клиента");
-    return;
-  }
-
-  if (!car_model) {
-    safeAlert("Укажи модель авто");
-    return;
-  }
-
-  if (!total || total <= 0) {
-    safeAlert("Укажи итоговую сумму");
-    return;
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.style.opacity = "0.7";
+    submitBtn.style.cursor = "not-allowed";
   }
 
   try {
-    let media_url = null;
+    const client_id = document.getElementById("client_id")?.value || null;
+    const client_name = document.getElementById("client_name")?.value.trim() || "";
+    const car_model = document.getElementById("car_model")?.value.trim() || "";
+
+    const type = document.getElementById("order_type")?.value || "combined";
+    const status = document.getElementById("order_status")?.value || "new";
+
+    const intake_date = document.getElementById("intake_date")?.value || null;
+    const start_date = document.getElementById("start_date")?.value || null;
+    const end_date = document.getElementById("end_date")?.value || null;
+
+    const subtotal = asNumber(document.getElementById("subtotal")?.value, 0);
+    const discount = asNumber(document.getElementById("discount")?.value, 0);
+    const total = asNumber(document.getElementById("total")?.value, 0);
+
+    const material_cost = asNumber(document.getElementById("material_cost")?.value, 0);
+    const labor_cost = asNumber(document.getElementById("labor_cost")?.value, 0);
+    const other_cost = asNumber(document.getElementById("other_cost")?.value, 0);
+
+    const total_cost = asNumber(document.getElementById("total_cost")?.value, 0);
+    const profit = asNumber(document.getElementById("profit")?.value, 0);
+
+    const prepaid = asNumber(document.getElementById("prepaid")?.value, 0);
+    const paid = asNumber(document.getElementById("paid")?.value, 0);
+    const due = asNumber(document.getElementById("due")?.value, 0);
+
+    const currency = document.getElementById("currency")?.value || "USD";
+    const note = document.getElementById("order_note")?.value.trim() || null;
+
+    if (!client_name) throw new Error("Укажи имя клиента");
+    if (!car_model) throw new Error("Укажи модель авто");
+    if (!Number.isFinite(total) || total <= 0) throw new Error("Укажи итоговую сумму");
 
     const existingOrder = state.editingOrderId
-      ? (state.orders || []).find(o => String(o.id) === String(state.editingOrderId))
+      ? (state.orders || []).find((o) => String(o.id) === String(state.editingOrderId))
       : null;
 
     let media_urls = [];
-
-    const existingOrder = state.editingOrderId
-    ? (state.orders || []).find(o => String(o.id) === String(state.editingOrderId))
-    : null;
-
     try {
-    media_urls = await uploadOrderMediaIfNeeded();
+      media_urls = await uploadOrderMediaIfNeeded();
     } catch (e) {
-    console.warn("Media upload skipped:", e?.message || e);
+      console.warn("Media upload skipped:", e?.message || e);
     }
 
     if (!media_urls.length && Array.isArray(existingOrder?.media_urls)) {
-    media_urls = existingOrder.media_urls;
+      media_urls = existingOrder.media_urls;
     }
 
-    if (!media_url && existingOrder?.media_url) {
-      media_url = existingOrder.media_url;
-    }
-
-    const payload = {
-      client_id,
+    const createPayload = {
+      client_id: client_id || null,
       client_name,
       car_model,
       type,
@@ -1039,30 +1025,40 @@ async function createOrder() {
       due,
       currency,
       note,
-      media_urls, media_url: media_urls[0] || null,
+      media_urls,
+      media_url: media_urls[0] || existingOrder?.media_url || null,
     };
+
+    const payload = Object.fromEntries(
+      Object.entries(createPayload).filter(([, value]) => value !== undefined)
+    );
 
     if (state.editingOrderId) {
       await api("update_order", {
         id: state.editingOrderId,
         ...payload,
       });
-
+      await Promise.all([loadOrders(), loadDashboard(), loadFinance(), loadClientsToState()]);
+      closeModal();
       safeAlert("Заказ обновлён");
-    } else {
-      await api("create_order", payload);
-      safeAlert("Заказ создан");
+      state.editingOrderId = null;
+      return;
     }
 
-    state.editingOrderId = null;
+    await api("create_order", payload);
+    await Promise.all([loadOrders(), loadDashboard(), loadFinance(), loadClientsToState()]);
     closeModal();
-    await loadClientsToState();
-    loadOrders();
-    loadDashboard();
-    loadFinance();
-  } catch (e) {
-    console.error(e);
-    safeAlert(e.message || "Ошибка сохранения заказа");
+    safeAlert("Заказ создан");
+    state.editingOrderId = null;
+  } catch (error) {
+    console.error(error);
+    safeAlert(error?.message || "Ошибка сохранения заказа");
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.style.opacity = "1";
+      submitBtn.style.cursor = "pointer";
+    }
   }
 }
 async function addPayment(order_id) {
