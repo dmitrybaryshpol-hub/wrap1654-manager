@@ -29,6 +29,31 @@ function asNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+const FILM_CATEGORIES = ["vinyl", "ppf", "tint"];
+const PRODUCT_CATEGORIES = ["consumables", "chemicals", "tools", "accessories", "other"];
+const LEGACY_FILM_MARKERS = new Set(["film"]);
+const LEGACY_PRODUCT_MARKERS = new Set(["product"]);
+
+function normalizeInventoryCategory(value = "") {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (FILM_CATEGORIES.includes(normalized)) return normalized;
+  if (PRODUCT_CATEGORIES.includes(normalized)) return normalized;
+  if (LEGACY_FILM_MARKERS.has(normalized)) return "vinyl";
+  if (LEGACY_PRODUCT_MARKERS.has(normalized)) return "other";
+  return "";
+}
+
+function inventoryCategoryGroup(category = "") {
+  const normalized = normalizeInventoryCategory(category);
+  if (FILM_CATEGORIES.includes(normalized)) return "film";
+  if (PRODUCT_CATEGORIES.includes(normalized)) return "product";
+  return "product";
+}
+
+function defaultCategoryByType(type = "product") {
+  return type === "film" ? FILM_CATEGORIES[0] : PRODUCT_CATEGORIES[0];
+}
+
 function formatMoney(value) {
   return Number(value || 0).toLocaleString("uk-UA", {
     minimumFractionDigits: 0,
@@ -1241,8 +1266,13 @@ async function loadInventory() {
   try {
     const res = await api("get_inventory");
     const items = res.items || [];
-    const filmItems = items.filter((i) => String(i.category || "").toLowerCase() === "film");
-    const productItems = items.filter((i) => String(i.category || "").toLowerCase() !== "film");
+    const normalizedItems = items.map((item) => ({
+      ...item,
+      normalized_category: normalizeInventoryCategory(item.category),
+      normalized_group: inventoryCategoryGroup(item.category),
+    }));
+    const filmItems = normalizedItems.filter((i) => i.normalized_group === "film");
+    const productItems = normalizedItems.filter((i) => i.normalized_group === "product");
 
     const renderInventoryCard = (i, type) => card(`
       <div style="font-weight:700;">${escapeHtml(i.name || "")}</div>
@@ -1250,6 +1280,7 @@ async function loadInventory() {
       <div style="font-size:13px; opacity:0.85;">Резерв: ${formatMoney(i.reserved_quantity || 0)}</div>
       <div style="font-size:13px; opacity:0.85;">Доступно: ${formatMoney(i.available_quantity ?? i.quantity)}</div>
       <div style="font-size:13px; opacity:0.85;">Мин. остаток: ${formatMoney(i.min_quantity || 0)}</div>
+      <div style="font-size:12px; opacity:0.7;">Категория: ${escapeHtml(i.normalized_category || i.category || "other")}</div>
       ${type === "film"
         ? `<div style="font-size:13px; opacity:0.85;">Цена: ${formatMoney(i.retail_price || i.purchase_price || 0)} ${currencySymbol(i.currency || "USD")}</div>`
         : `
@@ -1285,8 +1316,14 @@ async function loadInventory() {
 
 function openCreateInventoryItem(type = "product") {
   const isFilm = type === "film";
+  const allowedCategories = isFilm ? FILM_CATEGORIES : PRODUCT_CATEGORIES;
   openModal(`
     <h3 style="margin-top:0;">${isFilm ? "Новая плёнка" : "Новый товар"}</h3>
+    <select id="inv_category" style="width:100%; margin-bottom:8px;">
+      ${allowedCategories.map((category) => `
+        <option value="${category}">${category}</option>
+      `).join("")}
+    </select>
     <input id="inv_brand" placeholder="Бренд" style="width:100%; margin-bottom:8px;">
     <input id="inv_name" placeholder="Название" style="width:100%; margin-bottom:8px;">
     <input id="inv_width" placeholder="Ширина, см" type="number" style="width:100%; margin-bottom:8px;">
@@ -1310,8 +1347,14 @@ function openCreateInventoryItem(type = "product") {
 async function createInventoryItem(type = "product") {
   const isFilm = type === "film";
   const rawPrice = Number(document.getElementById("inv_price")?.value) || 0;
+  const selectedCategory = normalizeInventoryCategory(document.getElementById("inv_category")?.value);
+  const fallbackCategory = defaultCategoryByType(type);
+  const allowedCategories = isFilm ? FILM_CATEGORIES : PRODUCT_CATEGORIES;
+  const category = allowedCategories.includes(selectedCategory) ? selectedCategory : fallbackCategory;
+
   const payload = {
-    category: isFilm ? "film" : "product",
+    item_type: isFilm ? "film" : "product",
+    category,
     brand: document.getElementById("inv_brand")?.value.trim(),
     name: document.getElementById("inv_name")?.value.trim(),
     width_cm: Number(document.getElementById("inv_width")?.value) || null,
@@ -1327,13 +1370,21 @@ async function createInventoryItem(type = "product") {
     safeAlert("Заполни название");
     return;
   }
+  if (isFilm && !FILM_CATEGORIES.includes(payload.category)) {
+    safeAlert("Для плёнки выбери категорию: vinyl, ppf или tint");
+    return;
+  }
+  if (!isFilm && !PRODUCT_CATEGORIES.includes(payload.category)) {
+    safeAlert("Для товара выбери категорию: consumables, chemicals, tools, accessories или other");
+    return;
+  }
 
   try {
     await api("create_inventory_item", payload);
     closeModal();
     loadInventory();
     loadDashboard();
-    safeAlert("Товар создан");
+    safeAlert(isFilm ? "Плёнка создана" : "Товар создан");
   } catch (e) {
     console.error(e);
   }
