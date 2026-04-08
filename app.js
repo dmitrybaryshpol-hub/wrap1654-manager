@@ -1011,7 +1011,8 @@ async function createOrder() {
       due,
       currency,
       note,
-      media_urls, media_url: media_urls[0] || null,
+      media_urls,
+      media_url: media_urls[0] || media_url || null,
     };
 
     if (state.editingOrderId) {
