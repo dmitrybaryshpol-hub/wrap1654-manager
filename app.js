@@ -569,7 +569,7 @@ async function openOrder(id) {
     if (order.materials && order.materials.length) {
       materialsHtml = order.materials.map((m) => `
         <div style="border-bottom:1px solid #1f2937; padding:6px 0;">
-          <div><b>${escapeHtml(m.item_name || m.inventory_item_id || "Материал")}</b></div>
+          <div><b>${escapeHtml(m.item_name || "Материал")}</b></div>
           <div style="font-size:13px; opacity:0.8;">
             Кол-во: ${formatMoney(m.quantity)} ${escapeHtml(m.unit || "")}
             |
@@ -1241,28 +1241,39 @@ async function loadInventory() {
   try {
     const res = await api("get_inventory");
     const items = res.items || [];
+    const filmItems = items.filter((i) => String(i.category || "").toLowerCase() === "film");
+    const productItems = items.filter((i) => String(i.category || "").toLowerCase() !== "film");
+
+    const renderInventoryCard = (i, type) => card(`
+      <div style="font-weight:700;">${escapeHtml(i.name || "")}</div>
+      <div style="font-size:13px; opacity:0.85;">Остаток: ${formatMoney(i.quantity)}</div>
+      <div style="font-size:13px; opacity:0.85;">Резерв: ${formatMoney(i.reserved_quantity || 0)}</div>
+      <div style="font-size:13px; opacity:0.85;">Доступно: ${formatMoney(i.available_quantity ?? i.quantity)}</div>
+      <div style="font-size:13px; opacity:0.85;">Мин. остаток: ${formatMoney(i.min_quantity || 0)}</div>
+      ${type === "film"
+        ? `<div style="font-size:13px; opacity:0.85;">Цена: ${formatMoney(i.retail_price || i.purchase_price || 0)} ${currencySymbol(i.currency || "USD")}</div>`
+        : `
+          <div style="font-size:13px; opacity:0.85;">Вход: ${formatMoney(i.purchase_price || 0)} ${currencySymbol(i.currency || "USD")}</div>
+          <div style="font-size:13px; opacity:0.85;">Розница: ${formatMoney(i.retail_price || 0)} ${currencySymbol(i.currency || "USD")}</div>
+        `}
+    `);
 
     el.innerHTML = `
       <div style="padding:16px;">
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
-          ${btn("+ Товар", "openCreateInventoryItem()")}
+          ${btn("+ Плёнка", "openCreateInventoryItem('film')")}
+          ${btn("+ Товар", "openCreateInventoryItem('product')")}
         </div>
 
-        ${items.length
-          ? items.map((i) => `
-              <div>
-                ${card(`
-                  <div style="font-weight:700;">${escapeHtml(i.name || "")}</div>
-                  <div style="font-size:13px; opacity:0.85;">Остаток: ${formatMoney(i.quantity)}</div>
-                  <div style="font-size:13px; opacity:0.85;">Резерв: ${formatMoney(i.reserved_quantity || 0)}</div>
-                  <div style="font-size:13px; opacity:0.85;">Доступно: ${formatMoney(i.available_quantity ?? i.quantity)}</div>
-                  <div style="font-size:13px; opacity:0.85;">Мин. остаток: ${formatMoney(i.min_quantity || 0)}</div>
-                  <div style="font-size:13px; opacity:0.85;">Вход: ${formatMoney(i.purchase_price || 0)} ${currencySymbol(i.currency || "USD")}</div>
-                  <div style="font-size:13px; opacity:0.85;">Розница: ${formatMoney(i.retail_price || 0)} ${currencySymbol(i.currency || "USD")}</div>
-                `)}
-              </div>
-            `).join("")
-          : card("Склад пуст")}
+        <h3 style="margin:0 0 8px 0;">Плёнка</h3>
+        ${filmItems.length
+          ? filmItems.map((i) => `<div>${renderInventoryCard(i, "film")}</div>`).join("")
+          : card("Плёнка отсутствует")}
+
+        <h3 style="margin:14px 0 8px 0;">Товар</h3>
+        ${productItems.length
+          ? productItems.map((i) => `<div>${renderInventoryCard(i, "product")}</div>`).join("")
+          : card("Товар отсутствует")}
       </div>
     `;
   } catch (e) {
@@ -1272,42 +1283,48 @@ async function loadInventory() {
 }
 
 
-function openCreateInventoryItem() {
+function openCreateInventoryItem(type = "product") {
+  const isFilm = type === "film";
   openModal(`
-    <h3 style="margin-top:0;">Новый товар</h3>
-    <input id="inv_category" placeholder="Категория (vinyl / ppf / tint / consumables)" style="width:100%; margin-bottom:8px;">
+    <h3 style="margin-top:0;">${isFilm ? "Новая плёнка" : "Новый товар"}</h3>
     <input id="inv_brand" placeholder="Бренд" style="width:100%; margin-bottom:8px;">
     <input id="inv_name" placeholder="Название" style="width:100%; margin-bottom:8px;">
     <input id="inv_width" placeholder="Ширина, см" type="number" style="width:100%; margin-bottom:8px;">
     <input id="inv_unit" placeholder="Ед. изм. (m / pcs / roll / l / set)" style="width:100%; margin-bottom:8px;">
     <input id="inv_quantity" placeholder="Количество" type="number" step="0.1" style="width:100%; margin-bottom:8px;">
-    <input id="inv_purchase" placeholder="Входная цена" type="number" step="0.01" style="width:100%; margin-bottom:8px;">
-    <input id="inv_retail" placeholder="Розничная цена" type="number" step="0.01" style="width:100%; margin-bottom:8px;">
+    ${isFilm
+      ? `<input id="inv_price" placeholder="Цена" type="number" step="0.01" style="width:100%; margin-bottom:8px;">`
+      : `
+        <input id="inv_purchase" placeholder="Входная цена" type="number" step="0.01" style="width:100%; margin-bottom:8px;">
+        <input id="inv_retail" placeholder="Розничная цена" type="number" step="0.01" style="width:100%; margin-bottom:8px;">
+      `}
     <select id="inv_currency" style="width:100%; margin-bottom:8px;">
-      <option value="UAH">UAH ₴</option>
       <option value="USD">USD $</option>
+      <option value="UAH">UAH ₴</option>
     </select>
     <input id="inv_min" placeholder="Мин. остаток" type="number" step="0.1" style="width:100%; margin-bottom:8px;">
-    ${btn("Создать", "createInventoryItem()")}
+    ${btn("Создать", `createInventoryItem('${type}')`)}
   `);
 }
 
-async function createInventoryItem() {
+async function createInventoryItem(type = "product") {
+  const isFilm = type === "film";
+  const rawPrice = Number(document.getElementById("inv_price")?.value) || 0;
   const payload = {
-    category: document.getElementById("inv_category")?.value.trim(),
+    category: isFilm ? "film" : "product",
     brand: document.getElementById("inv_brand")?.value.trim(),
     name: document.getElementById("inv_name")?.value.trim(),
     width_cm: Number(document.getElementById("inv_width")?.value) || null,
     unit: document.getElementById("inv_unit")?.value.trim() || "m",
     quantity: Number(document.getElementById("inv_quantity")?.value) || 0,
-    purchase_price: Number(document.getElementById("inv_purchase")?.value) || 0,
-    retail_price: Number(document.getElementById("inv_retail")?.value) || 0,
+    purchase_price: isFilm ? rawPrice : Number(document.getElementById("inv_purchase")?.value) || 0,
+    retail_price: isFilm ? rawPrice : Number(document.getElementById("inv_retail")?.value) || 0,
     currency: document.getElementById("inv_currency")?.value || "USD",
     min_quantity: Number(document.getElementById("inv_min")?.value) || 0,
   };
 
-  if (!payload.category || !payload.name) {
-    safeAlert("Заполни категорию и название");
+  if (!payload.name) {
+    safeAlert("Заполни название");
     return;
   }
 
