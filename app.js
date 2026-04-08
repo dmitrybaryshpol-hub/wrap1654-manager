@@ -268,25 +268,14 @@ async function loadDashboard() {
 
   try {
     const data = await api("dashboard");
-    const f = data.finance || {};
     const stats = data.stats || {};
 
     el.innerHTML = `
       <div style="padding:16px;">
         ${card(`
-          <div style="font-weight:700; margin-bottom:8px;">💰 Финансы</div>
-          <div>Выручка по заказам: ${formatMoney(f.orders_revenue || 0)} ₴</div>
-          <div>Расходы: ${formatMoney(f.expenses_total || 0)} ₴</div>
-          <hr style="border-color:#1f2937;">
-          <div><b>Чистая прибыль: ${formatMoney(f.net_profit || 0)} ₴</b></div>
-          ${state.fxRate > 0 ? `<div style="font-size:12px; opacity:.7; margin-top:8px;">USD курс: ${formatMoney(state.fxRate)} ₴</div>` : ""}
-        `)}
-
-        ${card(`
-          <div style="font-weight:700; margin-bottom:8px;">📊 Статистика</div>
+          <div style="font-weight:700; margin-bottom:8px;">📊 Оперативная сводка</div>
           <div>Активных заказов: ${stats.active_count || 0}</div>
           <div>В работе: ${stats.total_in_work || 0}</div>
-          <div>Долги: ${formatMoney(stats.total_debt || 0)} ₴</div>
           <div>Клиентов: ${data.clients_count || 0}</div>
           <div>Товаров: ${data.inventory_count || 0}</div>
         `)}
@@ -304,21 +293,12 @@ async function loadDashboard() {
                 ${card(`
                   <div style="font-weight:700;">${orderLabel(o)}</div>
                   <div style="font-size:14px; opacity:0.8;">Статус: ${escapeHtml(o.status || "")}</div>
-                  <div style="font-size:14px; opacity:0.8;">Сумма: ${formatMoney(o.total || 0)} ${currencySymbol(o.currency || "USD")}</div>
+                  <div style="font-size:14px; opacity:0.8;">Клиент: ${escapeHtml(o.client_name || "—")}</div>
+                  <div style="font-size:14px; opacity:0.8;">Авто: ${escapeHtml(o.car_model || "—")}</div>
                 `)}
               </div>
             `).join("")
           : card("Нет активных заказов")}
-
-        <h3 style="margin:12px 0;">💸 Долги</h3>
-        ${(data.debts || []).length
-          ? data.debts.map((d) => `
-              ${card(`
-                <div style="font-weight:700;">${orderLabel(d)}</div>
-                <div>Долг: ${formatMoney(d.due || 0)} ${currencySymbol(d.currency || "USD")}</div>
-              `)}
-            `).join("")
-          : card("Долгов нет")}
 
         <h3 style="margin:12px 0;">⚠️ Заканчивается</h3>
         ${(data.low_stock || []).length
