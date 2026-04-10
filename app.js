@@ -437,48 +437,234 @@ async function loadDashboard() {
   try {
     const data = await api("dashboard");
     const stats = data.stats || {};
-    const activeOrders = Array.isArray(data.active_orders) ? data.active_orders : [];
+    const dashboardActiveOrders = Array.isArray(data.active_orders) ? data.active_orders : [];
+    const activeOrders = dashboardActiveOrders.filter((order) => isActiveOrderStatus(order?.status));
     const lowStock = Array.isArray(data.low_stock) ? data.low_stock : [];
+    const totalClients = asNumber(
+      data.clients_count ?? stats.clients_count ?? stats.total_clients,
+      0
+    );
+    const totalInventory = asNumber(
+      data.inventory_count ?? stats.inventory_count ?? stats.total_inventory,
+      0
+    );
+    const lowStockCount = asNumber(
+      stats.low_stock_count ?? lowStock.length,
+      lowStock.length
+    );
+    const activeCount = asNumber(
+      stats.active_count ?? stats.total_in_work ?? activeOrders.length,
+      activeOrders.length
+    );
+    const now = new Date();
+
+    const attentionItems = activeOrders.reduce((acc, order) => {
+      const orderId = String(order?.id || "");
+      const status = String(order?.status || "").toLowerCase();
+      const createdAt = parseDateValue(getOrderDate(order, ["created_at", "createdAt"]));
+      const startDate = parseDateValue(getOrderDate(order, ["start_date", "startDate", "intake_date", "received_at"]));
+      const endDateRaw = getOrderDate(order, ["end_date", "endDate", "due_date", "planned_end_date"]);
+      const endDate = parseDateValue(endDateRaw);
+      const updatedAt = parseDateValue(getOrderDate(order, ["updated_at", "updatedAt"]));
+      const ageDays = daysBetween(createdAt, now);
+      const inProgressDays = daysBetween(startDate || updatedAt || createdAt, now);
+
+      if (status === "in_progress" && !endDateRaw) {
+        acc.push({
+          level: "high",
+          text: `Заказ ${orderLabel(order)} в работе без даты завершения`,
+          orderId,
+        });
+      }
+
+      if (status === "in_progress" && inProgressDays !== null && inProgressDays >= 7) {
+        acc.push({
+          level: "medium",
+          text: `Заказ ${orderLabel(order)} в работе ${inProgressDays} дн.`,
+          orderId,
+        });
+      }
+
+      if (status === "new" && ageDays !== null && ageDays >= 2) {
+        acc.push({
+          level: "medium",
+          text: `Новый заказ ${orderLabel(order)} ожидает продвижения ${ageDays} дн.`,
+          orderId,
+        });
+      }
+
+      if (endDate && endDate < now && status !== "ready") {
+        acc.push({
+          level: "high",
+          text: `Заказ ${orderLabel(order)} просрочен по дате ${displayDate(endDateRaw)}`,
+          orderId,
+        });
+      }
+
+      return acc;
+    }, []);
+
+    const quickActions = [
+      { label: "➕ Новый заказ", action: "openCreateOrder()" },
+      { label: "📦 Открыть заказы", action: "showTab('orders')" },
+      { label: "🧰 Открыть склад", action: "showTab('inventory')" },
+      { label: "👤 Открыть клиентов", action: "showTab('clients')" },
+    ];
+    const sectionTitleStyle = "margin:16px 0 10px 0; font-size:15px; letter-spacing:.2px; color:#e5e7eb;";
 
     el.innerHTML = `
-      <div style="padding:16px;">
-        ${card(`
-          <div style="font-weight:700; margin-bottom:8px;">📊 Оперативная сводка</div>
-          <div>Активных заказов: ${stats.active_count || 0}</div>
-          <div>В работе: ${stats.total_in_work || 0}</div>
-          <div>Клиентов: ${data.clients_count || 0}</div>
-          <div>Товаров: ${data.inventory_count || 0}</div>
-        `)}
-
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
-          ${btn("+ Заказ", "openCreateOrder()")}
-          ${btn("+ Клиент", "openCreateClient()")}
+      <div style="padding:16px; display:flex; flex-direction:column; gap:2px;">
+        <div style="
+          display:grid;
+          grid-template-columns:repeat(2,minmax(0,1fr));
+          gap:10px;
+          margin-bottom:14px;
+        ">
+          ${card(`
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div style="font-size:11px; color:#94a3b8; text-transform:uppercase; letter-spacing:.5px;">Активные заказы</div>
+              <div style="font-size:14px;">🛠</div>
+            </div>
+            <div style="font-size:30px; line-height:1; font-weight:900; margin-top:8px; color:#f8fafc;">${activeCount}</div>
+          `, "margin-bottom:0; background:linear-gradient(180deg,#131c2f,#0f172a); border-color:#263143; box-shadow:0 8px 22px rgba(2,6,23,.35);")}
+          ${card(`
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div style="font-size:11px; color:#94a3b8; text-transform:uppercase; letter-spacing:.5px;">Клиенты</div>
+              <div style="font-size:14px;">👥</div>
+            </div>
+            <div style="font-size:30px; line-height:1; font-weight:900; margin-top:8px; color:#f8fafc;">${totalClients}</div>
+          `, "margin-bottom:0; background:linear-gradient(180deg,#131c2f,#0f172a); border-color:#263143; box-shadow:0 8px 22px rgba(2,6,23,.35);")}
+          ${card(`
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div style="font-size:11px; color:#94a3b8; text-transform:uppercase; letter-spacing:.5px;">Позиции на складе</div>
+              <div style="font-size:14px;">📚</div>
+            </div>
+            <div style="font-size:30px; line-height:1; font-weight:900; margin-top:8px; color:#f8fafc;">${totalInventory}</div>
+          `, "margin-bottom:0; background:linear-gradient(180deg,#131c2f,#0f172a); border-color:#263143; box-shadow:0 8px 22px rgba(2,6,23,.35);")}
+          ${card(`
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div style="font-size:11px; color:#94a3b8; text-transform:uppercase; letter-spacing:.5px;">Low stock</div>
+              <div style="font-size:14px;">⚠️</div>
+            </div>
+            <div style="font-size:30px; line-height:1; font-weight:900; margin-top:8px; color:#fbbf24;">${lowStockCount}</div>
+          `, "margin-bottom:0; background:linear-gradient(180deg,#131c2f,#0f172a); border-color:#263143; box-shadow:0 8px 22px rgba(2,6,23,.35);")}
         </div>
 
-        <h3 style="margin:12px 0;">📦 Активные заказы</h3>
+        <h3 style="${sectionTitleStyle}">🚀 Быстрые действия</h3>
+        ${card(`
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            ${quickActions.map((item) => btn(
+              item.label,
+              item.action,
+              "width:100%; background:linear-gradient(180deg,#0f172a,#111827); border-color:#2a374a; min-height:44px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px; box-shadow:inset 0 1px 0 rgba(255,255,255,.04);"
+            )).join("")}
+          </div>
+        `, "background:linear-gradient(180deg,#111827,#0b1220);")}
+
+        <h3 style="${sectionTitleStyle}">🛠 Сейчас в работе</h3>
         ${activeOrders.length
           ? activeOrders.map((o) => `
               <div onclick="openOrder('${o.id}')" style="cursor:pointer;">
                 ${card(`
-                  <div style="font-weight:700;">${orderLabel(o)}</div>
-                  <div style="font-size:14px; opacity:0.8;">Статус: ${escapeHtml(o.status || "")}</div>
-                  <div style="font-size:14px; opacity:0.8;">Клиент: ${escapeHtml(o.client_name || "—")}</div>
-                  <div style="font-size:14px; opacity:0.8;">Авто: ${escapeHtml(o.car_model || "—")}</div>
-                `)}
+                  <div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;">
+                    <div style="font-weight:700; font-size:15px;">${escapeHtml(o.client_name || "Клиент не указан")}</div>
+                    <span style="
+                      padding:5px 10px;
+                      border-radius:999px;
+                      font-size:10px;
+                      font-weight:800;
+                      letter-spacing:.35px;
+                      background:${statusVisual(o.status || "").bg};
+                      color:${statusVisual(o.status || "").color};
+                      border:1px solid ${statusVisual(o.status || "").border};
+                      text-transform:uppercase;
+                    ">${statusVisual(o.status || "").label}</span>
+                  </div>
+                  <div style="font-size:13px; opacity:0.9; margin-top:6px;">${escapeHtml(o.car_model || "Авто не указано")}</div>
+                  <div style="font-size:12px; color:#9ca3af; margin-top:6px;">
+                    Тип: ${escapeHtml(o.order_type || o.type || "—")}
+                  </div>
+                  <div style="font-size:11px; color:#94a3b8; margin-top:8px; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px;">
+                    <div style="padding:7px; border:1px solid #233147; border-radius:10px; background:#0f172a;">
+                      <div style="font-size:10px; color:#64748b;">ПРИЁМ</div>
+                      <div style="margin-top:3px; color:#cbd5e1;">${displayDate(getOrderDate(o, ["intake_date", "received_at", "created_at"]))}</div>
+                    </div>
+                    <div style="padding:7px; border:1px solid #233147; border-radius:10px; background:#0f172a;">
+                      <div style="font-size:10px; color:#64748b;">СТАРТ</div>
+                      <div style="margin-top:3px; color:#cbd5e1;">${displayDate(getOrderDate(o, ["start_date", "started_at"]))}</div>
+                    </div>
+                    <div style="padding:7px; border:1px solid #233147; border-radius:10px; background:#0f172a;">
+                      <div style="font-size:10px; color:#64748b;">ФИНИШ</div>
+                      <div style="margin-top:3px; color:#cbd5e1;">${displayDate(getOrderDate(o, ["end_date", "due_date", "planned_end_date"]))}</div>
+                    </div>
+                  </div>
+                  <div style="margin-top:10px; font-size:12px; color:#93c5fd; font-weight:700;">Открыть заказ →</div>
+                `, "background:linear-gradient(180deg,#111827,#0d1524);")}
               </div>
             `).join("")
-          : card("Нет активных заказов")}
+          : card(`
+              <div style="text-align:center; padding:8px 4px;">
+                <div style="font-size:24px;">✅</div>
+                <div style="margin-top:6px; color:#cbd5e1;">Нет заказов в работе</div>
+                <div style="margin-top:4px; font-size:12px; color:#64748b;">Все активные задачи закрыты</div>
+              </div>
+            `)}
 
-        <h3 style="margin:12px 0;">⚠️ Заканчивается</h3>
+        <h3 style="${sectionTitleStyle}">⚠️ Требует внимания</h3>
+        ${attentionItems.length
+          ? attentionItems.slice(0, 8).map((item) => `
+              <div onclick="${item.orderId ? `openOrder('${item.orderId}')` : ""}" style="${item.orderId ? "cursor:pointer;" : ""}">
+                ${card(`
+                  <div style="display:flex; align-items:flex-start; gap:8px;">
+                    <span style="
+                      width:10px; height:10px; border-radius:999px; display:inline-block; margin-top:4px;
+                      background:${item.level === "high" ? "#f87171" : "#fbbf24"};
+                      box-shadow:0 0 12px ${item.level === "high" ? "rgba(248,113,113,.8)" : "rgba(251,191,36,.8)"};
+                    "></span>
+                    <div>
+                      <div style="font-size:11px; color:${item.level === "high" ? "#fca5a5" : "#fde68a"}; text-transform:uppercase; letter-spacing:.4px;">
+                        ${item.level === "high" ? "Высокий приоритет" : "Средний приоритет"}
+                      </div>
+                      <div style="font-size:13px; margin-top:3px;">${item.text}</div>
+                    </div>
+                  </div>
+                `, item.level === "high"
+                  ? "background:linear-gradient(180deg,rgba(127,29,29,.3),rgba(17,24,39,.95)); border-color:rgba(248,113,113,.35);"
+                  : "background:linear-gradient(180deg,rgba(120,53,15,.2),rgba(17,24,39,.95)); border-color:rgba(251,191,36,.28);"
+                )}
+              </div>
+            `).join("")
+          : card(`
+              <div style="text-align:center; padding:8px 4px;">
+                <div style="font-size:24px;">🟢</div>
+                <div style="margin-top:6px; color:#cbd5e1;">Операционные риски не обнаружены</div>
+                <div style="margin-top:4px; font-size:12px; color:#64748b;">Секция контроля в норме</div>
+              </div>
+            `, "background:linear-gradient(180deg,#0f1f1a,#101826); border-color:rgba(52,211,153,.25);")}
+
+        <h3 style="${sectionTitleStyle}">📉 Low stock</h3>
         ${lowStock.length
           ? lowStock.map((i) => `
               ${card(`
-                <b>${escapeHtml(i.name || "")}</b><br>
-                Остаток: ${formatMoney(i.quantity || 0)}<br>
-                Мин. остаток: ${formatMoney(i.min_quantity || 0)}
-              `)}
+                <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
+                  <div>
+                    <div style="font-weight:700;">${escapeHtml(i.name || "")}</div>
+                    <div style="font-size:12px; color:#9ca3af; margin-top:3px;">${escapeHtml(i.category || "Без категории")}</div>
+                  </div>
+                  <div style="text-align:right; font-size:13px;">
+                    <div>Текущий: ${formatMoney(i.quantity || 0)} ${escapeHtml(i.unit || "")}</div>
+                    <div style="color:#fca5a5;">Мин: ${formatMoney(i.min_quantity || 0)} ${escapeHtml(i.unit || "")}</div>
+                  </div>
+                </div>
+              `, "background:linear-gradient(180deg,#111827,#0d1524);")}
             `).join("")
-          : card("Склад в норме")}
+          : card(`
+              <div style="text-align:center; padding:10px 4px;">
+                <div style="font-size:24px;">📦</div>
+                <div style="margin-top:6px; color:#cbd5e1;">Low stock отсутствует</div>
+                <div style="margin-top:4px; font-size:12px; color:#64748b;">Все складские позиции выше минимального уровня</div>
+              </div>
+            `, "background:linear-gradient(180deg,#0f1f1a,#101826); border-color:rgba(52,211,153,.25);")}
       </div>
     `;
   } catch (e) {
@@ -625,6 +811,33 @@ function displayDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return escapeHtml(String(value));
   const [y, m, d] = raw.split("-");
   return `${d}.${m}.${y}`;
+}
+
+function parseDateValue(value) {
+  if (!value) return null;
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return null;
+  return dt;
+}
+
+function daysBetween(from, to = new Date()) {
+  if (!from || !to) return null;
+  const diff = to.getTime() - from.getTime();
+  if (!Number.isFinite(diff)) return null;
+  return Math.floor(diff / (1000 * 60 * 60 * 24));
+}
+
+function isActiveOrderStatus(status = "") {
+  const key = String(status || "").trim().toLowerCase();
+  const closedStatuses = new Set(["closed", "cancelled", "delivered"]);
+  return !closedStatuses.has(key);
+}
+
+function getOrderDate(order = {}, keys = []) {
+  for (const key of keys) {
+    if (order[key]) return order[key];
+  }
+  return null;
 }
 
 function collectMediaUrls(order = {}) {
