@@ -653,8 +653,9 @@ async function openCreateOrder(order = null) {
 
   openModal(`
     <h3 style="margin-top:0;">${isEdit ? "Редактировать заказ" : "Новый заказ"}</h3>
+    ${isEdit ? "" : `<div style="font-size:12px; opacity:.7; margin-top:-4px; margin-bottom:10px;">Быстрый приём заказа — детали добавишь после создания.</div>`}
 
-    <div style="margin-bottom:14px;">
+    <div style="margin-bottom:12px; padding:12px; border-radius:12px; border:1px solid #1f2937; background:#020617;">
       <div style="opacity:.6; font-size:12px; margin-bottom:6px;">Клиент</div>
 
       <select id="client_id" style="width:100%; margin-bottom:8px;">
@@ -665,7 +666,7 @@ async function openCreateOrder(order = null) {
       <input id="car_model" placeholder="Модель авто" style="width:100%;">
     </div>
 
-    <div style="margin-bottom:14px;">
+    <div style="margin-bottom:12px; padding:12px; border-radius:12px; border:1px solid #1f2937; background:#020617;">
       <div style="opacity:.6; font-size:12px; margin-bottom:6px;">Тип и статус</div>
       <select id="order_type" style="width:100%; margin-bottom:8px;">
         <option value="combined">combined</option>
@@ -692,7 +693,7 @@ async function openCreateOrder(order = null) {
       </select>
     </div>
 
-    <div style="margin-bottom:14px;">
+    <div style="margin-bottom:12px; padding:12px; border-radius:12px; border:1px solid #1f2937; background:#020617;">
       <div style="opacity:.6; font-size:12px; margin-bottom:6px;">Даты</div>
       <input id="intake_date" type="date" style="width:100%; margin-bottom:6px;">
       <input id="start_date" type="date" style="width:100%; margin-bottom:6px;">
@@ -703,7 +704,7 @@ async function openCreateOrder(order = null) {
       background:#020617;
       padding:12px;
       border-radius:12px;
-      margin-bottom:14px;
+      margin-bottom:12px;
       border:1px solid #1f2937;
     ">
       <div style="font-weight:600; margin-bottom:10px;">🧰 Услуги</div>
@@ -796,7 +797,7 @@ async function openCreateOrder(order = null) {
       background:#020617;
       padding:12px;
       border-radius:12px;
-      margin-bottom:14px;
+      margin-bottom:12px;
       border:1px solid #1f2937;
     ">
       <label style="font-size:12px; opacity:.6;">Итоговая сумма</label>
@@ -821,10 +822,14 @@ async function openCreateOrder(order = null) {
       <label style="font-size:12px; opacity:.6;">Предоплата</label>
       <input id="prepaid" type="number" value="0" style="width:100%; margin-bottom:8px;">
 
-      <label style="font-size:12px; opacity:.6;">Оплачено</label>
-      <input id="paid" type="number" value="0" style="width:100%; margin-bottom:8px;">
+      ${isEdit ? `
+        <label style="font-size:12px; opacity:.6;">Оплачено</label>
+        <input id="paid" type="number" value="0" style="width:100%; margin-bottom:8px;">
+      ` : `
+        <div style="font-size:12px; opacity:.6; margin-bottom:8px;">Оплачено при создании = предоплата</div>
+      `}
 
-      <label style="font-size:12px; opacity:.6;">Долг</label>
+      <label style="font-size:12px; opacity:.6;">К доплате</label>
       <input id="due" readonly style="
         width:100%;
         font-weight:bold;
@@ -835,7 +840,7 @@ async function openCreateOrder(order = null) {
       ">
     </div>
 
-    <div style="margin-bottom:14px;">
+    <div style="margin-bottom:12px;">
       <label style="font-size:12px; opacity:.6;">Валюта</label>
       <select id="currency" style="width:100%;">
         <option value="UAH">UAH ₴</option>
@@ -843,11 +848,13 @@ async function openCreateOrder(order = null) {
       </select>
     </div>
 
-    <div style="margin-bottom:14px;">
-      <label style="font-size:12px; opacity:.6;">Фото / видео</label>
-      <input id="order_media" type="file" accept="image/*,video/*" multiple style="width:100%;">
-      <div id="order_media_preview" style="margin-top:8px;"></div>
-    </div>
+    ${isEdit ? `
+      <div style="margin-bottom:12px;">
+        <label style="font-size:12px; opacity:.6;">Фото / видео</label>
+        <input id="order_media" type="file" accept="image/*,video/*" multiple style="width:100%;">
+        <div id="order_media_preview" style="margin-top:8px;"></div>
+      </div>
+    ` : ""}
 
     <textarea id="order_note" placeholder="Комментарий" style="width:100%; min-height:80px; margin-bottom:12px;"></textarea>
 
@@ -862,7 +869,9 @@ async function openCreateOrder(order = null) {
   }
 
   bindOrderFormRecalc();
-  bindOrderMediaPreview(Array.isArray(order?.media_urls) ? order.media_urls : (order?.media_url ? [order.media_url] : []));
+  if (isEdit) {
+    bindOrderMediaPreview(Array.isArray(order?.media_urls) ? order.media_urls : (order?.media_url ? [order.media_url] : []));
+  }
   
   if (order) {
     document.getElementById("client_name").value = order.client_name || "";
@@ -881,11 +890,13 @@ async function openCreateOrder(order = null) {
       document.getElementById("other_cost").value = String(order.other_cost ?? 0);
     }
     document.getElementById("prepaid").value = String(order.prepaid ?? 0);
-    document.getElementById("paid").value = String(order.paid ?? 0);
+    if (isEdit) {
+      document.getElementById("paid").value = String(order.paid ?? 0);
+    }
     document.getElementById("currency").value = order.currency || "USD";
     document.getElementById("order_note").value = parsedNote.cleanNote || "";
 
-    if (order.media_url) {
+    if (isEdit && order.media_url) {
       const root = document.getElementById("order_media_preview");
       if (root) {
         const url = String(order.media_url);
@@ -1031,7 +1042,7 @@ function recalcOrderForm() {
   const laborCost = asNumber(laborCostEl?.value, 0);
   const otherCost = asNumber(otherCostEl?.value, 0);
 
-  const paid = asNumber(paidEl?.value, 0);
+  const paid = paidEl ? asNumber(paidEl.value, 0) : asNumber(prepaidEl?.value, 0);
   const prepaid = asNumber(prepaidEl?.value, 0);
 
   if (!total && subtotal > 0) {
@@ -1064,6 +1075,10 @@ function recalcOrderForm() {
   if (paidEl && prepaid > paid) {
     paidEl.value = String(prepaid);
     if (dueField) dueField.value = String(Math.max(total - prepaid, 0));
+  }
+
+  if (!paidEl && dueField) {
+    dueField.value = String(Math.max(total - prepaid, 0));
   }
 }
 
@@ -1164,8 +1179,10 @@ async function createOrder() {
     : total - total_cost;
 
   const prepaid = asNumber(document.getElementById("prepaid")?.value, 0);
-  const paid = asNumber(document.getElementById("paid")?.value, 0);
-  const due = asNumber(document.getElementById("due")?.value, 0);
+  const paid = isEdit
+    ? asNumber(document.getElementById("paid")?.value, 0)
+    : prepaid;
+  const due = Math.max(total - paid, 0);
 
   const currency = document.getElementById("currency")?.value || "USD";
   const baseNote = document.getElementById("order_note")?.value.trim() || null;
@@ -1195,10 +1212,12 @@ async function createOrder() {
       ? (state.orders || []).find(o => String(o.id) === String(state.editingOrderId))
       : null;
 
-    try {
-      media_urls = await uploadOrderMediaIfNeeded();
-    } catch (e) {
-      console.warn("Media upload skipped:", e?.message || e);
+    if (isEdit) {
+      try {
+        media_urls = await uploadOrderMediaIfNeeded();
+      } catch (e) {
+        console.warn("Media upload skipped:", e?.message || e);
+      }
     }
 
     if (!media_urls.length && Array.isArray(existingOrder?.media_urls)) {
