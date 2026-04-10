@@ -402,6 +402,46 @@ function renderLayout() {
         border-radius:13px;
       }
       input::placeholder, textarea::placeholder{ color:#7f8ab0; }
+      .soft-chip{
+        display:inline-flex;
+        align-items:center;
+        gap:6px;
+        padding:5px 10px;
+        border-radius:999px;
+        font-size:11px;
+        font-weight:700;
+        border:1px solid rgba(167,139,250,.28);
+        background:rgba(30,41,69,.55);
+        color:#dbeafe;
+      }
+      .ui-ghost-btn{
+        border:1px solid rgba(148,163,184,.35);
+        background:linear-gradient(180deg, rgba(30,41,59,.72), rgba(15,23,42,.82));
+        color:#e2e8f0;
+        border-radius:11px;
+        padding:9px 12px;
+        font-size:12px;
+        font-weight:700;
+      }
+      .ui-danger-btn{
+        border:1px solid rgba(248,113,113,.45);
+        background:linear-gradient(180deg, rgba(127,29,29,.4), rgba(69,10,10,.5));
+        color:#fee2e2;
+        border-radius:11px;
+        padding:9px 12px;
+        font-size:12px;
+        font-weight:700;
+      }
+      .kpi-card{
+        padding:11px;
+        border-radius:13px;
+        border:1px solid rgba(167,139,250,.2);
+        background:linear-gradient(180deg, rgba(9,15,30,.9), rgba(6,10,24,.95));
+        min-height:88px;
+        display:flex;
+        flex-direction:column;
+        justify-content:space-between;
+      }
     </style>
     <div id="app-shell" style="
       padding-bottom:80px;
@@ -647,7 +687,20 @@ async function loadDashboard() {
                     <div>Старт: ${displayDate(getOrderDate(o, ["start_date", "started_at"]))}</div>
                     <div>Финиш: ${displayDate(getOrderDate(o, ["end_date", "due_date", "planned_end_date"]))}</div>
                   </div>
-                  <div style="margin-top:10px; font-size:12px; color:#93c5fd;">Открыть заказ →</div>
+                  <div style="margin-top:12px; display:flex; justify-content:flex-end;">
+                    <span style="
+                      display:inline-flex;
+                      align-items:center;
+                      gap:6px;
+                      padding:7px 11px;
+                      border-radius:10px;
+                      border:1px solid rgba(147,197,253,.45);
+                      background:linear-gradient(180deg, rgba(30,58,138,.35), rgba(30,41,59,.45));
+                      color:#dbeafe;
+                      font-size:12px;
+                      font-weight:800;
+                    ">Открыть заказ →</span>
+                  </div>
                 `)}
               </div>
             `).join("")
@@ -658,14 +711,15 @@ async function loadDashboard() {
           ? attentionItems.slice(0, 8).map((item) => `
               <div onclick="${item.orderId ? `openOrder('${item.orderId}')` : ""}" style="${item.orderId ? "cursor:pointer;" : ""}">
                 ${card(`
-                  <div style="display:flex; align-items:center; gap:8px;">
+                  <div style="display:flex; align-items:center; gap:8px; padding:2px 0;">
                     <span style="
-                      width:8px; height:8px; border-radius:999px; display:inline-block;
+                      width:9px; height:9px; border-radius:999px; display:inline-block;
                       background:${item.level === "high" ? "#f87171" : "#fbbf24"};
+                      box-shadow:0 0 0 4px ${item.level === "high" ? "rgba(248,113,113,.17)" : "rgba(251,191,36,.16)"};
                     "></span>
-                    <span style="font-size:13px;">${item.text}</span>
+                    <span style="font-size:13px; font-weight:${item.level === "high" ? "700" : "500"};">${item.text}</span>
                   </div>
-                `)}
+                `, `border-color:${item.level === "high" ? "rgba(248,113,113,.34)" : "rgba(251,191,36,.28)"}; background:${item.level === "high" ? "linear-gradient(180deg, rgba(69,10,10,.44), rgba(31,11,18,.55))" : "linear-gradient(180deg, rgba(66,32,6,.38), rgba(31,18,8,.55))"};`)}
               </div>
             `).join("")
           : card("Критичных операционных рисков не найдено")}
@@ -714,35 +768,55 @@ async function loadOrders() {
           ? orders.map((o) => `
               <div onclick="openOrder('${o.id}')" style="cursor:pointer;">
                 ${card(`
-  <div style="font-weight:700;">${orderLabel(o)}</div>
-  <div>${escapeHtml(o.status || "")}</div>
-  <div>${formatMoney(o.total || 0)} ${currencySymbol(o.currency || "USD")}</div>
-  <div style="font-size:13px; opacity:0.7;">Клиент: ${escapeHtml(o.client_name || "—")}</div>
-  <div style="font-size:13px; opacity:0.7;">Авто: ${escapeHtml(o.car_model || "—")}</div>
-  <div style="font-size:13px; opacity:0.7;">
-    Оплачено: ${formatMoney(o.paid || 0)} ${currencySymbol(o.currency || "USD")}
-    |
-    Долг: ${formatMoney(o.due || 0)} ${currencySymbol(o.currency || "USD")}
+  <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+    <div>
+      <div style="font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#94a3b8;">Заказ</div>
+      <div style="font-size:18px; font-weight:900; margin-top:2px; color:#f5f3ff;">${orderLabel(o)}</div>
+    </div>
+    <span style="
+      display:inline-flex;
+      align-items:center;
+      padding:5px 10px;
+      border-radius:999px;
+      font-size:11px;
+      font-weight:800;
+      background:${statusVisual(o.status || "").bg};
+      color:${statusVisual(o.status || "").color};
+      border:1px solid ${statusVisual(o.status || "").border};
+      text-transform:uppercase;
+    ">${statusVisual(o.status || "").label}</span>
   </div>
 
-  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
-    <button onclick="event.stopPropagation(); startEditOrder('${o.id}')" style="
-      padding:10px 12px;
-      border-radius:10px;
-      border:1px solid #374151;
-      background:#1f2937;
-      color:#fff;
-      cursor:pointer;
-    ">Редактировать</button>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;">
+    <div style="padding:9px 10px; border-radius:11px; background:rgba(15,23,42,.72); border:1px solid rgba(167,139,250,.2);">
+      <div style="font-size:11px; color:#94a3b8;">Клиент</div>
+      <div style="font-size:13px; font-weight:700; margin-top:3px;">${escapeHtml(o.client_name || "—")}</div>
+    </div>
+    <div style="padding:9px 10px; border-radius:11px; background:rgba(15,23,42,.72); border:1px solid rgba(167,139,250,.2);">
+      <div style="font-size:11px; color:#94a3b8;">Авто</div>
+      <div style="font-size:13px; font-weight:700; margin-top:3px;">${escapeHtml(o.car_model || "—")}</div>
+    </div>
+  </div>
 
-    <button onclick="event.stopPropagation(); handleDeleteOrder('${o.id}')" style="
-      padding:10px 12px;
-      border-radius:10px;
-      border:1px solid rgba(239,68,68,.35);
-      background:rgba(239,68,68,.15);
-      color:#fecaca;
-      cursor:pointer;
-    ">Удалить</button>
+  <div style="display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:10px;">
+    <div style="padding:8px 9px; border-radius:10px; border:1px solid rgba(148,163,184,.22); background:rgba(9,14,27,.7);">
+      <div style="font-size:10px; color:#94a3b8;">Сумма</div>
+      <div style="font-size:14px; font-weight:800; margin-top:3px;">${formatMoney(o.total || 0)} ${currencySymbol(o.currency || "USD")}</div>
+    </div>
+    <div style="padding:8px 9px; border-radius:10px; border:1px solid rgba(52,211,153,.24); background:rgba(6,31,23,.45);">
+      <div style="font-size:10px; color:#86efac;">Оплачено</div>
+      <div style="font-size:14px; font-weight:800; margin-top:3px; color:#bbf7d0;">${formatMoney(o.paid || 0)} ${currencySymbol(o.currency || "USD")}</div>
+    </div>
+    <div style="padding:8px 9px; border-radius:10px; border:1px solid rgba(248,113,113,.3); background:rgba(69,10,10,.34);">
+      <div style="font-size:10px; color:#fca5a5;">Долг</div>
+      <div style="font-size:14px; font-weight:800; margin-top:3px; color:#fecaca;">${formatMoney(o.due || 0)} ${currencySymbol(o.currency || "USD")}</div>
+    </div>
+  </div>
+
+  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
+    <button onclick="event.stopPropagation(); openOrder('${o.id}')" class="ui-ghost-btn">Открыть</button>
+    <button onclick="event.stopPropagation(); startEditOrder('${o.id}')" class="ui-ghost-btn">Редактировать</button>
+    <button onclick="event.stopPropagation(); handleDeleteOrder('${o.id}')" class="ui-danger-btn">Удалить</button>
   </div>
 `)}              </div>
             `).join("")
@@ -1071,16 +1145,16 @@ function renderCalendarOpsOrderCard(order, hint = "") {
     <button onclick="openOrderFromCalendar('${escapeHtml(String(order.orderId || ""))}')" style="
       width:100%;
       text-align:left;
-      border-radius:12px;
-      border:1px solid #1f2937;
-      background:#0b1325;
-      padding:10px;
+      border-radius:13px;
+      border:1px solid rgba(148,163,184,.24);
+      background:linear-gradient(180deg, rgba(11,19,37,.95), rgba(9,14,28,.95));
+      padding:11px;
       color:#fff;
       margin-top:7px;
       cursor:pointer;
     ">
       <div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;">
-        <div style="font-size:13px; font-weight:700;">${escapeHtml(order.label)}</div>
+        <div style="font-size:13px; font-weight:800; line-height:1.35;">${escapeHtml(order.label)}</div>
         <span style="
           padding:3px 7px;
           border-radius:999px;
@@ -1104,18 +1178,24 @@ function renderCalendarOpsOrderCard(order, hint = "") {
 function renderCalendarOpsSection(title, subtitle, groups = [], tone = {}) {
   const border = tone.border || "#1f2937";
   const accent = tone.accent || "#93c5fd";
+  const totalCount = groups.reduce((sum, g) => sum + g.items.length, 0);
   return card(`
     <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
       <div>
         <div style="font-size:15px; font-weight:800; color:${accent};">${escapeHtml(title)}</div>
         <div style="font-size:12px; color:#94a3b8; margin-top:2px;">${escapeHtml(subtitle)}</div>
       </div>
-      <div style="font-size:11px; color:#94a3b8;">${groups.reduce((sum, g) => sum + g.items.length, 0)}</div>
+      <div style="display:flex; flex-direction:column; align-items:flex-end;">
+        <span class="soft-chip">${totalCount}</span>
+      </div>
     </div>
     <div style="margin-top:8px;">
       ${groups.map((group) => `
-        <div style="margin-top:8px;">
-          <div style="font-size:12px; color:#cbd5e1;">${escapeHtml(group.label)} · ${group.items.length}</div>
+        <div style="margin-top:9px; padding-top:8px; border-top:1px dashed rgba(148,163,184,.18);">
+          <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
+            <div style="font-size:12px; color:#cbd5e1; font-weight:700;">${escapeHtml(group.label)}</div>
+            <div style="font-size:11px; color:#94a3b8;">${group.items.length}</div>
+          </div>
           ${group.items.length
             ? group.items.map((item) => renderCalendarOpsOrderCard(item, group.hint(item))).join("")
             : `<div style="font-size:12px; color:#6b7280; margin-top:6px;">Нет заказов</div>`
@@ -1174,7 +1254,7 @@ async function loadCalendar() {
     el.innerHTML = `
       <div style="padding:14px 12px 18px;">
         <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;">
-          <div style="font-size:17px; font-weight:800;">Календарь</div>
+          <div style="font-size:17px; font-weight:800;">Календарь задач</div>
           <div style="display:flex; gap:6px;">
             <button onclick="setCalendarView('day')" style="padding:8px 10px; border-radius:10px; border:1px solid ${state.calendarView === "day" ? "rgba(96,165,250,.45)" : "#374151"}; background:${state.calendarView === "day" ? "rgba(59,130,246,.2)" : "#111827"}; color:#fff;">День</button>
             <button onclick="setCalendarView('week')" style="padding:8px 10px; border-radius:10px; border:1px solid ${state.calendarView === "week" ? "rgba(96,165,250,.45)" : "#374151"}; background:${state.calendarView === "week" ? "rgba(59,130,246,.2)" : "#111827"}; color:#fff;">Неделя</button>
@@ -1187,8 +1267,13 @@ async function loadCalendar() {
         </div>
 
         ${card(`
-          <div style="font-size:13px; color:#94a3b8; margin-bottom:6px;">Период</div>
-          <div style="font-size:16px; font-weight:700;">${escapeHtml(formatCalendarTitle(anchor, state.calendarView))}</div>
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+            <div>
+              <div style="font-size:13px; color:#94a3b8; margin-bottom:6px;">Период</div>
+              <div style="font-size:16px; font-weight:700;">${escapeHtml(formatCalendarTitle(anchor, state.calendarView))}</div>
+            </div>
+            <span class="soft-chip">${state.calendarView === "day" ? "Day" : "Week"}</span>
+          </div>
         `)}
 
         ${renderCalendarOpsSection(
@@ -1243,7 +1328,7 @@ async function loadCalendar() {
               <div style="font-size:15px; font-weight:800; color:#fca5a5;">Просрочено</div>
               <div style="font-size:12px; color:#94a3b8; margin-top:2px;">Дата завершения прошла, а заказ не закрыт</div>
             </div>
-            <div style="font-size:11px; color:#94a3b8;">${buckets.overdue.length}</div>
+            <span class="soft-chip" style="border-color:rgba(248,113,113,.4); color:#fecaca; background:rgba(69,10,10,.38);">${buckets.overdue.length}</span>
           </div>
           <div style="margin-top:8px;">
             ${buckets.overdue.length
@@ -1259,7 +1344,7 @@ async function loadCalendar() {
               <div style="font-size:15px; font-weight:800; color:#fcd34d;">Незапланировано</div>
               <div style="font-size:12px; color:#94a3b8; margin-top:2px;">Активные заказы без полной даты старта/финиша</div>
             </div>
-            <div style="font-size:11px; color:#94a3b8;">${buckets.unplanned.length}</div>
+            <span class="soft-chip" style="border-color:rgba(250,204,21,.4); color:#fde68a; background:rgba(66,32,6,.38);">${buckets.unplanned.length}</span>
           </div>
           <div style="margin-top:8px;">
             ${buckets.unplanned.length
@@ -3015,7 +3100,19 @@ function renderInventoryCard(item, type = "product") {
 }
 
 function renderInventoryGroup(items = [], type = "product", title = "Товар") {
-  if (!items.length) return card(`${title} отсутствует`);
+  if (!items.length) {
+    const emoji = type === "film" ? "🎞️" : "📦";
+    const helper = type === "film"
+      ? "Добавьте рулон, чтобы планировать материалы и резервы под заказы."
+      : "Добавьте позицию, чтобы видеть остатки, движение и low stock заранее.";
+    return card(`
+      <div style="text-align:center; padding:14px 10px;">
+        <div style="font-size:24px; margin-bottom:6px;">${emoji}</div>
+        <div style="font-weight:800; font-size:15px;">${escapeHtml(title)} пока пуст</div>
+        <div style="font-size:12px; color:#94a3b8; margin-top:6px; line-height:1.45;">${helper}</div>
+      </div>
+    `, "border-style:dashed; border-color:rgba(148,163,184,.35); background:linear-gradient(180deg, rgba(15,23,42,.72), rgba(12,18,33,.82));");
+  }
   return items.map((item) => `<div>${renderInventoryCard(item, type)}</div>`).join("");
 }
 
@@ -3053,27 +3150,31 @@ function renderInventoryTab() {
         ${btn("+ Товар", "openCreateInventoryItem('product')")}
       </div>
 
-      <div style="background:#0f172a; border:1px solid #1f2937; border-radius:14px; padding:10px; margin-bottom:12px;">
+      <div style="background:linear-gradient(180deg, rgba(15,23,42,.95), rgba(11,17,32,.95)); border:1px solid rgba(167,139,250,.22); border-radius:16px; padding:11px; margin-bottom:12px; box-shadow:inset 0 1px 0 rgba(255,255,255,.02);">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
+          <div style="font-size:13px; font-weight:800;">Фильтры склада</div>
+          <span class="soft-chip">${filteredItems.length} поз.</span>
+        </div>
         <input
           id="inv_search"
           placeholder="Поиск по названию"
           value="${escapeHtml(filters.search || "")}"
           oninput="updateInventoryFilters()"
-          style="width:100%; margin-bottom:8px; background:#0b1120; color:#fff; border:1px solid #334155; border-radius:10px; padding:10px;"
+          style="width:100%; margin-bottom:8px; background:#0b1120; color:#fff; border:1px solid rgba(167,139,250,.23); border-radius:11px; padding:10px;"
         >
         <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px;">
-          <select id="inv_filter_category" onchange="updateInventoryFilters()" style="width:100%; background:#0b1120; color:#fff; border:1px solid #334155; border-radius:10px; padding:10px;">
+          <select id="inv_filter_category" onchange="updateInventoryFilters()" style="width:100%; background:#0b1120; color:#fff; border:1px solid rgba(167,139,250,.23); border-radius:11px; padding:10px;">
             <option value="all" ${selectedCategory === "all" ? "selected" : ""}>Все категории</option>
             ${categories.map((category) => `<option value="${escapeHtml(category)}" ${selectedCategory === category ? "selected" : ""}>${escapeHtml(category)}</option>`).join("")}
           </select>
-          <select id="inv_filter_brand" onchange="updateInventoryFilters()" style="width:100%; background:#0b1120; color:#fff; border:1px solid #334155; border-radius:10px; padding:10px;">
+          <select id="inv_filter_brand" onchange="updateInventoryFilters()" style="width:100%; background:#0b1120; color:#fff; border:1px solid rgba(167,139,250,.23); border-radius:11px; padding:10px;">
             <option value="all" ${selectedBrand === "all" ? "selected" : ""}>Все бренды</option>
             ${brands.map((brand) => `<option value="${escapeHtml(brand)}" ${selectedBrand === brand ? "selected" : ""}>${escapeHtml(brand)}</option>`).join("")}
           </select>
         </div>
-        <label style="display:flex; align-items:center; gap:8px; margin-top:10px; font-size:13px; cursor:pointer;">
-          <input id="inv_filter_low_only" type="checkbox" ${lowOnly ? "checked" : ""} onchange="updateInventoryFilters()">
-          Только low/critical/out of stock
+        <label style="display:flex; align-items:center; gap:9px; margin-top:10px; font-size:13px; cursor:pointer; padding:8px 10px; border-radius:11px; border:1px solid ${lowOnly ? "rgba(248,113,113,.4)" : "rgba(148,163,184,.26)"}; background:${lowOnly ? "rgba(69,10,10,.35)" : "rgba(15,23,42,.55)"};">
+          <input id="inv_filter_low_only" type="checkbox" ${lowOnly ? "checked" : ""} onchange="updateInventoryFilters()" style="width:16px; height:16px; accent-color:#f87171; margin:0;">
+          <span style="font-weight:700; color:${lowOnly ? "#fecaca" : "#dbeafe"};">Только low/critical/out of stock</span>
         </label>
         <div style="margin-top:8px; font-size:12px; opacity:.75;">
           Найдено: ${filteredItems.length} • Low stock: ${lowStockCount}
@@ -3448,23 +3549,23 @@ async function loadFinance() {
         </div>
 
         ${card(`
-          <div style="font-size:12px; letter-spacing:.07em; color:#93c5fd; font-weight:800; margin-bottom:10px;">FINANCE PRO v1</div>
+          <div style="font-size:12px; letter-spacing:.07em; color:#c4b5fd; font-weight:800; margin-bottom:10px;">FINANCE SNAPSHOT</div>
           <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px;">
-            <div style="padding:10px; border:1px solid rgba(37,99,235,.35); border-radius:12px; background:rgba(37,99,235,.12);">
+            <div class="kpi-card" style="border-color:rgba(37,99,235,.35); background:linear-gradient(180deg, rgba(30,58,138,.22), rgba(9,15,30,.95));">
               <div style="font-size:11px; color:#93c5fd; margin-bottom:4px;">Выручка</div>
-              <div style="font-size:20px; font-weight:900;">${formatMoney(revenue)} ₴</div>
+              <div style="font-size:21px; font-weight:900;">${formatMoney(revenue)} ₴</div>
             </div>
-            <div style="padding:10px; border:1px solid rgba(251,146,60,.35); border-radius:12px; background:rgba(251,146,60,.1);">
+            <div class="kpi-card" style="border-color:rgba(251,146,60,.35); background:linear-gradient(180deg, rgba(124,45,18,.24), rgba(9,15,30,.95));">
               <div style="font-size:11px; color:#fdba74; margin-bottom:4px;">Расходы</div>
-              <div style="font-size:20px; font-weight:900;">${formatMoney(expenseTotal)} ₴</div>
+              <div style="font-size:21px; font-weight:900;">${formatMoney(expenseTotal)} ₴</div>
             </div>
-            <div style="padding:10px; border:1px solid ${netProfit >= 0 ? "rgba(34,197,94,.35)" : "rgba(239,68,68,.35)"}; border-radius:12px; background:${netProfit >= 0 ? "rgba(34,197,94,.1)" : "rgba(239,68,68,.1)"};">
+            <div class="kpi-card" style="border-color:${netProfit >= 0 ? "rgba(34,197,94,.35)" : "rgba(239,68,68,.35)"}; background:${netProfit >= 0 ? "linear-gradient(180deg, rgba(6,78,59,.24), rgba(9,15,30,.95))" : "linear-gradient(180deg, rgba(127,29,29,.24), rgba(9,15,30,.95))"};">
               <div style="font-size:11px; color:${netProfit >= 0 ? "#86efac" : "#fca5a5"}; margin-bottom:4px;">Чистая прибыль</div>
-              <div style="font-size:20px; font-weight:900;">${formatMoney(netProfit)} ₴</div>
+              <div style="font-size:21px; font-weight:900;">${formatMoney(netProfit)} ₴</div>
             </div>
-            <div style="padding:10px; border:1px solid rgba(239,68,68,.35); border-radius:12px; background:rgba(239,68,68,.1);">
+            <div class="kpi-card" style="border-color:rgba(239,68,68,.35); background:linear-gradient(180deg, rgba(127,29,29,.24), rgba(9,15,30,.95));">
               <div style="font-size:11px; color:#fca5a5; margin-bottom:4px;">Неоплачено / к оплате</div>
-              <div style="font-size:20px; font-weight:900;">${formatMoney(unpaidTotal)} ₴</div>
+              <div style="font-size:21px; font-weight:900;">${formatMoney(unpaidTotal)} ₴</div>
             </div>
           </div>
         `)}
@@ -3482,7 +3583,7 @@ async function loadFinance() {
               const method = paymentMethodLabel(payment);
               const note = paymentNoteLabel(payment);
               return `
-                <div style="border:1px solid rgba(148,163,184,.2); border-radius:12px; padding:10px; margin-bottom:8px; background:rgba(2,6,23,.55);">
+                <div style="border:1px solid rgba(148,163,184,.22); border-radius:12px; padding:10px; margin-bottom:8px; background:rgba(2,6,23,.55); border-left:3px solid rgba(147,197,253,.6);">
                   <div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;">
                     <div style="font-weight:800; font-size:17px; color:#93c5fd;">${formatMoney(amount)} ${currencySymbol(cur)}</div>
                     <div style="font-size:12px; color:#94a3b8;">${paymentDateLabel(payment, order.updated_at || order.created_at)}</div>
@@ -3504,7 +3605,7 @@ async function loadFinance() {
           </div>
           ${recentExpenses.length
             ? recentExpenses.map((x) => `
-              <div style="border:1px solid rgba(148,163,184,.2); border-radius:12px; padding:10px; margin-bottom:8px; background:rgba(2,6,23,.55);">
+              <div style="border:1px solid rgba(148,163,184,.2); border-radius:12px; padding:10px; margin-bottom:8px; background:rgba(2,6,23,.55); border-left:3px solid rgba(251,146,60,.6);">
                 <div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;">
                   <div style="font-weight:700;">${escapeHtml(x.category || "Без категории")}</div>
                   <div style="font-size:12px; color:#94a3b8;">${expenseDateLabel(x)}</div>
@@ -3531,7 +3632,7 @@ async function loadFinance() {
             ? dueOrders.map((o) => {
               const info = financeItemMeta(o);
               return `
-                <div style="border:1px solid rgba(239,68,68,.25); border-radius:12px; padding:10px; margin-bottom:8px; background:rgba(127,29,29,.15);">
+                <div style="border:1px solid rgba(239,68,68,.28); border-radius:12px; padding:10px; margin-bottom:8px; background:rgba(127,29,29,.15); border-left:3px solid rgba(248,113,113,.75);">
                   <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
                     <div>
                       <div style="font-weight:700;">${escapeHtml(info.client)}</div>
