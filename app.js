@@ -11,6 +11,7 @@ const state = {
   orders: [],
   clients: [],
   inventory: [],
+  inventoryMovementsByItem: {},
   inventoryFilters: {
     search: "",
     category: "all",
@@ -872,6 +873,132 @@ function getInventoryStockState(item = {}) {
   };
 }
 
+function inventoryMovementDateValue(movement = {}) {
+  return movement.date
+    || movement.created_at
+    || movement.movement_date
+    || movement.timestamp
+    || movement.updated_at
+    || null;
+}
+
+function normalizeMovementTypeLabel(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return "Movement";
+  const key = raw.toLowerCase();
+  const map = {
+    reserve: "Reserve",
+    reserved: "Reserve",
+    unreserve: "Unreserve",
+    release: "Release",
+    in: "Stock in",
+    intake: "Stock in",
+    receipt: "Stock in",
+    out: "Stock out",
+    расход: "Stock out",
+    writeoff: "Write-off",
+    correction: "Correction",
+    adjustment: "Adjustment",
+    usage: "Used in order",
+    consume: "Used in order",
+  };
+  if (map[key]) return map[key];
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+function normalizeInventoryMovement(raw = {}) {
+  if (!raw || typeof raw !== "object") return null;
+  const quantity = asNumber(raw.quantity ?? raw.qty ?? raw.amount ?? raw.delta ?? 0, 0);
+  return {
+    id: raw.id || raw.movement_id || null,
+    inventory_item_id: raw.inventory_item_id || raw.item_id || raw.inventory_id || null,
+    movement_type: normalizeMovementTypeLabel(raw.movement_type || raw.type || raw.action || ""),
+    quantity,
+    unit: raw.unit || raw.uom || "",
+    comment: raw.comment || raw.note || raw.reason || "",
+    related_order_id: raw.related_order_id || raw.order_id || raw.order?.id || null,
+    related_order_number: raw.related_order_number || raw.order_number || raw.order?.order_number || null,
+    date: inventoryMovementDateValue(raw),
+  };
+}
+
+function inventoryMovementOrderLabel(movement = {}) {
+  if (movement.related_order_number) return movement.related_order_number;
+  if (movement.related_order_id) return `#${String(movement.related_order_id).slice(0, 8)}`;
+  return null;
+}
+
+async function ensureInventoryMovementsForItem(itemId, { force = false } = {}) {
+  const key = String(itemId || "");
+  if (!key) return [];
+  if (!force && Array.isArray(state.inventoryMovementsByItem[key])) {
+    return state.inventoryMovementsByItem[key];
+  }
+
+  const attempts = [
+    { action: "get_inventory_movements", payload: { inventory_item_id: itemId, limit: 12 } },
+    { action: "get_inventory_movements", payload: { item_id: itemId, limit: 12 } },
+    { action: "get_inventory_item_movements", payload: { inventory_item_id: itemId, limit: 12 } },
+    { action: "get_inventory_item_movements", payload: { item_id: itemId, limit: 12 } },
+    { action: "get_inventory_movement_history", payload: { inventory_item_id: itemId, limit: 12 } },
+    { action: "get_inventory_movement_history", payload: { item_id: itemId, limit: 12 } },
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      const res = await api(attempt.action, attempt.payload);
+      const rows = Array.isArray(res?.items)
+        ? res.items
+        : (Array.isArray(res?.movements) ? res.movements : []);
+      const normalized = rows
+        .map(normalizeInventoryMovement)
+        .filter(Boolean)
+        .filter((row) => !row.inventory_item_id || String(row.inventory_item_id) === key)
+        .sort((a, b) => {
+          const ta = parseDateValue(inventoryMovementDateValue(a))?.getTime() || 0;
+          const tb = parseDateValue(inventoryMovementDateValue(b))?.getTime() || 0;
+          return tb - ta;
+        });
+
+      state.inventoryMovementsByItem[key] = normalized.slice(0, 12);
+      return state.inventoryMovementsByItem[key];
+    } catch (e) {
+      console.warn(`Inventory movement action failed: ${attempt.action}`, e?.message || e);
+    }
+  }
+
+  state.inventoryMovementsByItem[key] = [];
+  return [];
+}
+
+function renderInventoryMovementHistoryBlock(itemId, { compact = false } = {}) {
+  const key = String(itemId || "");
+  const list = Array.isArray(state.inventoryMovementsByItem[key]) ? state.inventoryMovementsByItem[key] : [];
+  const rows = compact ? list.slice(0, 3) : list.slice(0, 6);
+
+  if (!rows.length) {
+    return `
+      <div style="padding:10px; border-radius:10px; border:1px dashed rgba(148,163,184,.35); color:#94a3b8; font-size:12px;">
+        История движений пока недоступна.
+      </div>
+    `;
+  }
+
+  return rows.map((movement) => `
+    <div style="padding:9px; border-radius:10px; border:1px solid rgba(148,163,184,.2); margin-bottom:8px; background:rgba(15,23,42,.4);">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <div style="font-size:13px; font-weight:700;">${escapeHtml(movement.movement_type || "Movement")}</div>
+        <div style="font-size:13px; font-weight:700;">${formatMoney(movement.quantity || 0)} ${escapeHtml(movement.unit || "")}</div>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; font-size:11px; color:#94a3b8;">
+        <span>${escapeHtml(displayDate(movement.date))}</span>
+        ${inventoryMovementOrderLabel(movement) ? `<span>Заказ: ${escapeHtml(inventoryMovementOrderLabel(movement))}</span>` : ""}
+      </div>
+      ${movement.comment ? `<div style="margin-top:4px; font-size:12px; color:#cbd5e1;">${escapeHtml(movement.comment)}</div>` : ""}
+    </div>
+  `).join("");
+}
+
 function isInventoryLowStock(item = {}) {
   const stock = getInventoryStockState(item);
   return stock.key === "low" || stock.key === "critical" || stock.key === "out";
@@ -1081,7 +1208,10 @@ async function openOrder(id) {
         </div>
 
         ${materials.length
-          ? materials.map((m) => `
+          ? materials.map((m) => {
+            const linkedItem = (state.inventory || []).find((item) => String(item.id) === String(m.inventory_item_id));
+            const linkedAvailable = linkedItem ? getInventoryAvailableQuantity(linkedItem) : null;
+            return `
             <div style="padding:10px; border-radius:12px; border:1px solid rgba(148,163,184,.2); margin-bottom:8px; background:rgba(15,23,42,.38);">
               <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:6px;">
                 <div style="font-weight:700; font-size:14px;">${escapeHtml(m.item_name || "Материал")}</div>
@@ -1093,8 +1223,17 @@ async function openOrder(id) {
                   ? `<span>Цена закупки: —</span>`
                   : `<span>Цена закупки: ${formatMoney(m.purchase_price)} ${currencySymbol(m.currency || order.currency || "USD")}</span>`}
               </div>
+              ${m.inventory_item_id
+                ? `<div style="margin-top:6px; font-size:12px; color:#cbd5e1;">
+                    Склад: ${linkedItem ? escapeHtml(linkedItem.name || "Позиция склада") : "ID " + escapeHtml(String(m.inventory_item_id))}
+                    ${linkedItem && linkedAvailable != null
+                      ? ` · Доступно: ${formatMoney(linkedAvailable)} ${escapeHtml(linkedItem.unit || "pcs")} · Резерв: ${formatMoney(linkedItem.reserved_quantity || 0)}`
+                      : ""}
+                  </div>`
+                : `<div style="margin-top:6px; font-size:12px; color:#94a3b8;">Склад: позиция не привязана</div>`}
             </div>
-          `).join("")
+          `;
+          }).join("")
           : `<div style="padding:12px; border-radius:12px; border:1px dashed rgba(148,163,184,.35); color:#94a3b8; font-size:13px;">Материалы пока не добавлены. Нажмите «+ Материал», чтобы привязать позицию со склада.</div>`
         }
       `)}
@@ -1883,7 +2022,7 @@ async function openAddMaterialToOrder(order_id) {
         <option value="">Выберите материал</option>
         ${sorted.map((item) => `
           <option value="${escapeHtml(String(item.id))}">
-            ${escapeHtml(item.name || "Без названия")} · ${formatMoney(item.available_quantity ?? item.quantity ?? 0)} ${escapeHtml(item.unit || "pcs")}
+            ${escapeHtml(item.name || "Без названия")} · Доступно: ${formatMoney(getInventoryAvailableQuantity(item))} ${escapeHtml(item.unit || "pcs")} (резерв: ${formatMoney(item.reserved_quantity || 0)})
           </option>
         `).join("")}
       </select>
@@ -1987,6 +2126,9 @@ function renderInventoryCard(item, type = "product") {
   const stock = getInventoryStockState(item);
   const isLow = isInventoryLowStock(item);
   const currency = currencySymbol(item.currency || "USD");
+  const usagePercent = asNumber(item.quantity, 0) > 0
+    ? Math.max(0, Math.min(100, (available / asNumber(item.quantity, 0)) * 100))
+    : 0;
 
   return card(`
     <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
@@ -2033,12 +2175,22 @@ function renderInventoryCard(item, type = "product") {
         <div style="font-size:14px; font-weight:700;">${formatMoney(item.min_quantity || 0)} ${escapeHtml(item.unit || "pcs")}</div>
       </div>
     </div>
+    <div style="margin-top:8px; font-size:11px; color:#94a3b8;">
+      Available = Quantity - Reserved
+    </div>
+    <div style="margin-top:6px; height:6px; border-radius:999px; background:#0b1220; border:1px solid #1e293b; overflow:hidden;">
+      <div style="height:100%; width:${usagePercent}%; background:${isLow ? "#f87171" : "#34d399"};"></div>
+    </div>
 
     <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:10px; font-size:12px; opacity:.9;">
       <span>Purchase: ${formatMoney(item.purchase_price || 0)} ${currency}</span>
       <span>Retail: ${formatMoney(item.retail_price || 0)} ${currency}</span>
     </div>
     ${item.note ? `<div style="font-size:12px; opacity:0.75; margin-top:6px;">Заметка: ${escapeHtml(item.note)}</div>` : ""}
+    <div style="margin-top:10px;">
+      <div style="font-size:11px; color:#94a3b8; margin-bottom:6px;">Последние движения</div>
+      ${renderInventoryMovementHistoryBlock(item.id, { compact: true })}
+    </div>
     <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
       ${btn("Редактировать", `openEditInventoryItem('${item.id}', '${type}')`)}
       ${btn("Удалить", `deleteInventoryItem('${item.id}')`, "background:#3b0f15; border-color:#7f1d1d;")}
@@ -2119,6 +2271,11 @@ function renderInventoryTab() {
       ${renderInventoryGroup(productItems, "product", "Товар")}
     </div>
   `;
+
+  const toPrefetch = [...filmItems, ...productItems].slice(0, 8);
+  toPrefetch.forEach((item) => {
+    ensureInventoryMovementsForItem(item.id);
+  });
 }
 
 async function loadInventory() {
@@ -2144,12 +2301,13 @@ function openCreateInventoryItem(type = "product") {
   });
 }
 
-function openEditInventoryItem(id, type = "product") {
+async function openEditInventoryItem(id, type = "product") {
   const item = (state.inventory || []).find((x) => String(x.id) === String(id));
   if (!item) {
     safeAlert("Позиция не найдена");
     return;
   }
+  await ensureInventoryMovementsForItem(item.id);
   openInventoryItemForm({
     mode: "edit",
     type,
@@ -2194,8 +2352,30 @@ function openInventoryItemForm({ mode = "create", type = "product", item = null 
     </select>
     <input id="inv_min" placeholder="Мин. остаток" value="${escapeHtml(item?.min_quantity ?? 0)}" type="number" step="0.1" style="width:100%; margin-bottom:8px;">
     <textarea id="inv_note" placeholder="Заметка" style="width:100%; margin-bottom:8px; min-height:68px;">${escapeHtml(item?.note || "")}</textarea>
+    ${mode === "edit" && item?.id ? `
+      <div style="margin-bottom:10px; border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; background:rgba(2,6,23,.55);">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;">
+          <div style="font-size:13px; font-weight:700;">История движений</div>
+          ${btn("Обновить", `refreshInventoryMovementHistory('${item.id}')`, "padding:6px 10px; font-size:12px;")}
+        </div>
+        <div id="inventory_movements_${escapeHtml(String(item.id))}">
+          ${renderInventoryMovementHistoryBlock(item.id)}
+        </div>
+      </div>
+    ` : ""}
     ${btn(actionLabel, mode === "edit" ? `updateInventoryItem('${item?.id}', '${type}')` : `createInventoryItem('${type}')`)}
   `);
+}
+
+async function refreshInventoryMovementHistory(itemId) {
+  const box = document.getElementById(`inventory_movements_${itemId}`);
+  if (box) {
+    box.innerHTML = `<div style="font-size:12px; color:#94a3b8;">Обновляем историю...</div>`;
+  }
+  await ensureInventoryMovementsForItem(itemId, { force: true });
+  if (box) {
+    box.innerHTML = renderInventoryMovementHistoryBlock(itemId);
+  }
 }
 
 async function createInventoryItem(type = "product") {
