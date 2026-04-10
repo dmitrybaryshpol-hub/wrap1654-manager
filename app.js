@@ -11,6 +11,12 @@ const state = {
   orders: [],
   clients: [],
   inventory: [],
+  inventoryFilters: {
+    search: "",
+    category: "all",
+    brand: "all",
+    lowOnly: false,
+  },
 
   editingOrderId: null,
   orderServices: [],
@@ -812,6 +818,63 @@ function normalizeInventoryItems(items = []) {
     normalized_category: normalizeInventoryCategory(item.category),
     normalized_group: inventoryCategoryGroup(item.category),
   }));
+}
+
+function getInventoryAvailableQuantity(item = {}) {
+  const explicitAvailable = Number(item.available_quantity);
+  if (Number.isFinite(explicitAvailable)) return explicitAvailable;
+
+  const quantity = asNumber(item.quantity, 0);
+  const reserved = asNumber(item.reserved_quantity, 0);
+  return quantity - reserved;
+}
+
+function getInventoryStockState(item = {}) {
+  const available = getInventoryAvailableQuantity(item);
+  const minQuantity = asNumber(item.min_quantity, 0);
+
+  if (available <= 0) {
+    return {
+      key: "out",
+      label: "Out of stock",
+      tone: "rgba(239,68,68,.25)",
+      border: "#dc2626",
+      color: "#fca5a5",
+    };
+  }
+
+  if (minQuantity > 0 && available <= minQuantity * 0.5) {
+    return {
+      key: "critical",
+      label: "Critical",
+      tone: "rgba(239,68,68,.2)",
+      border: "#b91c1c",
+      color: "#fca5a5",
+    };
+  }
+
+  if (minQuantity > 0 && available <= minQuantity) {
+    return {
+      key: "low",
+      label: "Low",
+      tone: "rgba(245,158,11,.22)",
+      border: "#d97706",
+      color: "#fcd34d",
+    };
+  }
+
+  return {
+    key: "normal",
+    label: "Normal",
+    tone: "rgba(16,185,129,.2)",
+    border: "#047857",
+    color: "#6ee7b7",
+  };
+}
+
+function isInventoryLowStock(item = {}) {
+  const stock = getInventoryStockState(item);
+  return stock.key === "low" || stock.key === "critical" || stock.key === "out";
 }
 
 async function ensureInventoryLoaded() {
@@ -1909,6 +1972,155 @@ async function addMaterialToOrder(order_id) {
 
 
 
+function updateInventoryFilters() {
+  state.inventoryFilters = {
+    search: document.getElementById("inv_search")?.value || "",
+    category: document.getElementById("inv_filter_category")?.value || "all",
+    brand: document.getElementById("inv_filter_brand")?.value || "all",
+    lowOnly: Boolean(document.getElementById("inv_filter_low_only")?.checked),
+  };
+  renderInventoryTab();
+}
+
+function renderInventoryCard(item, type = "product") {
+  const available = getInventoryAvailableQuantity(item);
+  const stock = getInventoryStockState(item);
+  const isLow = isInventoryLowStock(item);
+  const currency = currencySymbol(item.currency || "USD");
+
+  return card(`
+    <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+      <div>
+        <div style="font-weight:800; font-size:15px; line-height:1.35;">${escapeHtml(item.name || "Без названия")}</div>
+        <div style="font-size:12px; opacity:.7; margin-top:3px;">
+          ${escapeHtml(item.brand || "Без бренда")} • ${escapeHtml(item.normalized_category || item.category || "other")}
+        </div>
+      </div>
+      <span style="
+        display:inline-flex;
+        padding:4px 9px;
+        border-radius:999px;
+        font-size:11px;
+        font-weight:700;
+        background:${stock.tone};
+        border:1px solid ${stock.border};
+        color:${stock.color};
+      ">${stock.label}</span>
+    </div>
+
+    ${(type === "film" && item.color) || (type === "film" && item.width_cm)
+      ? `<div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; font-size:12px; opacity:.8;">
+           ${item.color ? `<span>Цвет: ${escapeHtml(item.color)}</span>` : ""}
+           ${item.width_cm ? `<span>Ширина: ${formatMoney(item.width_cm)} см</span>` : ""}
+         </div>`
+      : ""}
+
+    <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; margin-top:10px;">
+      <div style="background:#0b1220; border:1px solid #1e293b; border-radius:10px; padding:8px;">
+        <div style="font-size:11px; opacity:.65;">Quantity</div>
+        <div style="font-size:14px; font-weight:700;">${formatMoney(item.quantity)} ${escapeHtml(item.unit || "pcs")}</div>
+      </div>
+      <div style="background:#0b1220; border:1px solid #1e293b; border-radius:10px; padding:8px;">
+        <div style="font-size:11px; opacity:.65;">Reserved</div>
+        <div style="font-size:14px; font-weight:700;">${formatMoney(item.reserved_quantity || 0)} ${escapeHtml(item.unit || "pcs")}</div>
+      </div>
+      <div style="background:${isLow ? "rgba(127,29,29,.25)" : "#0b1220"}; border:1px solid ${isLow ? "#7f1d1d" : "#1e293b"}; border-radius:10px; padding:8px;">
+        <div style="font-size:11px; opacity:.72;">Available</div>
+        <div style="font-size:15px; font-weight:800; color:${isLow ? "#fca5a5" : "#fff"};">${formatMoney(available)} ${escapeHtml(item.unit || "pcs")}</div>
+      </div>
+      <div style="background:#0b1220; border:1px solid #1e293b; border-radius:10px; padding:8px;">
+        <div style="font-size:11px; opacity:.65;">Min stock</div>
+        <div style="font-size:14px; font-weight:700;">${formatMoney(item.min_quantity || 0)} ${escapeHtml(item.unit || "pcs")}</div>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:10px; font-size:12px; opacity:.9;">
+      <span>Purchase: ${formatMoney(item.purchase_price || 0)} ${currency}</span>
+      <span>Retail: ${formatMoney(item.retail_price || 0)} ${currency}</span>
+    </div>
+    ${item.note ? `<div style="font-size:12px; opacity:0.75; margin-top:6px;">Заметка: ${escapeHtml(item.note)}</div>` : ""}
+    <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+      ${btn("Редактировать", `openEditInventoryItem('${item.id}', '${type}')`)}
+      ${btn("Удалить", `deleteInventoryItem('${item.id}')`, "background:#3b0f15; border-color:#7f1d1d;")}
+    </div>
+  `, isLow ? "box-shadow:0 0 0 1px rgba(239,68,68,.35) inset;" : "");
+}
+
+function renderInventoryGroup(items = [], type = "product", title = "Товар") {
+  if (!items.length) return card(`${title} отсутствует`);
+  return items.map((item) => `<div>${renderInventoryCard(item, type)}</div>`).join("");
+}
+
+function renderInventoryTab() {
+  const el = document.getElementById("inventory");
+  if (!el) return;
+  const allItems = Array.isArray(state.inventory) ? state.inventory : [];
+  const filters = state.inventoryFilters || {};
+  const search = String(filters.search || "").trim().toLowerCase();
+  const selectedCategory = String(filters.category || "all");
+  const selectedBrand = String(filters.brand || "all");
+  const lowOnly = Boolean(filters.lowOnly);
+
+  const categories = Array.from(new Set(allItems.map((item) => item.normalized_category || item.category || "other"))).sort((a, b) => a.localeCompare(b, "uk"));
+  const brands = Array.from(new Set(allItems.map((item) => String(item.brand || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "uk"));
+
+  const filteredItems = allItems.filter((item) => {
+    if (search && !String(item.name || "").toLowerCase().includes(search)) return false;
+    const itemCategory = item.normalized_category || item.category || "other";
+    if (selectedCategory !== "all" && itemCategory !== selectedCategory) return false;
+    const itemBrand = String(item.brand || "").trim() || "—";
+    if (selectedBrand !== "all" && itemBrand !== selectedBrand) return false;
+    if (lowOnly && !isInventoryLowStock(item)) return false;
+    return true;
+  });
+
+  const filmItems = filteredItems.filter((i) => i.normalized_group === "film");
+  const productItems = filteredItems.filter((i) => i.normalized_group === "product");
+  const lowStockCount = filteredItems.filter(isInventoryLowStock).length;
+
+  el.innerHTML = `
+    <div style="padding:16px;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+        ${btn("+ Плёнка", "openCreateInventoryItem('film')")}
+        ${btn("+ Товар", "openCreateInventoryItem('product')")}
+      </div>
+
+      <div style="background:#0f172a; border:1px solid #1f2937; border-radius:14px; padding:10px; margin-bottom:12px;">
+        <input
+          id="inv_search"
+          placeholder="Поиск по названию"
+          value="${escapeHtml(filters.search || "")}"
+          oninput="updateInventoryFilters()"
+          style="width:100%; margin-bottom:8px; background:#0b1120; color:#fff; border:1px solid #334155; border-radius:10px; padding:10px;"
+        >
+        <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px;">
+          <select id="inv_filter_category" onchange="updateInventoryFilters()" style="width:100%; background:#0b1120; color:#fff; border:1px solid #334155; border-radius:10px; padding:10px;">
+            <option value="all" ${selectedCategory === "all" ? "selected" : ""}>Все категории</option>
+            ${categories.map((category) => `<option value="${escapeHtml(category)}" ${selectedCategory === category ? "selected" : ""}>${escapeHtml(category)}</option>`).join("")}
+          </select>
+          <select id="inv_filter_brand" onchange="updateInventoryFilters()" style="width:100%; background:#0b1120; color:#fff; border:1px solid #334155; border-radius:10px; padding:10px;">
+            <option value="all" ${selectedBrand === "all" ? "selected" : ""}>Все бренды</option>
+            ${brands.map((brand) => `<option value="${escapeHtml(brand)}" ${selectedBrand === brand ? "selected" : ""}>${escapeHtml(brand)}</option>`).join("")}
+          </select>
+        </div>
+        <label style="display:flex; align-items:center; gap:8px; margin-top:10px; font-size:13px; cursor:pointer;">
+          <input id="inv_filter_low_only" type="checkbox" ${lowOnly ? "checked" : ""} onchange="updateInventoryFilters()">
+          Только low/critical/out of stock
+        </label>
+        <div style="margin-top:8px; font-size:12px; opacity:.75;">
+          Найдено: ${filteredItems.length} • Low stock: ${lowStockCount}
+        </div>
+      </div>
+
+      <h3 style="margin:0 0 8px 0;">Плёнка</h3>
+      ${renderInventoryGroup(filmItems, "film", "Плёнка")}
+
+      <h3 style="margin:14px 0 8px 0;">Товар</h3>
+      ${renderInventoryGroup(productItems, "product", "Товар")}
+    </div>
+  `;
+}
+
 async function loadInventory() {
   const el = document.getElementById("inventory");
   if (!el) return;
@@ -1916,53 +2128,8 @@ async function loadInventory() {
 
   try {
     const res = await api("get_inventory");
-    const normalizedItems = normalizeInventoryItems(res?.items || []);
-    state.inventory = normalizedItems;
-    const filmItems = normalizedItems.filter((i) => i.normalized_group === "film");
-    const productItems = normalizedItems.filter((i) => i.normalized_group === "product");
-
-    const renderInventoryCard = (i, type) => card(`
-      <div style="font-weight:700;">${escapeHtml(i.name || "")}</div>
-      <div style="font-size:12px; opacity:0.7;">Бренд: ${escapeHtml(i.brand || "—")}</div>
-      ${type === "film" ? `<div style="font-size:12px; opacity:0.7;">Цвет: ${escapeHtml(i.color || "—")}</div>` : ""}
-      ${type === "film" ? `<div style="font-size:12px; opacity:0.7;">Ширина: ${formatMoney(i.width_cm || 0)} см</div>` : ""}
-      <div style="font-size:12px; opacity:0.7;">Ед.: ${escapeHtml(i.unit || "pcs")}</div>
-      <div style="font-size:13px; opacity:0.85;">Остаток: ${formatMoney(i.quantity)}</div>
-      <div style="font-size:13px; opacity:0.85;">Резерв: ${formatMoney(i.reserved_quantity || 0)}</div>
-      <div style="font-size:13px; opacity:0.85;">Доступно: ${formatMoney(i.available_quantity ?? i.quantity)}</div>
-      <div style="font-size:13px; opacity:0.85;">Мин. остаток: ${formatMoney(i.min_quantity || 0)}</div>
-      <div style="font-size:12px; opacity:0.7;">Категория: ${escapeHtml(i.normalized_category || i.category || "other")}</div>
-      ${type === "film"
-        ? `<div style="font-size:13px; opacity:0.85;">Цена: ${formatMoney(i.retail_price || i.purchase_price || 0)} ${currencySymbol(i.currency || "USD")}</div>`
-        : `
-          <div style="font-size:13px; opacity:0.85;">Вход: ${formatMoney(i.purchase_price || 0)} ${currencySymbol(i.currency || "USD")}</div>
-          <div style="font-size:13px; opacity:0.85;">Розница: ${formatMoney(i.retail_price || 0)} ${currencySymbol(i.currency || "USD")}</div>
-        `}
-      ${i.note ? `<div style="font-size:12px; opacity:0.75; margin-top:6px;">Заметка: ${escapeHtml(i.note)}</div>` : ""}
-      <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
-        ${btn("Редактировать", `openEditInventoryItem('${i.id}', '${type}')`)}
-        ${btn("Удалить", `deleteInventoryItem('${i.id}')`, "background:#3b0f15; border-color:#7f1d1d;")}
-      </div>
-    `);
-
-    el.innerHTML = `
-      <div style="padding:16px;">
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
-          ${btn("+ Плёнка", "openCreateInventoryItem('film')")}
-          ${btn("+ Товар", "openCreateInventoryItem('product')")}
-        </div>
-
-        <h3 style="margin:0 0 8px 0;">Плёнка</h3>
-        ${filmItems.length
-          ? filmItems.map((i) => `<div>${renderInventoryCard(i, "film")}</div>`).join("")
-          : card("Плёнка отсутствует")}
-
-        <h3 style="margin:14px 0 8px 0;">Товар</h3>
-        ${productItems.length
-          ? productItems.map((i) => `<div>${renderInventoryCard(i, "product")}</div>`).join("")
-          : card("Товар отсутствует")}
-      </div>
-    `;
+    state.inventory = normalizeInventoryItems(res?.items || []);
+    renderInventoryTab();
   } catch (e) {
     console.error(e);
     el.innerHTML = `<div style="padding:16px;">Ошибка загрузки склада</div>`;
