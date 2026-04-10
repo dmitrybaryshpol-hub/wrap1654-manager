@@ -877,6 +877,87 @@ function buildCalendarEvents(orders = []) {
   return events.sort((a, b) => a.date.getTime() - b.date.getTime());
 }
 
+function buildCalendarOperationalBuckets(orders = [], options = {}) {
+  const today = startOfDay(options.today || new Date());
+  const soonHorizonDays = Number.isFinite(Number(options.soonHorizonDays))
+    ? Math.max(1, Number(options.soonHorizonDays))
+    : 3;
+  const soonEnd = addDays(today, soonHorizonDays);
+  const orderList = Array.isArray(orders) ? orders : [];
+
+  const buckets = {
+    today: { arrivals: [], starts: [], completions: [] },
+    soon: { arrivals: [], starts: [], completions: [] },
+    overdue: [],
+    unplanned: [],
+  };
+  const seen = {
+    today: { arrivals: new Set(), starts: new Set(), completions: new Set() },
+    soon: { arrivals: new Set(), starts: new Set(), completions: new Set() },
+    overdue: new Set(),
+    unplanned: new Set(),
+  };
+
+  const pushUnique = (group, set, item) => {
+    const key = String(item.orderId || "");
+    if (!key || set.has(key)) return;
+    set.add(key);
+    group.push(item);
+  };
+
+  orderList.forEach((order) => {
+    const orderId = String(order?.id || "");
+    if (!orderId) return;
+
+    const status = String(order?.status || "").toLowerCase();
+    const orderItem = {
+      orderId,
+      label: orderLabel(order),
+      clientName: order?.client_name || "—",
+      carModel: order?.car_model || "—",
+      status,
+      statusVisual: statusVisual(status),
+      intakeDateRaw: getOrderDate(order, ["intake_date", "received_at"]),
+      startDateRaw: getOrderDate(order, ["start_date", "started_at"]),
+      endDateRaw: getOrderDate(order, ["end_date", "due_date", "planned_end_date"]),
+    };
+
+    const intakeDate = parseDateOnly(orderItem.intakeDateRaw);
+    const startDate = parseDateOnly(orderItem.startDateRaw);
+    const endDate = parseDateOnly(orderItem.endDateRaw);
+    const isComplete = isOrderCompletionStatus(status);
+    const isActive = isActiveOrderStatus(status);
+
+    const dateRules = [
+      { date: intakeDate, todayList: buckets.today.arrivals, todaySet: seen.today.arrivals, soonList: buckets.soon.arrivals, soonSet: seen.soon.arrivals },
+      { date: startDate, todayList: buckets.today.starts, todaySet: seen.today.starts, soonList: buckets.soon.starts, soonSet: seen.soon.starts },
+      { date: endDate, todayList: buckets.today.completions, todaySet: seen.today.completions, soonList: buckets.soon.completions, soonSet: seen.soon.completions },
+    ];
+
+    dateRules.forEach((rule) => {
+      if (!rule.date) return;
+      if (isSameDay(rule.date, today)) {
+        pushUnique(rule.todayList, rule.todaySet, orderItem);
+        return;
+      }
+      if (rule.date > today && rule.date <= soonEnd) {
+        pushUnique(rule.soonList, rule.soonSet, orderItem);
+      }
+    });
+
+    if (endDate && endDate < today && !isComplete) {
+      pushUnique(buckets.overdue, seen.overdue, orderItem);
+    }
+
+    const hasPlanningGap = isActive && (!startDate || !endDate);
+    if (hasPlanningGap) {
+      pushUnique(buckets.unplanned, seen.unplanned, orderItem);
+    }
+  });
+
+  return { buckets, soonHorizonDays };
+}
+
 function renderCalendarEventCard(event) {
   const type = eventTypeVisual(event.type);
   return `
@@ -920,6 +1001,66 @@ function renderCalendarEventCard(event) {
   `;
 }
 
+function renderCalendarOpsOrderCard(order, hint = "") {
+  return `
+    <button onclick="openOrderFromCalendar('${escapeHtml(String(order.orderId || ""))}')" style="
+      width:100%;
+      text-align:left;
+      border-radius:12px;
+      border:1px solid #1f2937;
+      background:#0b1325;
+      padding:10px;
+      color:#fff;
+      margin-top:7px;
+      cursor:pointer;
+    ">
+      <div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;">
+        <div style="font-size:13px; font-weight:700;">${escapeHtml(order.label)}</div>
+        <span style="
+          padding:3px 7px;
+          border-radius:999px;
+          background:${order.statusVisual.bg};
+          color:${order.statusVisual.color};
+          border:1px solid ${order.statusVisual.border};
+          font-size:10px;
+          font-weight:700;
+          white-space:nowrap;
+        ">${order.statusVisual.label}</span>
+      </div>
+      <div style="font-size:12px; color:#cbd5e1; margin-top:4px;">${escapeHtml(order.clientName)} · ${escapeHtml(order.carModel)}</div>
+      ${hint
+        ? `<div style="font-size:11px; color:#94a3b8; margin-top:4px;">${escapeHtml(hint)}</div>`
+        : ""
+      }
+    </button>
+  `;
+}
+
+function renderCalendarOpsSection(title, subtitle, groups = [], tone = {}) {
+  const border = tone.border || "#1f2937";
+  const accent = tone.accent || "#93c5fd";
+  return card(`
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+      <div>
+        <div style="font-size:15px; font-weight:800; color:${accent};">${escapeHtml(title)}</div>
+        <div style="font-size:12px; color:#94a3b8; margin-top:2px;">${escapeHtml(subtitle)}</div>
+      </div>
+      <div style="font-size:11px; color:#94a3b8;">${groups.reduce((sum, g) => sum + g.items.length, 0)}</div>
+    </div>
+    <div style="margin-top:8px;">
+      ${groups.map((group) => `
+        <div style="margin-top:8px;">
+          <div style="font-size:12px; color:#cbd5e1;">${escapeHtml(group.label)} · ${group.items.length}</div>
+          ${group.items.length
+            ? group.items.map((item) => renderCalendarOpsOrderCard(item, group.hint(item))).join("")
+            : `<div style="font-size:12px; color:#6b7280; margin-top:6px;">Нет заказов</div>`
+          }
+        </div>
+      `).join("")}
+    </div>
+  `, `margin-bottom:10px; background:linear-gradient(180deg,#0b1220,#0a1020); border:1px solid ${border};`);
+}
+
 async function openOrderFromCalendar(orderId) {
   if (!orderId) return;
   showTab("orders");
@@ -957,6 +1098,7 @@ async function loadCalendar() {
     }
 
     const events = buildCalendarEvents(orders);
+    const { buckets, soonHorizonDays } = buildCalendarOperationalBuckets(orders, { soonHorizonDays: 3 });
     const anchor = startOfDay(state.calendarAnchor || new Date());
     state.calendarAnchor = anchor;
 
@@ -983,6 +1125,90 @@ async function loadCalendar() {
           <div style="font-size:13px; color:#94a3b8; margin-bottom:6px;">Период</div>
           <div style="font-size:16px; font-weight:700;">${escapeHtml(formatCalendarTitle(anchor, state.calendarView))}</div>
         `)}
+
+        ${renderCalendarOpsSection(
+          "Сегодня",
+          "Критичные события текущего дня",
+          [
+            {
+              label: "Заезды сегодня",
+              items: buckets.today.arrivals,
+              hint: (item) => `Приём: ${displayDate(item.intakeDateRaw)}`,
+            },
+            {
+              label: "Старты сегодня",
+              items: buckets.today.starts,
+              hint: (item) => `Старт: ${displayDate(item.startDateRaw)}`,
+            },
+            {
+              label: "Выдачи сегодня",
+              items: buckets.today.completions,
+              hint: (item) => `Финиш: ${displayDate(item.endDateRaw)}`,
+            },
+          ],
+          { border: "rgba(96,165,250,.4)", accent: "#bfdbfe" }
+        )}
+
+        ${renderCalendarOpsSection(
+          "Скоро",
+          `План на ближайшие ${soonHorizonDays} дня`,
+          [
+            {
+              label: "Ближайшие заезды",
+              items: buckets.soon.arrivals,
+              hint: (item) => `Приём: ${displayDate(item.intakeDateRaw)}`,
+            },
+            {
+              label: "Ближайшие старты",
+              items: buckets.soon.starts,
+              hint: (item) => `Старт: ${displayDate(item.startDateRaw)}`,
+            },
+            {
+              label: "Ближайшие выдачи",
+              items: buckets.soon.completions,
+              hint: (item) => `Финиш: ${displayDate(item.endDateRaw)}`,
+            },
+          ],
+          { border: "rgba(52,211,153,.35)", accent: "#86efac" }
+        )}
+
+        ${card(`
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+            <div>
+              <div style="font-size:15px; font-weight:800; color:#fca5a5;">Просрочено</div>
+              <div style="font-size:12px; color:#94a3b8; margin-top:2px;">Дата завершения прошла, а заказ не закрыт</div>
+            </div>
+            <div style="font-size:11px; color:#94a3b8;">${buckets.overdue.length}</div>
+          </div>
+          <div style="margin-top:8px;">
+            ${buckets.overdue.length
+              ? buckets.overdue.map((item) => renderCalendarOpsOrderCard(item, `Финиш: ${displayDate(item.endDateRaw)}`)).join("")
+              : `<div style="font-size:12px; color:#6b7280;">Просроченных заказов нет</div>`
+            }
+          </div>
+        `, "margin-bottom:10px; background:linear-gradient(180deg,#180f14,#150b12); border:1px solid rgba(248,113,113,.35);")}
+
+        ${card(`
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+            <div>
+              <div style="font-size:15px; font-weight:800; color:#fcd34d;">Незапланировано</div>
+              <div style="font-size:12px; color:#94a3b8; margin-top:2px;">Активные заказы без полной даты старта/финиша</div>
+            </div>
+            <div style="font-size:11px; color:#94a3b8;">${buckets.unplanned.length}</div>
+          </div>
+          <div style="margin-top:8px;">
+            ${buckets.unplanned.length
+              ? buckets.unplanned.map((item) => {
+                  const missing = [
+                    !parseDateOnly(item.startDateRaw) ? "нет даты старта" : null,
+                    !parseDateOnly(item.endDateRaw) ? "нет даты финиша" : null,
+                  ].filter(Boolean).join(", ");
+                  return renderCalendarOpsOrderCard(item, missing || "Неполный график");
+                }).join("")
+              : `<div style="font-size:12px; color:#6b7280;">Пробелов планирования не найдено</div>`
+            }
+          </div>
+        `, "margin-bottom:10px; background:linear-gradient(180deg,#19130a,#120f08); border:1px solid rgba(250,204,21,.35);")}
 
         ${state.calendarView === "day"
           ? card(`
