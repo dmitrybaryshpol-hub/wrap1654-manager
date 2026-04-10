@@ -182,11 +182,12 @@ function syncSelectedClientToOrderForm() {
 function card(html, extra = "") {
   return `
     <div style="
-      background:#111827;
-      border:1px solid #1f2937;
-      border-radius:14px;
-      padding:12px;
-      margin-bottom:10px;
+      background:linear-gradient(180deg, rgba(24,28,45,.9) 0%, rgba(16,20,34,.95) 100%);
+      border:1px solid rgba(167,139,250,.16);
+      border-radius:18px;
+      padding:14px;
+      margin-bottom:12px;
+      box-shadow:0 10px 24px rgba(2,6,23,.38), inset 0 1px 0 rgba(255,255,255,.03);
       ${extra}
     ">
       ${html}
@@ -197,12 +198,14 @@ function card(html, extra = "") {
 function btn(text, onclick, extra = "") {
   return `
     <button onclick="${onclick}" style="
-      padding:10px 12px;
-      border-radius:10px;
-      border:1px solid #374151;
-      background:#1f2937;
+      padding:11px 13px;
+      border-radius:12px;
+      border:1px solid rgba(167,139,250,.24);
+      background:linear-gradient(180deg, rgba(60,72,104,.45), rgba(36,46,76,.68));
       color:#fff;
       cursor:pointer;
+      font-weight:700;
+      box-shadow:0 4px 14px rgba(2,6,23,.32);
       ${extra}
     ">${text}</button>
   `;
@@ -280,7 +283,7 @@ function renderServicesList() {
 
   const services = Array.isArray(state.orderServices) ? state.orderServices : [];
   if (!services.length) {
-    listRoot.innerHTML = `<div style="opacity:.6; font-size:13px;">Добавьте хотя бы одну услугу</div>`;
+    listRoot.innerHTML = `<div style="opacity:.72; font-size:13px; padding:10px 12px; border-radius:12px; border:1px dashed rgba(167,139,250,.34); color:#a5b4d4;">Добавьте хотя бы одну услугу</div>`;
     return;
   }
 
@@ -290,11 +293,11 @@ function renderServicesList() {
       align-items:center;
       justify-content:space-between;
       gap:8px;
-      padding:8px 10px;
-      border:1px solid #1f2937;
-      border-radius:10px;
+      padding:9px 11px;
+      border:1px solid rgba(167,139,250,.2);
+      border-radius:12px;
       margin-bottom:8px;
-      background:#0b1120;
+      background:rgba(15,20,36,.78);
     ">
       <div style="font-size:14px;">${escapeHtml(service)}</div>
       <button
@@ -348,16 +351,75 @@ function bindServicesEditor(initialServices = []) {
 
 function renderLayout() {
   document.body.innerHTML = `
+    <style>
+      :root{
+        --app-bg:#060913;
+        --surface-1:#141a2d;
+        --surface-2:#1b2238;
+        --line:rgba(167,139,250,.2);
+        --text:#eef2ff;
+        --muted:#9ca3bf;
+        --accent:#8b5cf6;
+        --accent-2:#6d28d9;
+      }
+      body{
+        background:
+          radial-gradient(120% 80% at 10% 0%, rgba(139,92,246,.18) 0%, rgba(7,10,20,0) 55%),
+          radial-gradient(70% 50% at 90% 0%, rgba(76,29,149,.14) 0%, rgba(7,10,20,0) 60%),
+          linear-gradient(180deg, #060913 0%, #050712 100%);
+        color:var(--text);
+      }
+      #app-shell{
+        max-width:920px;
+        margin:0 auto;
+      }
+      #bottom-nav{
+        max-width:920px;
+        margin:0 auto;
+        border:1px solid rgba(167,139,250,.18);
+        border-bottom:0;
+        border-radius:20px 20px 0 0;
+        backdrop-filter:blur(10px);
+      }
+      .nav-btn{
+        border:none;
+        border-radius:12px;
+        background:transparent;
+        color:#a8b0cb;
+        font-weight:700;
+        padding:12px 8px;
+        white-space:nowrap;
+      }
+      .nav-btn.active{
+        color:#f5f3ff;
+        background:linear-gradient(180deg, rgba(139,92,246,.3), rgba(109,40,217,.25));
+        box-shadow:inset 0 0 0 1px rgba(196,181,253,.32);
+      }
+      input,select,textarea{
+        background:linear-gradient(180deg, rgba(18,23,40,.9), rgba(15,19,34,.96));
+        border:1px solid rgba(167,139,250,.16);
+        color:#f8fafc;
+        border-radius:13px;
+      }
+      input::placeholder, textarea::placeholder{ color:#7f8ab0; }
+    </style>
     <div id="app-shell" style="
       padding-bottom:80px;
       color:#fff;
-      background:#0b1120;
+      background:transparent;
       min-height:100vh;
-      font-family:Arial,sans-serif;
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
     ">
-      <div style="padding:16px 16px 8px 16px;">
-        <div style="font-size:20px; font-weight:700;">Wrap 1654 CRM</div>
-        <div style="font-size:12px; opacity:0.7;">
+      <div style="
+        margin:14px 12px 10px;
+        padding:16px;
+        border-radius:22px;
+        border:1px solid rgba(167,139,250,.2);
+        background:linear-gradient(180deg, rgba(20,26,45,.92), rgba(16,21,38,.95));
+        box-shadow:0 14px 32px rgba(2,6,23,.4);
+      ">
+        <div style="font-size:22px; font-weight:800; letter-spacing:.2px;">Wrap 1654 CRM</div>
+        <div style="font-size:12px; color:#9ca3bf; margin-top:2px;">
           ${escapeHtml(state.user?.first_name || state.user?.username || "User")}
         </div>
       </div>
@@ -371,7 +433,7 @@ function renderLayout() {
       </div>
     </div>
 
-    <div id="bottom-nav" style="
+      <div id="bottom-nav" style="
       position:fixed;
       left:0;
       right:0;
@@ -379,16 +441,16 @@ function renderLayout() {
       display:flex;
       gap:8px;
       overflow-x:auto;
-      padding:10px;
-      background:#111827;
-      border-top:1px solid #1f2937;
+      padding:10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+      background:rgba(13,17,31,.92);
+      border-top:1px solid rgba(167,139,250,.2);
       z-index:20;
     ">
-      <button onclick="showTab('dashboard')" style="flex:1;">Главная</button>
-      <button onclick="showTab('orders')" style="flex:1;">Заказы</button>
-      <button onclick="showTab('calendar')" style="flex:1;">Календарь</button>
-      <button onclick="showTab('inventory')" style="flex:1;">Склад</button>
-      <button onclick="showTab('finance')" style="flex:1;">Финансы</button>
+      <button class="nav-btn" data-nav="dashboard" onclick="showTab('dashboard')" style="flex:1;">Главная</button>
+      <button class="nav-btn" data-nav="orders" onclick="showTab('orders')" style="flex:1;">Заказы</button>
+      <button class="nav-btn" data-nav="calendar" onclick="showTab('calendar')" style="flex:1;">Календарь</button>
+      <button class="nav-btn" data-nav="inventory" onclick="showTab('inventory')" style="flex:1;">Склад</button>
+      <button class="nav-btn" data-nav="finance" onclick="showTab('finance')" style="flex:1;">Финансы</button>
     </div>
 
     <div id="modal"></div>
@@ -434,6 +496,9 @@ function showTab(tab) {
 
   const current = document.getElementById(tab);
   if (current) current.style.display = "block";
+  document.querySelectorAll("#bottom-nav .nav-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.nav === tab);
+  });
 
   if (tab === "dashboard") loadDashboard();
   if (tab === "orders") loadOrders();
