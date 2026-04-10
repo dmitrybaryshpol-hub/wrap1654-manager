@@ -195,19 +195,39 @@ function card(html, extra = "") {
   `;
 }
 
-function btn(text, onclick, extra = "") {
+function btn(text, onclick, extra = "", variant = "primary") {
+  const variantClass = variant === "secondary"
+    ? "ui-btn-secondary"
+    : variant === "danger"
+      ? "ui-btn-danger"
+      : "ui-btn-primary";
   return `
-    <button onclick="${onclick}" style="
-      padding:11px 13px;
-      border-radius:12px;
-      border:1px solid rgba(167,139,250,.24);
-      background:linear-gradient(180deg, rgba(60,72,104,.45), rgba(36,46,76,.68));
-      color:#fff;
-      cursor:pointer;
-      font-weight:700;
-      box-shadow:0 4px 14px rgba(2,6,23,.32);
-      ${extra}
-    ">${text}</button>
+    <button onclick="${onclick}" class="ui-btn ${variantClass}" style="${extra}">${text}</button>
+  `;
+}
+
+function renderToneBadge(label, tone = {}) {
+  return `
+    <span class="ui-status-badge" style="
+      background:${tone.bg || "rgba(148,163,184,.15)"};
+      color:${tone.color || "#e2e8f0"};
+      border-color:${tone.border || "rgba(148,163,184,.35)"};
+    ">${escapeHtml(label || "—")}</span>
+  `;
+}
+
+function renderStatusBadge(status = "") {
+  const visual = statusVisual(status);
+  return renderToneBadge(visual.label, { bg: visual.bg, color: visual.color, border: visual.border });
+}
+
+function renderEmptyState({ icon = "ℹ️", title = "Пока пусто", description = "" } = {}) {
+  return `
+    <div class="ui-empty-state">
+      <div class="ui-empty-icon">${escapeHtml(icon)}</div>
+      <div class="ui-empty-title">${escapeHtml(title)}</div>
+      ${description ? `<div class="ui-empty-description">${escapeHtml(description)}</div>` : ""}
+    </div>
   `;
 }
 
@@ -449,6 +469,65 @@ function renderLayout() {
         font-size:12px;
         font-weight:700;
       }
+      .ui-btn{
+        padding:11px 13px;
+        border-radius:12px;
+        cursor:pointer;
+        font-weight:700;
+        box-shadow:0 4px 14px rgba(2,6,23,.32);
+        border:1px solid transparent;
+        color:#fff;
+      }
+      .ui-btn-primary{
+        border-color:rgba(167,139,250,.24);
+        background:linear-gradient(180deg, rgba(60,72,104,.45), rgba(36,46,76,.68));
+      }
+      .ui-btn-secondary{
+        border-color:rgba(148,163,184,.35);
+        background:linear-gradient(180deg, rgba(30,41,59,.72), rgba(15,23,42,.82));
+        color:#e2e8f0;
+      }
+      .ui-btn-danger{
+        border-color:rgba(248,113,113,.45);
+        background:linear-gradient(180deg, rgba(127,29,29,.4), rgba(69,10,10,.5));
+        color:#fee2e2;
+      }
+      .ui-status-badge{
+        display:inline-flex;
+        align-items:center;
+        padding:5px 10px;
+        border-radius:999px;
+        font-size:11px;
+        font-weight:800;
+        border:1px solid transparent;
+        text-transform:uppercase;
+        letter-spacing:.03em;
+      }
+      .ui-secondary-text{
+        font-size:12px;
+        color:#94a3b8;
+      }
+      .ui-empty-state{
+        text-align:center;
+        border:1px dashed rgba(148,163,184,.35);
+        border-radius:12px;
+        background:rgba(15,23,42,.45);
+        padding:14px 10px;
+      }
+      .ui-empty-icon{
+        font-size:20px;
+        margin-bottom:4px;
+      }
+      .ui-empty-title{
+        font-size:14px;
+        font-weight:800;
+      }
+      .ui-empty-description{
+        margin-top:4px;
+        font-size:12px;
+        color:#94a3b8;
+        line-height:1.4;
+      }
       .kpi-card{
         padding:11px;
         border-radius:13px;
@@ -636,7 +715,6 @@ async function loadDashboard() {
     const quickActions = [
       { label: "➕ Новый заказ", action: "openCreateOrder()" },
       { label: "📦 Открыть заказы", action: "showTab('orders')" },
-      { label: "🗓 Календарь", action: "showTab('calendar')" },
       { label: "🧰 Открыть склад", action: "showTab('inventory')" },
       { label: "👤 Открыть клиентов", action: "showTab('clients')" },
     ];
@@ -665,7 +743,7 @@ async function loadDashboard() {
         <h3 style="margin:12px 0 8px 0;">🚀 Быстрые действия</h3>
         ${card(`
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-            ${quickActions.map((item) => btn(item.label, item.action, "width:100%; background:#0f172a;")).join("")}
+            ${quickActions.map((item) => btn(item.label, item.action, "width:100%;", "secondary")).join("")}
           </div>
         `)}
 
@@ -769,7 +847,7 @@ async function loadDashboard() {
                 </div>
               `)}
             `).join("")
-          : card("Склад в норме")}
+          : card(renderEmptyState({ icon: "✅", title: "Склад в норме", description: "Критических остатков сейчас нет." }))}
       </div>
     `;
   } catch (e) {
@@ -802,18 +880,7 @@ async function loadOrders() {
       <div style="font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#94a3b8;">Заказ</div>
       <div style="font-size:18px; font-weight:900; margin-top:2px; color:#f5f3ff;">${orderLabel(o)}</div>
     </div>
-    <span style="
-      display:inline-flex;
-      align-items:center;
-      padding:5px 10px;
-      border-radius:999px;
-      font-size:11px;
-      font-weight:800;
-      background:${statusVisual(o.status || "").bg};
-      color:${statusVisual(o.status || "").color};
-      border:1px solid ${statusVisual(o.status || "").border};
-      text-transform:uppercase;
-    ">${statusVisual(o.status || "").label}</span>
+    ${renderStatusBadge(o.status || "")}
   </div>
 
   <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;">
@@ -843,13 +910,13 @@ async function loadOrders() {
   </div>
 
   <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
-    <button onclick="event.stopPropagation(); openOrder('${o.id}')" class="ui-ghost-btn">Открыть</button>
-    <button onclick="event.stopPropagation(); startEditOrder('${o.id}')" class="ui-ghost-btn">Редактировать</button>
-    <button onclick="event.stopPropagation(); handleDeleteOrder('${o.id}')" class="ui-danger-btn">Удалить</button>
+    <button onclick="event.stopPropagation(); openOrder('${o.id}')" class="ui-btn ui-btn-secondary">Открыть</button>
+    <button onclick="event.stopPropagation(); startEditOrder('${o.id}')" class="ui-btn ui-btn-secondary">Редактировать</button>
+    <button onclick="event.stopPropagation(); handleDeleteOrder('${o.id}')" class="ui-btn ui-btn-danger">Удалить</button>
   </div>
 `)}              </div>
             `).join("")
-          : card("Заказов пока нет")}
+          : card(renderEmptyState({ icon: "📭", title: "Заказов пока нет", description: "Создайте первый заказ — он сразу появится в этом списке." }))}
       </div>
     `;
   } catch (e) {
@@ -1142,29 +1209,13 @@ function renderCalendarEventCard(event) {
     ">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
         <div style="font-size:13px; font-weight:700;">${escapeHtml(event.clientName)} · ${escapeHtml(event.carModel)}</div>
-        <span style="
-          padding:3px 7px;
-          font-size:11px;
-          border-radius:999px;
-          background:${type.tone};
-          border:1px solid ${type.border};
-          color:${type.color};
-          white-space:nowrap;
-        ">${type.label}</span>
+        <span style="white-space:nowrap;">${renderToneBadge(type.label, { bg: type.tone, color: type.color, border: type.border })}</span>
       </div>
       <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:7px;">
-        <span style="
-          padding:3px 7px;
-          border-radius:999px;
-          background:${event.statusVisual.bg};
-          color:${event.statusVisual.color};
-          border:1px solid ${event.statusVisual.border};
-          font-size:11px;
-          font-weight:700;
-        ">${event.statusVisual.label}</span>
-        <span style="font-size:12px; color:#cbd5e1;">Тип: ${escapeHtml(event.orderType)}</span>
+        ${renderStatusBadge(event.status)}
+        <span class="ui-secondary-text" style="color:#cbd5e1;">Тип: ${escapeHtml(event.orderType)}</span>
       </div>
-      <div style="font-size:12px; color:#94a3b8; margin-top:6px;">${escapeHtml(event.context)} · ${escapeHtml(event.dateText)}</div>
+      <div class="ui-secondary-text" style="margin-top:6px;">${escapeHtml(event.context)} · ${escapeHtml(event.dateText)}</div>
     </button>
   `;
 }
@@ -1184,20 +1235,11 @@ function renderCalendarOpsOrderCard(order, hint = "") {
     ">
       <div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;">
         <div style="font-size:13px; font-weight:800; line-height:1.35;">${escapeHtml(order.label)}</div>
-        <span style="
-          padding:3px 7px;
-          border-radius:999px;
-          background:${order.statusVisual.bg};
-          color:${order.statusVisual.color};
-          border:1px solid ${order.statusVisual.border};
-          font-size:10px;
-          font-weight:700;
-          white-space:nowrap;
-        ">${order.statusVisual.label}</span>
+        <span style="white-space:nowrap;">${renderStatusBadge(order.status)}</span>
       </div>
-      <div style="font-size:12px; color:#cbd5e1; margin-top:4px;">${escapeHtml(order.clientName)} · ${escapeHtml(order.carModel)}</div>
+      <div class="ui-secondary-text" style="color:#cbd5e1; margin-top:4px;">${escapeHtml(order.clientName)} · ${escapeHtml(order.carModel)}</div>
       ${hint
-        ? `<div style="font-size:11px; color:#94a3b8; margin-top:4px;">${escapeHtml(hint)}</div>`
+        ? `<div class="ui-secondary-text" style="font-size:11px; margin-top:4px;">${escapeHtml(hint)}</div>`
         : ""
       }
     </button>
@@ -1212,7 +1254,7 @@ function renderCalendarOpsSection(title, subtitle, groups = [], tone = {}) {
     <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
       <div>
         <div style="font-size:15px; font-weight:800; color:${accent};">${escapeHtml(title)}</div>
-        <div style="font-size:12px; color:#94a3b8; margin-top:2px;">${escapeHtml(subtitle)}</div>
+        <div class="ui-secondary-text" style="margin-top:2px;">${escapeHtml(subtitle)}</div>
       </div>
       <div style="display:flex; flex-direction:column; align-items:flex-end;">
         <span class="soft-chip">${totalCount}</span>
@@ -1223,11 +1265,11 @@ function renderCalendarOpsSection(title, subtitle, groups = [], tone = {}) {
         <div style="margin-top:9px; padding-top:8px; border-top:1px dashed rgba(148,163,184,.18);">
           <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
             <div style="font-size:12px; color:#cbd5e1; font-weight:700;">${escapeHtml(group.label)}</div>
-            <div style="font-size:11px; color:#94a3b8;">${group.items.length}</div>
+            <div class="ui-secondary-text" style="font-size:11px;">${group.items.length}</div>
           </div>
           ${group.items.length
             ? group.items.map((item) => renderCalendarOpsOrderCard(item, group.hint(item))).join("")
-            : `<div style="font-size:12px; color:#6b7280; margin-top:6px;">Нет заказов</div>`
+            : renderEmptyState({ icon: "🗂️", title: "Нет заказов", description: "В этой категории пока нет запланированных заказов." })
           }
         </div>
       `).join("")}
@@ -1393,11 +1435,11 @@ async function loadCalendar() {
           ? card(`
               <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
                 <div style="font-size:14px; font-weight:700;">События на день</div>
-                <div style="font-size:12px; color:#94a3b8;">${dayEvents.length}</div>
+                <div class="ui-secondary-text">${dayEvents.length}</div>
               </div>
               ${dayEvents.length
                 ? dayEvents.map(renderCalendarEventCard).join("")
-                : `<div style="padding:12px; border:1px dashed rgba(148,163,184,.35); border-radius:10px; color:#94a3b8; font-size:13px;">Нет событий по заказам на эту дату.</div>`
+                : renderEmptyState({ icon: "🗓️", title: "Нет событий на дату", description: "Выберите другой день или переключитесь на недельный вид." })
               }
             `)
           : weekDays.map((day) => {
@@ -1405,11 +1447,11 @@ async function loadCalendar() {
               return card(`
                 <div style="display:flex; justify-content:space-between; margin-bottom:9px;">
                   <div style="font-size:14px; font-weight:700;">${escapeHtml(formatDayLabel(day))}</div>
-                  <div style="font-size:12px; color:#94a3b8;">${items.length}</div>
+                  <div class="ui-secondary-text">${items.length}</div>
                 </div>
                 ${items.length
                   ? items.map(renderCalendarEventCard).join("")
-                  : `<div style="font-size:12px; color:#94a3b8;">Событий нет</div>`
+                  : renderEmptyState({ icon: "🕒", title: "Событий нет", description: "На этот день ничего не запланировано." })
                 }
               `);
             }).join("")
@@ -1727,21 +1769,7 @@ function financeItemMeta(order = {}) {
 }
 
 function financeOrderStatusLabel(order = {}) {
-  const s = statusVisual(order.status || "");
-  return `
-    <span style="
-      display:inline-flex;
-      align-items:center;
-      padding:4px 9px;
-      border-radius:999px;
-      border:1px solid ${s.border};
-      background:${s.bg};
-      color:${s.color};
-      font-size:11px;
-      font-weight:800;
-      letter-spacing:.03em;
-    ">${escapeHtml(s.label)}</span>
-  `;
+  return renderStatusBadge(order.status || "");
 }
 
 async function openOrder(id) {
@@ -1755,7 +1783,6 @@ async function openOrder(id) {
     const parsedServices = parseServicesFromNote(order?.note || "");
     const services = parsedServices.services || [];
     const cleanNote = parsedServices.cleanNote || "";
-    const status = statusVisual(order.status || "");
     const payments = parsePayments(order);
     const mediaUrls = collectMediaUrls(order);
 
@@ -1785,17 +1812,7 @@ async function openOrder(id) {
             <div style="font-size:12px; letter-spacing:.08em; color:#94a3b8;">ORDER</div>
             <div style="font-size:22px; font-weight:800; margin-top:3px;">${orderLabel(order)}</div>
           </div>
-          <span style="
-            background:${status.bg};
-            color:${status.color};
-            border:1px solid ${status.border};
-            border-radius:999px;
-            padding:6px 10px;
-            font-size:11px;
-            font-weight:800;
-            letter-spacing:.04em;
-            white-space:nowrap;
-          ">${status.label}</span>
+          <span style="white-space:nowrap;">${renderStatusBadge(order.status || "")}</span>
         </div>
 
         <div style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
@@ -3068,16 +3085,7 @@ function renderInventoryCard(item, type = "product") {
           ${escapeHtml(item.brand || "Без бренда")} • ${escapeHtml(item.normalized_category || item.category || "other")}
         </div>
       </div>
-      <span style="
-        display:inline-flex;
-        padding:4px 9px;
-        border-radius:999px;
-        font-size:11px;
-        font-weight:700;
-        background:${stock.tone};
-        border:1px solid ${stock.border};
-        color:${stock.color};
-      ">${stock.label}</span>
+      ${renderToneBadge(stock.label, { bg: stock.tone, color: stock.color, border: stock.border })}
     </div>
 
     ${(type === "film" && item.color) || (type === "film" && item.width_cm)
@@ -3123,7 +3131,7 @@ function renderInventoryCard(item, type = "product") {
     </div>
     <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
       ${btn("Редактировать", `openEditInventoryItem('${item.id}', '${type}')`)}
-      ${btn("Удалить", `deleteInventoryItem('${item.id}')`, "background:#3b0f15; border-color:#7f1d1d;")}
+      ${btn("Удалить", `deleteInventoryItem('${item.id}')`, "", "danger")}
     </div>
   `, isLow ? "box-shadow:0 0 0 1px rgba(239,68,68,.35) inset;" : "");
 }
@@ -3134,13 +3142,10 @@ function renderInventoryGroup(items = [], type = "product", title = "Товар"
     const helper = type === "film"
       ? "Добавьте рулон, чтобы планировать материалы и резервы под заказы."
       : "Добавьте позицию, чтобы видеть остатки, движение и low stock заранее.";
-    return card(`
-      <div style="text-align:center; padding:14px 10px;">
-        <div style="font-size:24px; margin-bottom:6px;">${emoji}</div>
-        <div style="font-weight:800; font-size:15px;">${escapeHtml(title)} пока пуст</div>
-        <div style="font-size:12px; color:#94a3b8; margin-top:6px; line-height:1.45;">${helper}</div>
-      </div>
-    `, "border-style:dashed; border-color:rgba(148,163,184,.35); background:linear-gradient(180deg, rgba(15,23,42,.72), rgba(12,18,33,.82));");
+    return card(
+      renderEmptyState({ icon: emoji, title: `${title} пока пуст`, description: helper }),
+      "border-style:dashed; border-color:rgba(148,163,184,.35); background:linear-gradient(180deg, rgba(15,23,42,.72), rgba(12,18,33,.82));"
+    );
   }
   return items.map((item) => `<div>${renderInventoryCard(item, type)}</div>`).join("");
 }
