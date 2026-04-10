@@ -649,6 +649,22 @@ function parsePayments(order = {}) {
     .filter(Boolean);
 }
 
+function parseMoneyInput(value) {
+  const normalized = String(value ?? "").trim().replace(",", ".");
+  const amount = Number(normalized);
+  return Number.isFinite(amount) ? amount : NaN;
+}
+
+function paymentMethodLabel(payment = {}) {
+  const raw = payment.method || payment.type || payment.payment_method || "";
+  return String(raw || "").trim() || "—";
+}
+
+function paymentNoteLabel(payment = {}) {
+  const raw = payment.note || payment.comment || payment.description || "";
+  return String(raw || "").trim();
+}
+
 async function openOrder(id) {
   try {
     const res = await api("get_order", { id });
@@ -768,18 +784,59 @@ async function openOrder(id) {
         : `<div style="padding:10px; border-radius:10px; border:1px dashed rgba(148,163,184,.35); color:#94a3b8; font-size:13px;">Материалы не добавлены</div>`
       )}
 
-      ${sectionCard("PAYMENTS", payments.length
-        ? payments.map((p) => `
-          <div style="padding:9px 10px; border-radius:10px; border:1px solid rgba(148,163,184,.2); margin-bottom:7px; display:flex; justify-content:space-between; gap:8px;">
-            <div>
-              <div style="font-size:14px; font-weight:700;">${formatMoney(p.amount || 0)} ${currencySymbol(p.currency || order.currency || "USD")}</div>
-              <div style="font-size:12px; color:#94a3b8;">${displayDate(p.created_at || p.date || p.paid_at || "")}</div>
+      ${sectionCard("PAYMENTS", `
+        <div style="padding:10px; border-radius:12px; border:1px solid rgba(59,130,246,.25); background:rgba(30,64,175,.12); margin-bottom:10px;">
+          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+            <div style="padding:9px; border-radius:10px; border:1px solid rgba(148,163,184,.18); background:rgba(15,23,42,.45);">
+              <div style="font-size:11px; color:#94a3b8;">Prepaid</div>
+              <div style="font-size:16px; font-weight:800;">${formatMoney(order.prepaid || 0)} ${cur}</div>
             </div>
-            <div style="font-size:12px; color:#94a3b8; text-align:right;">${escapeHtml(p.method || p.type || "")}</div>
+            <div style="padding:9px; border-radius:10px; border:1px solid rgba(148,163,184,.18); background:rgba(15,23,42,.45);">
+              <div style="font-size:11px; color:#94a3b8;">Paid</div>
+              <div style="font-size:16px; font-weight:800;">${formatMoney(order.paid || 0)} ${cur}</div>
+            </div>
+            <div style="padding:9px; border-radius:10px; border:1px solid rgba(239,68,68,.35); background:rgba(239,68,68,.08);">
+              <div style="font-size:11px; color:#fca5a5;">Due</div>
+              <div style="font-size:16px; font-weight:800; color:#fecaca;">${formatMoney(order.due || 0)} ${cur}</div>
+            </div>
           </div>
-        `).join("")
-        : `<div style="padding:10px; border-radius:10px; border:1px dashed rgba(148,163,184,.35); color:#94a3b8; font-size:13px;">Платежей пока нет</div>`
-      )}
+        </div>
+
+        <div style="padding:10px; border-radius:12px; border:1px solid rgba(148,163,184,.22); background:rgba(2,6,23,.55); margin-bottom:10px;">
+          <div style="font-size:12px; color:#cbd5e1; margin-bottom:8px; font-weight:700;">Добавить оплату</div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input
+              id="payment_amount_${escapeHtml(String(id))}"
+              type="number"
+              step="0.01"
+              min="0.01"
+              placeholder="Сумма"
+              style="flex:1; min-width:0; background:#0b1220; border:1px solid rgba(148,163,184,.3); border-radius:10px; padding:10px; color:#fff;"
+            />
+            ${btn("+ Оплата", `addPayment('${id}', 'payment_amount_${id}')`, "background:#1d4ed8; border-color:#3b82f6; white-space:nowrap;")}
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size:12px; color:#94a3b8; margin-bottom:8px; font-weight:700; letter-spacing:.04em;">PAYMENT HISTORY</div>
+          ${payments.length
+            ? payments.map((p) => {
+              const note = paymentNoteLabel(p);
+              return `
+                <div style="padding:10px; border-radius:10px; border:1px solid rgba(148,163,184,.2); margin-bottom:7px; background:rgba(15,23,42,.35);">
+                  <div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start; margin-bottom:4px;">
+                    <div style="font-size:14px; font-weight:700;">${formatMoney(p.amount || 0)} ${currencySymbol(p.currency || order.currency || "USD")}</div>
+                    <div style="font-size:12px; color:#94a3b8; text-align:right;">${escapeHtml(displayDate(p.created_at || p.date || p.paid_at || ""))}</div>
+                  </div>
+                  <div style="font-size:12px; color:#94a3b8;">Method: ${escapeHtml(paymentMethodLabel(p))}</div>
+                  ${note ? `<div style="font-size:12px; color:#cbd5e1; margin-top:4px;">Note: ${escapeHtml(note)}</div>` : ""}
+                </div>
+              `;
+            }).join("")
+            : `<div style="padding:10px; border-radius:10px; border:1px dashed rgba(148,163,184,.35); color:#94a3b8; font-size:13px;">Платежей пока нет. Добавьте первую оплату выше.</div>`
+          }
+        </div>
+      `)}
 
       ${sectionCard("MEDIA", mediaUrls.length
         ? `<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
@@ -801,7 +858,6 @@ async function openOrder(id) {
       )}
 
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
-        ${btn("+ Оплата", `addPayment('${id}')`, "background:#1d4ed8; border-color:#3b82f6;")}
         ${btn("Редактировать", `closeModal(); startEditOrder('${id}')`)}
         ${btn("Удалить", `handleDeleteOrder('${id}')`, "background:rgba(239,68,68,.15); color:#fecaca; border-color:rgba(239,68,68,.35);")}
       </div>
@@ -1443,18 +1499,20 @@ async function createOrder() {
     safeAlert(e.message || "Ошибка сохранения заказа");
   }
 }
-async function addPayment(order_id) {
-  const raw = prompt("Сумма");
+async function addPayment(order_id, amountInputId = "") {
+  const inlineInput = amountInputId ? document.getElementById(amountInputId) : null;
+  const raw = inlineInput ? inlineInput.value : prompt("Сумма");
   if (raw == null) return;
-  const amount = Number(String(raw).trim().replace(",", "."));
+  const amount = parseMoneyInput(raw);
   if (!Number.isFinite(amount) || amount <= 0) {
     safeAlert("Укажи корректную сумму оплаты");
+    if (inlineInput) inlineInput.focus();
     return;
   }
 
   try {
     const res = await api("get_order", { id: order_id });
-    const order = res.item;
+    const order = res?.item && typeof res.item === "object" ? res.item : {};
 
     await api("add_payment", {
       order_id,
@@ -1462,13 +1520,15 @@ async function addPayment(order_id) {
       currency: order.currency || "USD",
     });
 
+    if (inlineInput) inlineInput.value = "";
     safeAlert("Оплата добавлена");
-    openOrder(order_id);
-    loadOrders();
-    loadDashboard();
-    loadFinance();
+    await openOrder(order_id);
+    await loadOrders();
+    await loadDashboard();
+    await loadFinance();
   } catch (e) {
     console.error(e);
+    safeAlert(e?.message || "Не удалось добавить оплату");
   }
 }
 
