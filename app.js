@@ -5,6 +5,8 @@ const API_URL = "https://hbciwqgfccdfnzrhiops.supabase.co/functions/v1/smart-han
 const state = {
   user: null,
   currentTab: "dashboard",
+  calendarView: "day",
+  calendarAnchor: new Date(),
   fxRate: 0,
   fxUpdatedAt: null,
 
@@ -363,6 +365,7 @@ function renderLayout() {
       <div id="app">
         <div id="dashboard" class="tab"></div>
         <div id="orders" class="tab" style="display:none"></div>
+        <div id="calendar" class="tab" style="display:none"></div>
         <div id="inventory" class="tab" style="display:none"></div>
         <div id="finance" class="tab" style="display:none"></div>
       </div>
@@ -375,6 +378,7 @@ function renderLayout() {
       bottom:0;
       display:flex;
       gap:8px;
+      overflow-x:auto;
       padding:10px;
       background:#111827;
       border-top:1px solid #1f2937;
@@ -382,6 +386,7 @@ function renderLayout() {
     ">
       <button onclick="showTab('dashboard')" style="flex:1;">Главная</button>
       <button onclick="showTab('orders')" style="flex:1;">Заказы</button>
+      <button onclick="showTab('calendar')" style="flex:1;">Календарь</button>
       <button onclick="showTab('inventory')" style="flex:1;">Склад</button>
       <button onclick="showTab('finance')" style="flex:1;">Финансы</button>
     </div>
@@ -432,6 +437,7 @@ function showTab(tab) {
 
   if (tab === "dashboard") loadDashboard();
   if (tab === "orders") loadOrders();
+  if (tab === "calendar") loadCalendar();
   if (tab === "inventory") loadInventory();
   if (tab === "finance") loadFinance();
 }
@@ -769,6 +775,246 @@ function parseDateValue(value) {
   const dt = new Date(value);
   if (Number.isNaN(dt.getTime())) return null;
   return dt;
+}
+
+function parseDateOnly(value) {
+  if (!value) return null;
+  const raw = String(value).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const [y, m, d] = raw.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  if (Number.isNaN(dt.getTime())) return null;
+  dt.setHours(0, 0, 0, 0);
+  return dt;
+}
+
+function startOfDay(value = new Date()) {
+  const dt = new Date(value);
+  dt.setHours(0, 0, 0, 0);
+  return dt;
+}
+
+function addDays(date, amount = 0) {
+  const dt = new Date(date);
+  dt.setDate(dt.getDate() + amount);
+  return startOfDay(dt);
+}
+
+function isSameDay(a, b) {
+  if (!a || !b) return false;
+  return startOfDay(a).getTime() === startOfDay(b).getTime();
+}
+
+function startOfWeek(date) {
+  const base = startOfDay(date);
+  const day = base.getDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  return addDays(base, offset);
+}
+
+function formatDayLabel(date) {
+  return date.toLocaleDateString("ru-RU", { weekday: "short", day: "2-digit", month: "2-digit" });
+}
+
+function formatDateFromDate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${d}.${m}.${y}`;
+}
+
+function formatCalendarTitle(date, view = "day") {
+  const target = startOfDay(date);
+  if (view === "week") {
+    const from = startOfWeek(target);
+    const to = addDays(from, 6);
+    return `${formatDateFromDate(from)} — ${formatDateFromDate(to)}`;
+  }
+  return target.toLocaleDateString("ru-RU", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+}
+
+function orderTypeLabel(order = {}) {
+  return order.order_type || order.type || order.service_type || "—";
+}
+
+function eventTypeVisual(type = "intake") {
+  const map = {
+    intake: { label: "Приём", tone: "rgba(59,130,246,.16)", border: "rgba(96,165,250,.45)", color: "#bfdbfe" },
+    start: { label: "Старт", tone: "rgba(250,204,21,.14)", border: "rgba(250,204,21,.42)", color: "#fde68a" },
+    completion: { label: "Выдача", tone: "rgba(16,185,129,.15)", border: "rgba(16,185,129,.45)", color: "#86efac" },
+  };
+  return map[type] || map.intake;
+}
+
+function buildCalendarEvents(orders = []) {
+  const events = [];
+  (Array.isArray(orders) ? orders : []).forEach((order) => {
+    const variants = [
+      { type: "intake", date: order?.intake_date, context: "Приём / заезд" },
+      { type: "start", date: order?.start_date, context: "Начало работ" },
+      { type: "completion", date: order?.end_date, context: "Завершение / выдача" },
+    ];
+
+    variants.forEach((item) => {
+      const date = parseDateOnly(item.date);
+      if (!date) return;
+      events.push({
+        id: `${order.id || "order"}-${item.type}-${date.getTime()}`,
+        orderId: order.id,
+        type: item.type,
+        context: item.context,
+        date,
+        dateText: displayDate(item.date),
+        clientName: order.client_name || "—",
+        carModel: order.car_model || "—",
+        status: order.status || "—",
+        statusVisual: statusVisual(order.status || ""),
+        orderType: orderTypeLabel(order),
+      });
+    });
+  });
+
+  return events.sort((a, b) => a.date.getTime() - b.date.getTime());
+}
+
+function renderCalendarEventCard(event) {
+  const type = eventTypeVisual(event.type);
+  return `
+    <button onclick="openOrderFromCalendar('${escapeHtml(String(event.orderId || ""))}')" style="
+      width:100%;
+      text-align:left;
+      border-radius:14px;
+      border:1px solid #1f2937;
+      background:#0f172a;
+      padding:11px;
+      color:#fff;
+      margin-bottom:8px;
+      cursor:pointer;
+    ">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+        <div style="font-size:13px; font-weight:700;">${escapeHtml(event.clientName)} · ${escapeHtml(event.carModel)}</div>
+        <span style="
+          padding:3px 7px;
+          font-size:11px;
+          border-radius:999px;
+          background:${type.tone};
+          border:1px solid ${type.border};
+          color:${type.color};
+          white-space:nowrap;
+        ">${type.label}</span>
+      </div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:7px;">
+        <span style="
+          padding:3px 7px;
+          border-radius:999px;
+          background:${event.statusVisual.bg};
+          color:${event.statusVisual.color};
+          border:1px solid ${event.statusVisual.border};
+          font-size:11px;
+          font-weight:700;
+        ">${event.statusVisual.label}</span>
+        <span style="font-size:12px; color:#cbd5e1;">Тип: ${escapeHtml(event.orderType)}</span>
+      </div>
+      <div style="font-size:12px; color:#94a3b8; margin-top:6px;">${escapeHtml(event.context)} · ${escapeHtml(event.dateText)}</div>
+    </button>
+  `;
+}
+
+async function openOrderFromCalendar(orderId) {
+  if (!orderId) return;
+  showTab("orders");
+  await openOrder(orderId);
+}
+
+function shiftCalendarAnchor(direction = 1) {
+  const base = state.calendarAnchor || new Date();
+  const amount = state.calendarView === "week" ? 7 * direction : direction;
+  state.calendarAnchor = addDays(base, amount);
+  loadCalendar();
+}
+
+function setCalendarView(view = "day") {
+  state.calendarView = view === "week" ? "week" : "day";
+  loadCalendar();
+}
+
+function moveCalendarToToday() {
+  state.calendarAnchor = startOfDay(new Date());
+  loadCalendar();
+}
+
+async function loadCalendar() {
+  const el = document.getElementById("calendar");
+  if (!el) return;
+  el.innerHTML = `<div style="padding:16px;">Загрузка...</div>`;
+
+  try {
+    let orders = state.orders;
+    if (!Array.isArray(orders) || !orders.length) {
+      const res = await api("get_orders");
+      orders = Array.isArray(res.items) ? res.items : [];
+      state.orders = orders;
+    }
+
+    const events = buildCalendarEvents(orders);
+    const anchor = startOfDay(state.calendarAnchor || new Date());
+    state.calendarAnchor = anchor;
+
+    const dayEvents = events.filter((x) => isSameDay(x.date, anchor));
+    const weekStart = startOfWeek(anchor);
+    const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+
+    el.innerHTML = `
+      <div style="padding:14px 12px 18px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;">
+          <div style="font-size:17px; font-weight:800;">Календарь</div>
+          <div style="display:flex; gap:6px;">
+            <button onclick="setCalendarView('day')" style="padding:8px 10px; border-radius:10px; border:1px solid ${state.calendarView === "day" ? "rgba(96,165,250,.45)" : "#374151"}; background:${state.calendarView === "day" ? "rgba(59,130,246,.2)" : "#111827"}; color:#fff;">День</button>
+            <button onclick="setCalendarView('week')" style="padding:8px 10px; border-radius:10px; border:1px solid ${state.calendarView === "week" ? "rgba(96,165,250,.45)" : "#374151"}; background:${state.calendarView === "week" ? "rgba(59,130,246,.2)" : "#111827"}; color:#fff;">Неделя</button>
+          </div>
+        </div>
+        <div style="display:flex; gap:6px; margin-bottom:12px;">
+          <button onclick="shiftCalendarAnchor(-1)" style="flex:1; padding:9px; border-radius:10px; border:1px solid #374151; background:#111827; color:#fff;">←</button>
+          <button onclick="moveCalendarToToday()" style="flex:2; padding:9px; border-radius:10px; border:1px solid #374151; background:#111827; color:#fff;">Сегодня</button>
+          <button onclick="shiftCalendarAnchor(1)" style="flex:1; padding:9px; border-radius:10px; border:1px solid #374151; background:#111827; color:#fff;">→</button>
+        </div>
+
+        ${card(`
+          <div style="font-size:13px; color:#94a3b8; margin-bottom:6px;">Период</div>
+          <div style="font-size:16px; font-weight:700;">${escapeHtml(formatCalendarTitle(anchor, state.calendarView))}</div>
+        `)}
+
+        ${state.calendarView === "day"
+          ? card(`
+              <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                <div style="font-size:14px; font-weight:700;">События на день</div>
+                <div style="font-size:12px; color:#94a3b8;">${dayEvents.length}</div>
+              </div>
+              ${dayEvents.length
+                ? dayEvents.map(renderCalendarEventCard).join("")
+                : `<div style="padding:12px; border:1px dashed rgba(148,163,184,.35); border-radius:10px; color:#94a3b8; font-size:13px;">Нет событий по заказам на эту дату.</div>`
+              }
+            `)
+          : weekDays.map((day) => {
+              const items = events.filter((x) => isSameDay(x.date, day));
+              return card(`
+                <div style="display:flex; justify-content:space-between; margin-bottom:9px;">
+                  <div style="font-size:14px; font-weight:700;">${escapeHtml(formatDayLabel(day))}</div>
+                  <div style="font-size:12px; color:#94a3b8;">${items.length}</div>
+                </div>
+                ${items.length
+                  ? items.map(renderCalendarEventCard).join("")
+                  : `<div style="font-size:12px; color:#94a3b8;">Событий нет</div>`
+                }
+              `);
+            }).join("")
+        }
+      </div>
+    `;
+  } catch (e) {
+    console.error(e);
+    el.innerHTML = `<div style="padding:16px;">Ошибка загрузки календаря</div>`;
+  }
 }
 
 function daysBetween(from, to = new Date()) {
@@ -3100,6 +3346,10 @@ window.openCreateClient = openCreateClient;
 window.createClient = createClient;
 window.openCreateExpense = openCreateExpense;
 window.createExpense = createExpense;
+window.setCalendarView = setCalendarView;
+window.shiftCalendarAnchor = shiftCalendarAnchor;
+window.moveCalendarToToday = moveCalendarToToday;
+window.openOrderFromCalendar = openOrderFromCalendar;
 window.openModal = openModal;
 window.closeModal = closeModal;
 
