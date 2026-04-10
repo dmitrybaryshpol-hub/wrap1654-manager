@@ -649,6 +649,47 @@ function parsePayments(order = {}) {
     .filter(Boolean);
 }
 
+function normalizeInventoryItems(items = []) {
+  return (Array.isArray(items) ? items : []).map((item) => ({
+    ...item,
+    normalized_category: normalizeInventoryCategory(item.category),
+    normalized_group: inventoryCategoryGroup(item.category),
+  }));
+}
+
+async function ensureInventoryLoaded() {
+  if ((state.inventory || []).length) return state.inventory;
+  const res = await api("get_inventory");
+  const items = normalizeInventoryItems(res?.items || []);
+  state.inventory = items;
+  return items;
+}
+
+function normalizeOrderMaterial(raw = {}, orderCurrency = "USD") {
+  const quantity = asNumber(
+    raw.quantity ?? raw.qty ?? raw.amount ?? raw.used_quantity ?? 0,
+    0
+  );
+  const purchasePrice = asNumber(
+    raw.purchase_price ?? raw.unit_cost ?? raw.price ?? raw.cost_per_unit,
+    NaN
+  );
+  const fallbackTotal = Number.isFinite(purchasePrice) ? quantity * purchasePrice : 0;
+  const totalCost = asNumber(
+    raw.total_cost ?? raw.line_total ?? raw.total ?? raw.cost,
+    fallbackTotal
+  );
+  return {
+    item_name: raw.item_name || raw.name || raw.material_name || raw.inventory_name || "Материал",
+    quantity,
+    unit: raw.unit || raw.uom || "",
+    purchase_price: Number.isFinite(purchasePrice) ? purchasePrice : null,
+    total_cost: totalCost,
+    currency: raw.currency || orderCurrency || "USD",
+    inventory_item_id: raw.inventory_item_id || raw.item_id || raw.inventory_id || null,
+  };
+}
+
 function parseMoneyInput(value) {
   const normalized = String(value ?? "").trim().replace(",", ".");
   const amount = Number(normalized);
@@ -670,7 +711,9 @@ async function openOrder(id) {
     const res = await api("get_order", { id });
     const order = res?.item && typeof res.item === "object" ? res.item : {};
     const cur = currencySymbol(order.currency || "USD");
-    const materials = Array.isArray(order.materials) ? order.materials : [];
+    const materials = (Array.isArray(order.materials) ? order.materials : [])
+      .map((row) => normalizeOrderMaterial(row, order.currency || "USD"));
+    const materialsSubtotal = materials.reduce((sum, row) => sum + asNumber(row.total_cost, 0), 0);
     const parsedServices = parseServicesFromNote(order?.note || "");
     const services = parsedServices.services || [];
     const cleanNote = parsedServices.cleanNote || "";
@@ -772,17 +815,36 @@ async function openOrder(id) {
         : `<div style="padding:10px; border-radius:10px; border:1px dashed rgba(148,163,184,.35); color:#94a3b8; font-size:13px;">Услуги пока не добавлены</div>`
       )}
 
-      ${sectionCard("MATERIALS", materials.length
-        ? materials.map((m) => `
-          <div style="padding:9px 10px; border-radius:10px; border:1px solid rgba(148,163,184,.2); margin-bottom:7px;">
-            <div style="font-weight:700; font-size:14px; margin-bottom:3px;">${escapeHtml(m.item_name || "Материал")}</div>
-            <div style="font-size:12px; color:#94a3b8;">
-              ${formatMoney(m.quantity || 0)} ${escapeHtml(m.unit || "")} · ${formatMoney(m.total_cost || 0)} ${currencySymbol(m.currency || order.currency || "USD")}
+      ${sectionCard("MATERIALS", `
+        <div style="padding:10px; border-radius:12px; border:1px solid rgba(148,163,184,.22); background:rgba(2,6,23,.55); margin-bottom:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
+            <div>
+              <div style="font-size:11px; color:#94a3b8;">Подытог материалов</div>
+              <div style="font-size:18px; font-weight:800;">${formatMoney(materialsSubtotal)} ${cur}</div>
             </div>
+            ${btn("+ Материал", `openAddMaterialToOrder('${id}')`, "background:#1d4ed8; border-color:#3b82f6; white-space:nowrap;")}
           </div>
-        `).join("")
-        : `<div style="padding:10px; border-radius:10px; border:1px dashed rgba(148,163,184,.35); color:#94a3b8; font-size:13px;">Материалы не добавлены</div>`
-      )}
+          <div style="font-size:11px; color:#64748b;">Этот блок влияет на себестоимость заказа.</div>
+        </div>
+
+        ${materials.length
+          ? materials.map((m) => `
+            <div style="padding:10px; border-radius:12px; border:1px solid rgba(148,163,184,.2); margin-bottom:8px; background:rgba(15,23,42,.38);">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:6px;">
+                <div style="font-weight:700; font-size:14px;">${escapeHtml(m.item_name || "Материал")}</div>
+                <div style="font-size:13px; font-weight:700;">${formatMoney(m.total_cost || 0)} ${currencySymbol(m.currency || order.currency || "USD")}</div>
+              </div>
+              <div style="display:flex; flex-wrap:wrap; gap:8px; font-size:12px; color:#94a3b8;">
+                <span>Кол-во: ${formatMoney(m.quantity || 0)} ${escapeHtml(m.unit || "ед.")}</span>
+                ${m.purchase_price == null
+                  ? `<span>Цена закупки: —</span>`
+                  : `<span>Цена закупки: ${formatMoney(m.purchase_price)} ${currencySymbol(m.currency || order.currency || "USD")}</span>`}
+              </div>
+            </div>
+          `).join("")
+          : `<div style="padding:12px; border-radius:12px; border:1px dashed rgba(148,163,184,.35); color:#94a3b8; font-size:13px;">Материалы пока не добавлены. Нажмите «+ Материал», чтобы привязать позицию со склада.</div>`
+        }
+      `)}
 
       ${sectionCard("PAYMENTS", `
         <div style="padding:10px; border-radius:12px; border:1px solid rgba(59,130,246,.25); background:rgba(30,64,175,.12); margin-bottom:10px;">
@@ -1532,6 +1594,126 @@ async function addPayment(order_id, amountInputId = "") {
   }
 }
 
+function renderAddMaterialPricePreview(item) {
+  const preview = document.getElementById("add_material_price_preview");
+  if (!preview) return;
+  if (!item) {
+    preview.textContent = "—";
+    return;
+  }
+
+  const value = asNumber(item.purchase_price ?? item.retail_price ?? 0, 0);
+  preview.textContent = `${formatMoney(value)} ${currencySymbol(item.currency || "USD")}`;
+}
+
+function syncAddMaterialFields() {
+  const select = document.getElementById("add_material_item");
+  const unitInput = document.getElementById("add_material_unit");
+  if (!select || !unitInput) return;
+
+  const selected = (state.inventory || []).find((item) => String(item.id) === String(select.value));
+  unitInput.value = selected?.unit || "pcs";
+  renderAddMaterialPricePreview(selected || null);
+}
+
+async function openAddMaterialToOrder(order_id) {
+  try {
+    const inventory = await ensureInventoryLoaded();
+    const sorted = [...inventory].sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "uk"));
+
+    openModal(`
+      <h3 style="margin-top:0;">Добавить материал</h3>
+      <div style="font-size:12px; color:#94a3b8; margin-bottom:10px;">Выберите позицию склада и укажите расход для этого заказа.</div>
+
+      <label style="font-size:12px; opacity:.7;">Позиция</label>
+      <select id="add_material_item" onchange="syncAddMaterialFields()" style="width:100%; margin-bottom:10px;">
+        <option value="">Выберите материал</option>
+        ${sorted.map((item) => `
+          <option value="${escapeHtml(String(item.id))}">
+            ${escapeHtml(item.name || "Без названия")} · ${formatMoney(item.available_quantity ?? item.quantity ?? 0)} ${escapeHtml(item.unit || "pcs")}
+          </option>
+        `).join("")}
+      </select>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+        <div>
+          <label style="font-size:12px; opacity:.7;">Количество</label>
+          <input id="add_material_qty" type="number" step="0.01" min="0.01" value="1" style="width:100%;">
+        </div>
+        <div>
+          <label style="font-size:12px; opacity:.7;">Ед. изм.</label>
+          <input id="add_material_unit" type="text" value="pcs" style="width:100%;">
+        </div>
+      </div>
+
+      <div style="padding:10px; border-radius:10px; border:1px solid rgba(148,163,184,.2); margin-bottom:12px; background:rgba(15,23,42,.45);">
+        <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">Ориентир цены закупки</div>
+        <div id="add_material_price_preview" style="font-size:16px; font-weight:800;">—</div>
+      </div>
+
+      <div style="display:flex; gap:8px;">
+        ${btn("Назад к заказу", `openOrder('${order_id}')`, "flex:1;")}
+        ${btn("Добавить", `addMaterialToOrder('${order_id}')`, "flex:1; background:#1d4ed8; border-color:#3b82f6;")}
+      </div>
+    `);
+  } catch (e) {
+    console.error(e);
+    safeAlert(e?.message || "Не удалось загрузить склад");
+  }
+}
+
+async function addMaterialToOrder(order_id) {
+  const itemId = document.getElementById("add_material_item")?.value || "";
+  const quantity = asNumber(document.getElementById("add_material_qty")?.value, 0);
+  const unit = document.getElementById("add_material_unit")?.value.trim() || "";
+
+  if (!itemId) {
+    safeAlert("Выберите материал");
+    return;
+  }
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    safeAlert("Укажите корректное количество");
+    return;
+  }
+
+  const item = (state.inventory || []).find((row) => String(row.id) === String(itemId));
+  if (!item) {
+    safeAlert("Позиция склада не найдена");
+    return;
+  }
+
+  const purchasePrice = asNumber(item.purchase_price ?? item.retail_price, 0);
+  const payload = {
+    order_id,
+    inventory_item_id: item.id,
+    quantity,
+    unit: unit || item.unit || "pcs",
+    item_name: item.name || null,
+    purchase_price: purchasePrice,
+    total_cost: quantity * purchasePrice,
+    currency: item.currency || "USD",
+  };
+
+  const actions = ["add_order_material", "create_order_material", "attach_order_material"];
+  let lastError = null;
+  for (const action of actions) {
+    try {
+      await api(action, payload);
+      safeAlert("Материал добавлен");
+      await openOrder(order_id);
+      await loadOrders();
+      await loadDashboard();
+      await loadFinance();
+      return;
+    } catch (e) {
+      lastError = e;
+      console.warn(`Material action failed: ${action}`, e?.message || e);
+    }
+  }
+
+  safeAlert(lastError?.message || "На бэкенде нет поддержки добавления материалов к заказу");
+}
+
 
 
 
@@ -1544,12 +1726,7 @@ async function loadInventory() {
 
   try {
     const res = await api("get_inventory");
-    const items = Array.isArray(res?.items) ? res.items : [];
-    const normalizedItems = items.map((item) => ({
-      ...item,
-      normalized_category: normalizeInventoryCategory(item.category),
-      normalized_group: inventoryCategoryGroup(item.category),
-    }));
+    const normalizedItems = normalizeInventoryItems(res?.items || []);
     state.inventory = normalizedItems;
     const filmItems = normalizedItems.filter((i) => i.normalized_group === "film");
     const productItems = normalizedItems.filter((i) => i.normalized_group === "product");
@@ -1965,6 +2142,9 @@ window.openOrder = openOrder;
 window.startEditOrder = startEditOrder;
 window.handleDeleteOrder = handleDeleteOrder;
 window.addPayment = addPayment;
+window.openAddMaterialToOrder = openAddMaterialToOrder;
+window.syncAddMaterialFields = syncAddMaterialFields;
+window.addMaterialToOrder = addMaterialToOrder;
 window.openCreateInventoryItem = openCreateInventoryItem;
 window.createInventoryItem = createInventoryItem;
 window.openCreateClient = openCreateClient;
