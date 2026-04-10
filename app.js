@@ -1027,6 +1027,7 @@ function normalizeOrderMaterial(raw = {}, orderCurrency = "USD") {
     fallbackTotal
   );
   return {
+    material_id: raw.id || raw.material_id || raw.order_material_id || raw.link_id || null,
     item_name: raw.item_name || raw.name || raw.material_name || raw.inventory_name || "Материал",
     quantity,
     unit: raw.unit || raw.uom || "",
@@ -1229,8 +1230,15 @@ async function openOrder(id) {
                     ${linkedItem && linkedAvailable != null
                       ? ` · Доступно: ${formatMoney(linkedAvailable)} ${escapeHtml(linkedItem.unit || "pcs")} · Резерв: ${formatMoney(linkedItem.reserved_quantity || 0)}`
                       : ""}
+                    <div style="margin-top:4px; color:#93c5fd;">Этот материал зарезервирован под заказ.</div>
                   </div>`
                 : `<div style="margin-top:6px; font-size:12px; color:#94a3b8;">Склад: позиция не привязана</div>`}
+              ${m.material_id && m.inventory_item_id
+                ? `<div style="display:flex; gap:6px; margin-top:8px;">
+                    ${btn("Изм. кол-во", `changeOrderMaterialQuantity('${id}', '${m.material_id}', '${m.inventory_item_id}', ${asNumber(m.quantity, 0)})`, "padding:7px 10px; font-size:12px;")}
+                    ${btn("Убрать", `removeOrderMaterial('${id}', '${m.material_id}', '${m.inventory_item_id}', ${asNumber(m.quantity, 0)})`, "padding:7px 10px; font-size:12px; background:rgba(239,68,68,.14); border-color:rgba(239,68,68,.35); color:#fecaca;")}
+                  </div>`
+                : ""}
             </div>
           `;
           }).join("")
@@ -2073,6 +2081,11 @@ async function addMaterialToOrder(order_id) {
     safeAlert("Позиция склада не найдена");
     return;
   }
+  const availableNow = getInventoryAvailableQuantity(item);
+  if (quantity > availableNow) {
+    safeAlert(`Недостаточно доступного остатка. Доступно: ${formatMoney(availableNow)} ${item.unit || "pcs"}`);
+    return;
+  }
 
   const purchasePrice = asNumber(item.purchase_price ?? item.retail_price, 0);
   const payload = {
@@ -2091,6 +2104,10 @@ async function addMaterialToOrder(order_id) {
   for (const action of actions) {
     try {
       await api(action, payload);
+      await applyInventoryReserveDelta(item.id, quantity, {
+        order_id,
+        reason: "add_material",
+      });
       safeAlert("Материал добавлен");
       await openOrder(order_id);
       await loadOrders();
@@ -2104,6 +2121,156 @@ async function addMaterialToOrder(order_id) {
   }
 
   safeAlert(lastError?.message || "На бэкенде нет поддержки добавления материалов к заказу");
+}
+
+function findInventoryById(itemId) {
+  return (state.inventory || []).find((row) => String(row.id) === String(itemId));
+}
+
+async function applyInventoryReserveDelta(itemId, delta, context = {}) {
+  const normalizedDelta = asNumber(delta, 0);
+  if (!itemId || !normalizedDelta) return;
+
+  await loadInventory();
+  const item = findInventoryById(itemId);
+  if (!item) throw new Error("Позиция склада не найдена для резерва");
+
+  const quantity = asNumber(item.quantity, 0);
+  const reserved = asNumber(item.reserved_quantity, 0);
+  const nextReserved = reserved + normalizedDelta;
+
+  if (nextReserved < 0) {
+    throw new Error("Операция резерва отклонена: резерв не может быть отрицательным");
+  }
+
+  const available = getInventoryAvailableQuantity(item);
+  if (normalizedDelta > 0 && normalizedDelta > available) {
+    throw new Error(`Недостаточно доступного остатка. Доступно: ${formatMoney(available)} ${item.unit || "pcs"}`);
+  }
+
+  await api("update_inventory_item", {
+    id: item.id,
+    category: item.category || item.normalized_category || "other",
+    brand: item.brand || "",
+    name: item.name || "",
+    width_cm: item.width_cm ?? null,
+    unit: item.unit || "pcs",
+    quantity,
+    purchase_price: asNumber(item.purchase_price, 0),
+    retail_price: asNumber(item.retail_price, 0),
+    currency: item.currency || "USD",
+    min_quantity: asNumber(item.min_quantity, 0),
+    color: item.color || null,
+    reserved_quantity: nextReserved,
+    note: item.note || null,
+  });
+
+  await loadInventory();
+  const refreshed = findInventoryById(itemId);
+  if (refreshed) {
+    const refreshedReserved = asNumber(refreshed.reserved_quantity, 0);
+    if (Math.abs(refreshedReserved - nextReserved) > 0.0001) {
+      throw new Error("Резерв не подтверждён на сервере. Попробуйте обновить данные.");
+    }
+  }
+
+  if (context?.order_id && item?.id) {
+    try {
+      await api("create_inventory_movement", {
+        inventory_item_id: item.id,
+        movement_type: normalizedDelta > 0 ? "reserve" : "release",
+        quantity: Math.abs(normalizedDelta),
+        unit: item.unit || "pcs",
+        related_order_id: context.order_id,
+        comment: normalizedDelta > 0 ? "Reserve from order material" : "Release reserve from order material",
+      });
+    } catch (e) {
+      console.warn("Inventory movement for reserve was not created", e?.message || e);
+    }
+  }
+}
+
+async function changeOrderMaterialQuantity(order_id, material_id, inventory_item_id, currentQuantity) {
+  const raw = prompt("Новое количество материала", String(asNumber(currentQuantity, 0)));
+  if (raw == null) return;
+
+  const nextQuantity = parseMoneyInput(raw);
+  if (!Number.isFinite(nextQuantity) || nextQuantity <= 0) {
+    safeAlert("Укажите корректное количество больше 0");
+    return;
+  }
+
+  const currentQty = asNumber(currentQuantity, 0);
+  const delta = nextQuantity - currentQty;
+  if (Math.abs(delta) < 0.0001) return;
+
+  const orderRes = await api("get_order", { id: order_id });
+  const order = orderRes?.item || {};
+  const material = (Array.isArray(order.materials) ? order.materials : [])
+    .map((row) => normalizeOrderMaterial(row, order.currency || "USD"))
+    .find((row) => String(row.material_id) === String(material_id));
+
+  if (!material) {
+    safeAlert("Материал в заказе не найден. Обновите карточку заказа.");
+    return;
+  }
+
+  const purchasePrice = asNumber(material.purchase_price, 0);
+  const payload = {
+    id: material_id,
+    order_id,
+    quantity: nextQuantity,
+    unit: material.unit || "pcs",
+    purchase_price: purchasePrice,
+    total_cost: nextQuantity * purchasePrice,
+    inventory_item_id,
+  };
+
+  const actions = ["update_order_material", "edit_order_material", "patch_order_material"];
+  let updateError = null;
+  for (const action of actions) {
+    try {
+      await api(action, payload);
+      await applyInventoryReserveDelta(inventory_item_id, delta, { order_id, reason: "update_material" });
+      safeAlert("Количество материала обновлено");
+      await openOrder(order_id);
+      await loadOrders();
+      await loadDashboard();
+      await loadFinance();
+      return;
+    } catch (e) {
+      updateError = e;
+      console.warn(`Order material update failed: ${action}`, e?.message || e);
+    }
+  }
+
+  safeAlert(updateError?.message || "Не удалось обновить материал заказа");
+}
+
+async function removeOrderMaterial(order_id, material_id, inventory_item_id, quantity) {
+  const ok = await safeConfirm("Удалить материал из заказа и снять резерв?");
+  if (!ok) return;
+
+  const releaseQty = asNumber(quantity, 0);
+  const actions = ["delete_order_material", "remove_order_material", "detach_order_material"];
+  let lastError = null;
+  for (const action of actions) {
+    try {
+      await api(action, { id: material_id, material_id, order_id });
+      await applyInventoryReserveDelta(inventory_item_id, -releaseQty, { order_id, reason: "remove_material" });
+      safeAlert("Материал удалён, резерв снят");
+      await openOrder(order_id);
+      await loadOrders();
+      await loadDashboard();
+      await loadFinance();
+      return;
+    } catch (e) {
+      lastError = e;
+      console.warn(`Order material delete failed: ${action}`, e?.message || e);
+    }
+  }
+
+  safeAlert(lastError?.message || "Не удалось удалить материал из заказа");
 }
 
 
