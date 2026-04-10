@@ -863,6 +863,39 @@ function paymentNoteLabel(payment = {}) {
   return String(raw || "").trim();
 }
 
+function paymentDateLabel(payment = {}, fallbackValue = null) {
+  const raw = payment.date || payment.paid_at || payment.created_at || payment.payment_date || fallbackValue;
+  return displayDate(raw);
+}
+
+function expenseDateLabel(expense = {}) {
+  return displayDate(expense.date || expense.expense_date || expense.created_at || expense.updated_at || null);
+}
+
+function financeItemMeta(order = {}) {
+  const client = order.client_name || order.client?.full_name || order.customer_name || "Клиент не указан";
+  const car = order.car_model || order.vehicle || "Авто не указано";
+  return { client, car };
+}
+
+function financeOrderStatusLabel(order = {}) {
+  const s = statusVisual(order.status || "");
+  return `
+    <span style="
+      display:inline-flex;
+      align-items:center;
+      padding:4px 9px;
+      border-radius:999px;
+      border:1px solid ${s.border};
+      background:${s.bg};
+      color:${s.color};
+      font-size:11px;
+      font-weight:800;
+      letter-spacing:.03em;
+    ">${escapeHtml(s.label)}</span>
+  `;
+}
+
 async function openOrder(id) {
   try {
     const res = await api("get_order", { id });
@@ -2202,8 +2235,48 @@ async function loadFinance() {
   try {
     const summaryRes = await api("get_finance_summary");
     const summary = summaryRes && typeof summaryRes === "object" ? summaryRes : {};
+
+    const ordersRes = await api("get_orders");
+    const orders = Array.isArray(ordersRes?.items) ? ordersRes.items : [];
+    state.orders = orders;
+
     const expensesRes = await api("get_expenses");
-    const expenses = expensesRes.items || [];
+    const expenses = Array.isArray(expensesRes?.items) ? expensesRes.items : [];
+
+    const revenue = asNumber(summary.orders_revenue, 0);
+    const expenseTotal = asNumber(summary.expenses_total, 0);
+    const netProfit = asNumber(summary.net_profit, asNumber(summary.gross_profit, 0) - expenseTotal);
+    const unpaidFromSummary = asNumber(
+      summary.unpaid_total ?? summary.due_total ?? summary.orders_due_total,
+      NaN
+    );
+    const unpaidFromOrders = orders.reduce((sum, o) => sum + Math.max(0, asNumber(o.due, 0)), 0);
+    const unpaidTotal = Number.isFinite(unpaidFromSummary) ? unpaidFromSummary : unpaidFromOrders;
+
+    const recentPayments = orders
+      .flatMap((order) => {
+        const payments = parsePayments(order);
+        return payments.map((payment) => ({ order, payment }));
+      })
+      .sort((a, b) => {
+        const da = parseDateValue(a.payment?.date || a.payment?.paid_at || a.payment?.created_at || "");
+        const db = parseDateValue(b.payment?.date || b.payment?.paid_at || b.payment?.created_at || "");
+        return (db?.getTime() || 0) - (da?.getTime() || 0);
+      })
+      .slice(0, 8);
+
+    const recentExpenses = [...expenses]
+      .sort((a, b) => {
+        const da = parseDateValue(a?.date || a?.expense_date || a?.created_at || "");
+        const db = parseDateValue(b?.date || b?.expense_date || b?.created_at || "");
+        return (db?.getTime() || 0) - (da?.getTime() || 0);
+      })
+      .slice(0, 8);
+
+    const dueOrders = orders
+      .filter((o) => asNumber(o.due, 0) > 0)
+      .sort((a, b) => asNumber(b.due, 0) - asNumber(a.due, 0))
+      .slice(0, 8);
 
     el.innerHTML = `
       <div style="padding:16px;">
@@ -2212,25 +2285,118 @@ async function loadFinance() {
         </div>
 
         ${card(`
-          <div style="font-weight:700; margin-bottom:8px;">Сводка</div>
-          <div>Выручка по заказам: ${formatMoney(summary.orders_revenue || 0)} ₴</div>
-          <div>Прибыль по заказам: ${formatMoney(summary.orders_profit || 0)} ₴</div>
-          <div>Расходы: ${formatMoney(summary.expenses_total || 0)} ₴</div>
-          <hr style="border-color:#1f2937;">
-          <div><b>Валовая прибыль: ${formatMoney(summary.gross_profit || 0)} ₴</b></div>
-          <div><b>Чистая прибыль: ${formatMoney(summary.net_profit || 0)} ₴</b></div>
+          <div style="font-size:12px; letter-spacing:.07em; color:#93c5fd; font-weight:800; margin-bottom:10px;">FINANCE PRO v1</div>
+          <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px;">
+            <div style="padding:10px; border:1px solid rgba(37,99,235,.35); border-radius:12px; background:rgba(37,99,235,.12);">
+              <div style="font-size:11px; color:#93c5fd; margin-bottom:4px;">Выручка</div>
+              <div style="font-size:20px; font-weight:900;">${formatMoney(revenue)} ₴</div>
+            </div>
+            <div style="padding:10px; border:1px solid rgba(251,146,60,.35); border-radius:12px; background:rgba(251,146,60,.1);">
+              <div style="font-size:11px; color:#fdba74; margin-bottom:4px;">Расходы</div>
+              <div style="font-size:20px; font-weight:900;">${formatMoney(expenseTotal)} ₴</div>
+            </div>
+            <div style="padding:10px; border:1px solid ${netProfit >= 0 ? "rgba(34,197,94,.35)" : "rgba(239,68,68,.35)"}; border-radius:12px; background:${netProfit >= 0 ? "rgba(34,197,94,.1)" : "rgba(239,68,68,.1)"};">
+              <div style="font-size:11px; color:${netProfit >= 0 ? "#86efac" : "#fca5a5"}; margin-bottom:4px;">Чистая прибыль</div>
+              <div style="font-size:20px; font-weight:900;">${formatMoney(netProfit)} ₴</div>
+            </div>
+            <div style="padding:10px; border:1px solid rgba(239,68,68,.35); border-radius:12px; background:rgba(239,68,68,.1);">
+              <div style="font-size:11px; color:#fca5a5; margin-bottom:4px;">Неоплачено / к оплате</div>
+              <div style="font-size:20px; font-weight:900;">${formatMoney(unpaidTotal)} ₴</div>
+            </div>
+          </div>
         `)}
 
-        <h3 style="margin:12px 0;">Расходы</h3>
-        ${expenses.length
-          ? expenses.map((x) => `
-              ${card(`
-                <div style="font-weight:700;">${escapeHtml(x.category || "")}</div>
-                <div>${formatMoney(x.amount || 0)} ${currencySymbol(x.currency || "USD")}</div>
-                <div style="font-size:12px; opacity:0.7;">${escapeHtml(x.note || "")}</div>
-              `)}
+        ${card(`
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <div style="font-weight:800; font-size:16px;">Платежи</div>
+            <div style="font-size:12px; color:#94a3b8;">Последние ${recentPayments.length}</div>
+          </div>
+          ${recentPayments.length
+            ? recentPayments.map(({ order, payment }) => {
+              const amount = asNumber(payment.amount ?? payment.value ?? payment.sum, 0);
+              const cur = payment.currency || order.currency || "USD";
+              const info = financeItemMeta(order);
+              const method = paymentMethodLabel(payment);
+              const note = paymentNoteLabel(payment);
+              return `
+                <div style="border:1px solid rgba(148,163,184,.2); border-radius:12px; padding:10px; margin-bottom:8px; background:rgba(2,6,23,.55);">
+                  <div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;">
+                    <div style="font-weight:800; font-size:17px; color:#93c5fd;">${formatMoney(amount)} ${currencySymbol(cur)}</div>
+                    <div style="font-size:12px; color:#94a3b8;">${paymentDateLabel(payment, order.updated_at || order.created_at)}</div>
+                  </div>
+                  <div style="font-size:13px; margin-top:5px;">${escapeHtml(info.client)} · ${escapeHtml(info.car)}</div>
+                  <div style="font-size:12px; color:#94a3b8; margin-top:4px;">Заказ: ${orderLabel(order)} · ${escapeHtml(method)}</div>
+                  ${note ? `<div style="font-size:12px; color:#cbd5e1; margin-top:4px;">${escapeHtml(note)}</div>` : ""}
+                </div>
+              `;
+            }).join("")
+            : `<div style="padding:10px; border-radius:10px; border:1px dashed rgba(148,163,184,.35); color:#94a3b8; font-size:13px;">Платежей пока нет</div>`
+          }
+        `)}
+
+        ${card(`
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <div style="font-weight:800; font-size:16px;">Расходы</div>
+            <div style="font-size:12px; color:#94a3b8;">Последние ${recentExpenses.length}</div>
+          </div>
+          ${recentExpenses.length
+            ? recentExpenses.map((x) => `
+              <div style="border:1px solid rgba(148,163,184,.2); border-radius:12px; padding:10px; margin-bottom:8px; background:rgba(2,6,23,.55);">
+                <div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;">
+                  <div style="font-weight:700;">${escapeHtml(x.category || "Без категории")}</div>
+                  <div style="font-size:12px; color:#94a3b8;">${expenseDateLabel(x)}</div>
+                </div>
+                <div style="font-size:17px; font-weight:900; margin-top:4px; color:#fdba74;">
+                  ${formatMoney(x.amount || 0)} ${currencySymbol(x.currency || "USD")}
+                </div>
+                <div style="font-size:12px; color:#94a3b8; margin-top:4px;">
+                  Поставщик: ${escapeHtml(x.supplier || "—")}
+                </div>
+                ${x.note ? `<div style="font-size:12px; color:#cbd5e1; margin-top:4px;">${escapeHtml(x.note)}</div>` : ""}
+              </div>
             `).join("")
-          : card("Расходов пока нет")}
+            : `<div style="padding:10px; border-radius:10px; border:1px dashed rgba(148,163,184,.35); color:#94a3b8; font-size:13px;">Расходов пока нет</div>`
+          }
+        `)}
+
+        ${card(`
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <div style="font-weight:800; font-size:16px;">Неоплаченные заказы</div>
+            <div style="font-size:12px; color:#94a3b8;">${dueOrders.length} шт.</div>
+          </div>
+          ${dueOrders.length
+            ? dueOrders.map((o) => {
+              const info = financeItemMeta(o);
+              return `
+                <div style="border:1px solid rgba(239,68,68,.25); border-radius:12px; padding:10px; margin-bottom:8px; background:rgba(127,29,29,.15);">
+                  <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+                    <div>
+                      <div style="font-weight:700;">${escapeHtml(info.client)}</div>
+                      <div style="font-size:12px; color:#cbd5e1; margin-top:4px;">${escapeHtml(info.car)}</div>
+                    </div>
+                    <div style="text-align:right;">
+                      <div style="font-size:18px; font-weight:900; color:#fecaca;">${formatMoney(o.due || 0)} ${currencySymbol(o.currency || "USD")}</div>
+                      <div style="margin-top:4px;">${financeOrderStatusLabel(o)}</div>
+                    </div>
+                  </div>
+                  <div style="margin-top:8px;">
+                    <button onclick="openOrder('${o.id}')" style="
+                      width:100%;
+                      padding:9px 10px;
+                      border-radius:10px;
+                      border:1px solid rgba(248,113,113,.45);
+                      background:rgba(239,68,68,.16);
+                      color:#fee2e2;
+                      font-weight:700;
+                      cursor:pointer;
+                    ">Открыть заказ</button>
+                  </div>
+                </div>
+              `;
+            }).join("")
+            : `<div style="padding:10px; border-radius:10px; border:1px dashed rgba(34,197,94,.35); color:#86efac; font-size:13px;">Нет заказов с долгом</div>`
+          }
+        `)}
       </div>
     `;
   } catch (e) {
