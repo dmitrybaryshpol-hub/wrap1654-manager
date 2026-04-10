@@ -378,22 +378,39 @@ function renderLayout() {
         margin:0 auto;
         border:1px solid rgba(167,139,250,.18);
         border-bottom:0;
-        border-radius:20px 20px 0 0;
+        border-radius:22px 22px 0 0;
         backdrop-filter:blur(10px);
       }
       .nav-btn{
-        border:none;
-        border-radius:12px;
-        background:transparent;
-        color:#a8b0cb;
+        border:1px solid transparent;
+        border-radius:16px;
+        background:linear-gradient(180deg, rgba(30,41,59,.45), rgba(15,23,42,.4));
+        color:#c7d2fe;
         font-weight:700;
-        padding:12px 8px;
+        padding:10px 8px;
         white-space:nowrap;
+        min-height:64px;
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        justify-content:center;
+        gap:4px;
+        font-size:11px;
+        line-height:1.1;
       }
       .nav-btn.active{
         color:#f5f3ff;
-        background:linear-gradient(180deg, rgba(139,92,246,.3), rgba(109,40,217,.25));
-        box-shadow:inset 0 0 0 1px rgba(196,181,253,.32);
+        background:linear-gradient(180deg, rgba(139,92,246,.5), rgba(109,40,217,.45));
+        border-color:rgba(196,181,253,.45);
+        box-shadow:0 6px 18px rgba(109,40,217,.28), inset 0 1px 0 rgba(255,255,255,.16);
+      }
+      .nav-icon{
+        font-size:18px;
+        line-height:1;
+      }
+      .nav-label{
+        font-size:11px;
+        font-weight:700;
       }
       input,select,textarea{
         background:linear-gradient(180deg, rgba(18,23,40,.9), rgba(15,19,34,.96));
@@ -442,9 +459,41 @@ function renderLayout() {
         flex-direction:column;
         justify-content:space-between;
       }
+      .kpi-strip{
+        display:grid;
+        grid-template-columns:repeat(4,minmax(0,1fr));
+        gap:6px;
+        margin-bottom:12px;
+      }
+      .kpi-tile{
+        border-radius:12px;
+        border:1px solid rgba(167,139,250,.22);
+        background:linear-gradient(180deg, rgba(10,16,30,.88), rgba(7,11,24,.93));
+        padding:8px 9px;
+        min-height:62px;
+        display:flex;
+        flex-direction:column;
+        justify-content:space-between;
+      }
+      .kpi-label{
+        font-size:10px;
+        color:#9ca3af;
+        line-height:1.1;
+      }
+      .kpi-value{
+        margin-top:4px;
+        font-size:20px;
+        font-weight:800;
+        line-height:1;
+      }
+      @media (max-width:390px){
+        .kpi-strip{
+          grid-template-columns:repeat(2,minmax(0,1fr));
+        }
+      }
     </style>
     <div id="app-shell" style="
-      padding-bottom:80px;
+      padding-bottom:92px;
       color:#fff;
       background:transparent;
       min-height:100vh;
@@ -481,16 +530,31 @@ function renderLayout() {
       display:flex;
       gap:8px;
       overflow-x:auto;
-      padding:10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+      padding:10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
       background:rgba(13,17,31,.92);
       border-top:1px solid rgba(167,139,250,.2);
       z-index:20;
     ">
-      <button class="nav-btn" data-nav="dashboard" onclick="showTab('dashboard')" style="flex:1;">Главная</button>
-      <button class="nav-btn" data-nav="orders" onclick="showTab('orders')" style="flex:1;">Заказы</button>
-      <button class="nav-btn" data-nav="calendar" onclick="showTab('calendar')" style="flex:1;">Календарь</button>
-      <button class="nav-btn" data-nav="inventory" onclick="showTab('inventory')" style="flex:1;">Склад</button>
-      <button class="nav-btn" data-nav="finance" onclick="showTab('finance')" style="flex:1;">Финансы</button>
+      <button class="nav-btn" data-nav="dashboard" onclick="showTab('dashboard')" style="flex:1;">
+        <span class="nav-icon">🏠</span>
+        <span class="nav-label">Главная</span>
+      </button>
+      <button class="nav-btn" data-nav="orders" onclick="showTab('orders')" style="flex:1;">
+        <span class="nav-icon">📦</span>
+        <span class="nav-label">Заказы</span>
+      </button>
+      <button class="nav-btn" data-nav="calendar" onclick="showTab('calendar')" style="flex:1;">
+        <span class="nav-icon">🗓️</span>
+        <span class="nav-label">Календарь</span>
+      </button>
+      <button class="nav-btn" data-nav="inventory" onclick="showTab('inventory')" style="flex:1;">
+        <span class="nav-icon">🧰</span>
+        <span class="nav-label">Склад</span>
+      </button>
+      <button class="nav-btn" data-nav="finance" onclick="showTab('finance')" style="flex:1;">
+        <span class="nav-icon">💰</span>
+        <span class="nav-label">Финансы</span>
+      </button>
     </div>
 
     <div id="modal"></div>
@@ -579,28 +643,23 @@ async function loadDashboard() {
 
     el.innerHTML = `
       <div style="padding:16px;">
-        <div style="
-          display:grid;
-          grid-template-columns:repeat(2,minmax(0,1fr));
-          gap:8px;
-          margin-bottom:12px;
-        ">
-          ${card(`
-            <div style="font-size:12px; color:#9ca3af;">Активные заказы</div>
-            <div style="font-size:24px; font-weight:800; margin-top:4px;">${activeCount}</div>
-          `, "margin-bottom:0; background:linear-gradient(180deg,#111827,#0f172a);")}
-          ${card(`
-            <div style="font-size:12px; color:#9ca3af;">Просрочено</div>
-            <div style="font-size:24px; font-weight:800; margin-top:4px; color:#fca5a5;">${buckets.overdue.length}</div>
-          `, "margin-bottom:0; background:linear-gradient(180deg,#111827,#0f172a);")}
-          ${card(`
-            <div style="font-size:12px; color:#9ca3af;">Нужно планирование</div>
-            <div style="font-size:24px; font-weight:800; margin-top:4px; color:#fde68a;">${buckets.unplanned.length}</div>
-          `, "margin-bottom:0; background:linear-gradient(180deg,#111827,#0f172a);")}
-          ${card(`
-            <div style="font-size:12px; color:#9ca3af;">Low stock</div>
-            <div style="font-size:24px; font-weight:800; margin-top:4px; color:#fbbf24;">${lowStockCount}</div>
-          `, "margin-bottom:0; background:linear-gradient(180deg,#111827,#0f172a);")}
+        <div class="kpi-strip">
+          <div class="kpi-tile">
+            <div class="kpi-label">Активные заказы</div>
+            <div class="kpi-value">${activeCount}</div>
+          </div>
+          <div class="kpi-tile">
+            <div class="kpi-label">Просрочено</div>
+            <div class="kpi-value" style="color:#fca5a5;">${buckets.overdue.length}</div>
+          </div>
+          <div class="kpi-tile">
+            <div class="kpi-label">Нужно планирование</div>
+            <div class="kpi-value" style="color:#fde68a;">${buckets.unplanned.length}</div>
+          </div>
+          <div class="kpi-tile">
+            <div class="kpi-label">Low stock</div>
+            <div class="kpi-value" style="color:#fbbf24;">${lowStockCount}</div>
+          </div>
         </div>
 
         <h3 style="margin:12px 0 8px 0;">🚀 Быстрые действия</h3>
