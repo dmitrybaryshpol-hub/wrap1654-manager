@@ -558,14 +558,8 @@ async function loadDashboard() {
     const dashboardActiveOrders = Array.isArray(data.active_orders) ? data.active_orders : [];
     const activeOrders = dashboardActiveOrders.filter((order) => isActiveOrderStatus(order?.status));
     const lowStock = Array.isArray(data.low_stock) ? data.low_stock : [];
-    const totalClients = asNumber(
-      data.clients_count ?? stats.clients_count ?? stats.total_clients,
-      0
-    );
-    const totalInventory = asNumber(
-      data.inventory_count ?? stats.inventory_count ?? stats.total_inventory,
-      0
-    );
+    const { buckets, soonHorizonDays } = buildCalendarOperationalBuckets(activeOrders, { soonHorizonDays: 3 });
+
     const lowStockCount = asNumber(
       stats.low_stock_count ?? lowStock.length,
       lowStock.length
@@ -574,57 +568,11 @@ async function loadDashboard() {
       stats.active_count ?? stats.total_in_work ?? activeOrders.length,
       activeOrders.length
     );
-    const now = new Date();
-
-    const attentionItems = activeOrders.reduce((acc, order) => {
-      const orderId = String(order?.id || "");
-      const status = String(order?.status || "").toLowerCase();
-      const createdAt = parseDateValue(getOrderDate(order, ["created_at", "createdAt"]));
-      const startDate = parseDateValue(getOrderDate(order, ["start_date", "startDate", "intake_date", "received_at"]));
-      const endDateRaw = getOrderDate(order, ["end_date", "endDate", "due_date", "planned_end_date"]);
-      const endDate = parseDateValue(endDateRaw);
-      const updatedAt = parseDateValue(getOrderDate(order, ["updated_at", "updatedAt"]));
-      const ageDays = daysBetween(createdAt, now);
-      const inProgressDays = daysBetween(startDate || updatedAt || createdAt, now);
-
-      if (status === "in_progress" && !endDateRaw) {
-        acc.push({
-          level: "high",
-          text: `Заказ ${orderLabel(order)} в работе без даты завершения`,
-          orderId,
-        });
-      }
-
-      if (status === "in_progress" && inProgressDays !== null && inProgressDays >= 7) {
-        acc.push({
-          level: "medium",
-          text: `Заказ ${orderLabel(order)} в работе ${inProgressDays} дн.`,
-          orderId,
-        });
-      }
-
-      if (status === "new" && ageDays !== null && ageDays >= 2) {
-        acc.push({
-          level: "medium",
-          text: `Новый заказ ${orderLabel(order)} ожидает продвижения ${ageDays} дн.`,
-          orderId,
-        });
-      }
-
-      if (endDate && endDate < now && status !== "ready") {
-        acc.push({
-          level: "high",
-          text: `Заказ ${orderLabel(order)} просрочен по дате ${displayDate(endDateRaw)}`,
-          orderId,
-        });
-      }
-
-      return acc;
-    }, []);
 
     const quickActions = [
       { label: "➕ Новый заказ", action: "openCreateOrder()" },
       { label: "📦 Открыть заказы", action: "showTab('orders')" },
+      { label: "🗓 Календарь", action: "showTab('calendar')" },
       { label: "🧰 Открыть склад", action: "showTab('inventory')" },
       { label: "👤 Открыть клиентов", action: "showTab('clients')" },
     ];
@@ -642,12 +590,12 @@ async function loadDashboard() {
             <div style="font-size:24px; font-weight:800; margin-top:4px;">${activeCount}</div>
           `, "margin-bottom:0; background:linear-gradient(180deg,#111827,#0f172a);")}
           ${card(`
-            <div style="font-size:12px; color:#9ca3af;">Клиенты</div>
-            <div style="font-size:24px; font-weight:800; margin-top:4px;">${totalClients}</div>
+            <div style="font-size:12px; color:#9ca3af;">Просрочено</div>
+            <div style="font-size:24px; font-weight:800; margin-top:4px; color:#fca5a5;">${buckets.overdue.length}</div>
           `, "margin-bottom:0; background:linear-gradient(180deg,#111827,#0f172a);")}
           ${card(`
-            <div style="font-size:12px; color:#9ca3af;">Позиции на складе</div>
-            <div style="font-size:24px; font-weight:800; margin-top:4px;">${totalInventory}</div>
+            <div style="font-size:12px; color:#9ca3af;">Нужно планирование</div>
+            <div style="font-size:24px; font-weight:800; margin-top:4px; color:#fde68a;">${buckets.unplanned.length}</div>
           `, "margin-bottom:0; background:linear-gradient(180deg,#111827,#0f172a);")}
           ${card(`
             <div style="font-size:12px; color:#9ca3af;">Low stock</div>
@@ -662,71 +610,93 @@ async function loadDashboard() {
           </div>
         `)}
 
-        <h3 style="margin:12px 0;">🛠 Сейчас в работе</h3>
-        ${activeOrders.length
-          ? activeOrders.map((o) => `
-              <div onclick="openOrder('${o.id}')" style="cursor:pointer;">
-                ${card(`
-                  <div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;">
-                    <div style="font-weight:700;">${escapeHtml(o.client_name || "Клиент не указан")}</div>
-                    <span style="
-                      padding:4px 8px;
-                      border-radius:999px;
-                      font-size:11px;
-                      background:${statusVisual(o.status || "").bg};
-                      color:${statusVisual(o.status || "").color};
-                      border:1px solid ${statusVisual(o.status || "").border};
-                    ">${statusVisual(o.status || "").label}</span>
-                  </div>
-                  <div style="font-size:13px; opacity:0.86; margin-top:6px;">${escapeHtml(o.car_model || "Авто не указано")}</div>
-                  <div style="font-size:13px; color:#9ca3af; margin-top:6px;">
-                    Тип: ${escapeHtml(o.order_type || o.type || "—")}
-                  </div>
-                  <div style="font-size:12px; color:#9ca3af; margin-top:6px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
-                    <div>Приём: ${displayDate(getOrderDate(o, ["intake_date", "received_at", "created_at"]))}</div>
-                    <div>Старт: ${displayDate(getOrderDate(o, ["start_date", "started_at"]))}</div>
-                    <div>Финиш: ${displayDate(getOrderDate(o, ["end_date", "due_date", "planned_end_date"]))}</div>
-                  </div>
-                  <div style="margin-top:12px; display:flex; justify-content:flex-end;">
-                    <span style="
-                      display:inline-flex;
-                      align-items:center;
-                      gap:6px;
-                      padding:7px 11px;
-                      border-radius:10px;
-                      border:1px solid rgba(147,197,253,.45);
-                      background:linear-gradient(180deg, rgba(30,58,138,.35), rgba(30,41,59,.45));
-                      color:#dbeafe;
-                      font-size:12px;
-                      font-weight:800;
-                    ">Открыть заказ →</span>
-                  </div>
-                `)}
-              </div>
-            `).join("")
-          : card("Нет заказов в работе")}
+        ${renderCalendarOpsSection(
+          "Сегодня",
+          "Операционные события по датам на сегодня",
+          [
+            {
+              label: "Заезды сегодня",
+              items: buckets.today.arrivals,
+              hint: (item) => `Приём: ${displayDate(item.intakeDateRaw)}`,
+            },
+            {
+              label: "Старты сегодня",
+              items: buckets.today.starts,
+              hint: (item) => `Старт: ${displayDate(item.startDateRaw)}`,
+            },
+            {
+              label: "Выдачи сегодня",
+              items: buckets.today.completions,
+              hint: (item) => `Финиш: ${displayDate(item.endDateRaw)}`,
+            },
+          ],
+          { border: "rgba(96,165,250,.4)", accent: "#bfdbfe" }
+        )}
 
-        <h3 style="margin:12px 0;">⚠️ Требует внимания</h3>
-        ${attentionItems.length
-          ? attentionItems.slice(0, 8).map((item) => `
-              <div onclick="${item.orderId ? `openOrder('${item.orderId}')` : ""}" style="${item.orderId ? "cursor:pointer;" : ""}">
-                ${card(`
-                  <div style="display:flex; align-items:center; gap:8px; padding:2px 0;">
-                    <span style="
-                      width:9px; height:9px; border-radius:999px; display:inline-block;
-                      background:${item.level === "high" ? "#f87171" : "#fbbf24"};
-                      box-shadow:0 0 0 4px ${item.level === "high" ? "rgba(248,113,113,.17)" : "rgba(251,191,36,.16)"};
-                    "></span>
-                    <span style="font-size:13px; font-weight:${item.level === "high" ? "700" : "500"};">${item.text}</span>
-                  </div>
-                `, `border-color:${item.level === "high" ? "rgba(248,113,113,.34)" : "rgba(251,191,36,.28)"}; background:${item.level === "high" ? "linear-gradient(180deg, rgba(69,10,10,.44), rgba(31,11,18,.55))" : "linear-gradient(180deg, rgba(66,32,6,.38), rgba(31,18,8,.55))"};`)}
-              </div>
-            `).join("")
-          : card("Критичных операционных рисков не найдено")}
+        ${renderCalendarOpsSection(
+          "Скоро",
+          `План на ближайшие ${soonHorizonDays} дня`,
+          [
+            {
+              label: "Ближайшие заезды",
+              items: buckets.soon.arrivals,
+              hint: (item) => `Приём: ${displayDate(item.intakeDateRaw)}`,
+            },
+            {
+              label: "Ближайшие старты",
+              items: buckets.soon.starts,
+              hint: (item) => `Старт: ${displayDate(item.startDateRaw)}`,
+            },
+            {
+              label: "Ближайшие выдачи",
+              items: buckets.soon.completions,
+              hint: (item) => `Финиш: ${displayDate(item.endDateRaw)}`,
+            },
+          ],
+          { border: "rgba(52,211,153,.35)", accent: "#86efac" }
+        )}
+
+        ${card(`
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+            <div>
+              <div style="font-size:15px; font-weight:800; color:#fca5a5;">Просрочено</div>
+              <div style="font-size:12px; color:#94a3b8; margin-top:2px;">Плановая дата финиша в прошлом, заказ не в финальном статусе</div>
+            </div>
+            <span class="soft-chip" style="border-color:rgba(248,113,113,.4); color:#fecaca; background:rgba(69,10,10,.38);">${buckets.overdue.length}</span>
+          </div>
+          <div style="margin-top:8px;">
+            ${buckets.overdue.length
+              ? buckets.overdue.slice(0, 8).map((item) => renderCalendarOpsOrderCard(item, `Финиш: ${displayDate(item.endDateRaw)}`)).join("")
+              : `<div style="font-size:12px; color:#6b7280;">Просроченных заказов нет</div>`
+            }
+          </div>
+        `, "margin-bottom:10px; background:linear-gradient(180deg,#180f14,#150b12); border:1px solid rgba(248,113,113,.35);")}
+
+        ${card(`
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+            <div>
+              <div style="font-size:15px; font-weight:800; color:#fcd34d;">Нужно планирование</div>
+              <div style="font-size:12px; color:#94a3b8; margin-top:2px;">Активные заказы с пробелами графика (нет старта/финиша)</div>
+            </div>
+            <span class="soft-chip" style="border-color:rgba(250,204,21,.4); color:#fde68a; background:rgba(66,32,6,.38);">${buckets.unplanned.length}</span>
+          </div>
+          <div style="margin-top:8px;">
+            ${buckets.unplanned.length
+              ? buckets.unplanned.slice(0, 8).map((item) => {
+                  const missing = [
+                    !parseDateOnly(item.startDateRaw) ? "нет даты старта" : null,
+                    !parseDateOnly(item.endDateRaw) ? "нет даты финиша" : null,
+                  ].filter(Boolean).join(", ");
+                  return renderCalendarOpsOrderCard(item, missing || "Неполный график");
+                }).join("")
+              : `<div style="font-size:12px; color:#6b7280;">Пробелов планирования не найдено</div>`
+            }
+          </div>
+        `, "margin-bottom:10px; background:linear-gradient(180deg,#19130a,#120f08); border:1px solid rgba(250,204,21,.35);")}
 
         <h3 style="margin:12px 0;">📉 Low stock</h3>
         ${lowStock.length
-          ? lowStock.map((i) => `
+          ? lowStock.slice(0, 6).map((i) => `
               ${card(`
                 <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
                   <div>
