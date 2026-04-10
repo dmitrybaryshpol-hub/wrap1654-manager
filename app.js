@@ -784,6 +784,12 @@ function isActiveOrderStatus(status = "") {
   return !closedStatuses.has(key);
 }
 
+function isOrderCompletionStatus(status = "") {
+  const key = String(status || "").trim().toLowerCase();
+  const completionStatuses = new Set(["delivered", "closed", "done", "completed", "finished"]);
+  return completionStatuses.has(key);
+}
+
 function getOrderDate(order = {}, keys = []) {
   for (const key of keys) {
     if (order[key]) return order[key];
@@ -1939,12 +1945,42 @@ async function createOrder() {
     };
 
     if (state.editingOrderId) {
+      const previousStatus = String(existingOrder?.status || "").trim().toLowerCase();
+      const nextStatus = String(status || "").trim().toLowerCase();
+      const shouldConsumeOnCompletion =
+        !isOrderCompletionStatus(previousStatus) && isOrderCompletionStatus(nextStatus);
+
       await api("update_order", {
         id: state.editingOrderId,
         ...payload,
       });
 
-      safeAlert("Заказ обновлён");
+      if (shouldConsumeOnCompletion) {
+        try {
+          const refreshedOrderRes = await api("get_order", { id: state.editingOrderId });
+          const refreshedOrder = refreshedOrderRes?.item && typeof refreshedOrderRes.item === "object"
+            ? refreshedOrderRes.item
+            : null;
+          const materialRows = Array.isArray(refreshedOrder?.materials) ? refreshedOrder.materials : [];
+
+          const result = await consumeReservedMaterialsForOrder(
+            state.editingOrderId,
+            refreshedOrder?.order_number || existingOrder?.order_number || "",
+            materialRows,
+          );
+
+          if (result.consumed > 0) {
+            safeAlert(`Заказ обновлён. Списаны материалы: ${result.consumed}`);
+          } else {
+            safeAlert("Заказ обновлён. Резервов для списания не найдено.");
+          }
+        } catch (consumeError) {
+          console.error("Order completed, but stock consumption failed:", consumeError);
+          safeAlert(`Заказ обновлён, но списание материалов не завершено: ${consumeError?.message || "ошибка"}`);
+        }
+      } else {
+        safeAlert("Заказ обновлён");
+      }
     } else {
       await api("create_order", payload);
       safeAlert("Заказ создан");
@@ -2125,6 +2161,82 @@ async function addMaterialToOrder(order_id) {
 
 function findInventoryById(itemId) {
   return (state.inventory || []).find((row) => String(row.id) === String(itemId));
+}
+
+async function consumeReservedMaterialsForOrder(orderId, orderNumber = "", materials = []) {
+  const normalizedMaterials = (Array.isArray(materials) ? materials : [])
+    .map((row) => normalizeOrderMaterial(row))
+    .filter((row) => row.inventory_item_id && asNumber(row.quantity, 0) > 0);
+
+  if (!normalizedMaterials.length) {
+    return { consumed: 0, skipped: 0 };
+  }
+
+  await loadInventory();
+
+  let consumedCount = 0;
+  let skippedCount = 0;
+
+  for (const material of normalizedMaterials) {
+    const item = findInventoryById(material.inventory_item_id);
+    if (!item) {
+      skippedCount += 1;
+      continue;
+    }
+
+    const quantity = asNumber(item.quantity, 0);
+    const reserved = asNumber(item.reserved_quantity, 0);
+    const materialQty = asNumber(material.quantity, 0);
+    const consumableQty = Math.min(materialQty, reserved, quantity);
+
+    if (!(consumableQty > 0)) {
+      skippedCount += 1;
+      continue;
+    }
+
+    const nextQuantity = quantity - consumableQty;
+    const nextReserved = reserved - consumableQty;
+    if (nextQuantity < -0.0001 || nextReserved < -0.0001) {
+      throw new Error(`Списание отклонено: отрицательный остаток для "${item.name || "материала"}"`);
+    }
+
+    await api("update_inventory_item", {
+      id: item.id,
+      category: item.category || item.normalized_category || "other",
+      brand: item.brand || "",
+      name: item.name || "",
+      width_cm: item.width_cm ?? null,
+      unit: item.unit || "pcs",
+      quantity: Math.max(nextQuantity, 0),
+      purchase_price: asNumber(item.purchase_price, 0),
+      retail_price: asNumber(item.retail_price, 0),
+      currency: item.currency || "USD",
+      min_quantity: asNumber(item.min_quantity, 0),
+      color: item.color || null,
+      reserved_quantity: Math.max(nextReserved, 0),
+      note: item.note || null,
+    });
+
+    consumedCount += 1;
+
+    try {
+      await api("create_inventory_movement", {
+        inventory_item_id: item.id,
+        movement_type: "consume",
+        quantity: consumableQty,
+        unit: item.unit || material.unit || "pcs",
+        related_order_id: orderId,
+        comment: orderNumber
+          ? `Consumption on order completion (${orderNumber})`
+          : "Consumption on order completion",
+      });
+    } catch (e) {
+      console.warn("Inventory movement for consumption was not created", e?.message || e);
+    }
+  }
+
+  await loadInventory();
+  return { consumed: consumedCount, skipped: skippedCount };
 }
 
 async function applyInventoryReserveDelta(itemId, delta, context = {}) {
