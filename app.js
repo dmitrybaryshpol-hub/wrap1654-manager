@@ -437,6 +437,8 @@ async function loadDashboard() {
   try {
     const data = await api("dashboard");
     const stats = data.stats || {};
+    const activeOrders = Array.isArray(data.active_orders) ? data.active_orders : [];
+    const lowStock = Array.isArray(data.low_stock) ? data.low_stock : [];
 
     el.innerHTML = `
       <div style="padding:16px;">
@@ -454,8 +456,8 @@ async function loadDashboard() {
         </div>
 
         <h3 style="margin:12px 0;">📦 Активные заказы</h3>
-        ${(data.active_orders || []).length
-          ? data.active_orders.map((o) => `
+        ${activeOrders.length
+          ? activeOrders.map((o) => `
               <div onclick="openOrder('${o.id}')" style="cursor:pointer;">
                 ${card(`
                   <div style="font-weight:700;">${orderLabel(o)}</div>
@@ -468,8 +470,8 @@ async function loadDashboard() {
           : card("Нет активных заказов")}
 
         <h3 style="margin:12px 0;">⚠️ Заканчивается</h3>
-        ${(data.low_stock || []).length
-          ? data.low_stock.map((i) => `
+        ${lowStock.length
+          ? lowStock.map((i) => `
               ${card(`
                 <b>${escapeHtml(i.name || "")}</b><br>
                 Остаток: ${formatMoney(i.quantity || 0)}<br>
@@ -597,12 +599,13 @@ function renderOrderGallery(order) {
 async function openOrder(id) {
   try {
     const res = await api("get_order", { id });
-    const order = res.item;
+    const order = res?.item && typeof res.item === "object" ? res.item : {};
+    const materials = Array.isArray(order.materials) ? order.materials : [];
 
     let materialsHtml = `<div style="font-size:13px; opacity:0.7;">Материалов пока нет</div>`;
 
-    if (order.materials && order.materials.length) {
-      materialsHtml = order.materials.map((m) => `
+    if (materials.length) {
+      materialsHtml = materials.map((m) => `
         <div style="border-bottom:1px solid #1f2937; padding:6px 0;">
           <div><b>${escapeHtml(m.item_name || "Материал")}</b></div>
           <div style="font-size:13px; opacity:0.8;">
@@ -1296,7 +1299,7 @@ async function loadInventory() {
 
   try {
     const res = await api("get_inventory");
-    const items = res.items || [];
+    const items = Array.isArray(res?.items) ? res.items : [];
     const normalizedItems = items.map((item) => ({
       ...item,
       normalized_category: normalizeInventoryCategory(item.category),
@@ -1618,7 +1621,8 @@ async function loadFinance() {
   el.innerHTML = `<div style="padding:16px;">Загрузка...</div>`;
 
   try {
-    const summary = await api("get_finance_summary");
+    const summaryRes = await api("get_finance_summary");
+    const summary = summaryRes && typeof summaryRes === "object" ? summaryRes : {};
     const expensesRes = await api("get_expenses");
     const expenses = expensesRes.items || [];
 
