@@ -596,49 +596,215 @@ function renderOrderGallery(order) {
   `;
 }
 
+function statusVisual(status = "") {
+  const key = String(status || "").toLowerCase();
+  const map = {
+    new: { label: "NEW", bg: "rgba(96,165,250,.15)", color: "#93c5fd", border: "rgba(96,165,250,.35)" },
+    approved: { label: "APPROVED", bg: "rgba(52,211,153,.15)", color: "#6ee7b7", border: "rgba(52,211,153,.35)" },
+    booked: { label: "BOOKED", bg: "rgba(147,197,253,.15)", color: "#bfdbfe", border: "rgba(147,197,253,.35)" },
+    car_received: { label: "CAR RECEIVED", bg: "rgba(34,197,94,.15)", color: "#86efac", border: "rgba(34,197,94,.35)" },
+    in_progress: { label: "IN PROGRESS", bg: "rgba(250,204,21,.12)", color: "#fde68a", border: "rgba(250,204,21,.4)" },
+    paused: { label: "PAUSED", bg: "rgba(251,146,60,.15)", color: "#fdba74", border: "rgba(251,146,60,.35)" },
+    ready: { label: "READY", bg: "rgba(45,212,191,.15)", color: "#5eead4", border: "rgba(45,212,191,.35)" },
+    delivered: { label: "DELIVERED", bg: "rgba(16,185,129,.15)", color: "#6ee7b7", border: "rgba(16,185,129,.35)" },
+    closed: { label: "CLOSED", bg: "rgba(99,102,241,.15)", color: "#c7d2fe", border: "rgba(99,102,241,.35)" },
+    cancelled: { label: "CANCELLED", bg: "rgba(239,68,68,.15)", color: "#fca5a5", border: "rgba(239,68,68,.35)" },
+  };
+
+  return map[key] || {
+    label: String(status || "UNKNOWN").toUpperCase(),
+    bg: "rgba(148,163,184,.15)",
+    color: "#cbd5e1",
+    border: "rgba(148,163,184,.35)",
+  };
+}
+
+function displayDate(value) {
+  if (!value) return "—";
+  const raw = String(value).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return escapeHtml(String(value));
+  const [y, m, d] = raw.split("-");
+  return `${d}.${m}.${y}`;
+}
+
+function collectMediaUrls(order = {}) {
+  const fromList = Array.isArray(order.media_urls) ? order.media_urls : [];
+  const merged = [...fromList];
+  if (order.media_url) merged.push(order.media_url);
+  return Array.from(new Set(
+    merged.map((x) => String(x || "").trim()).filter(Boolean)
+  ));
+}
+
+function parsePayments(order = {}) {
+  const candidates = [
+    order.payments,
+    order.payment_list,
+    order.payment_history,
+    order.transactions,
+  ];
+  const list = candidates.find(Array.isArray) || [];
+  return list
+    .map((row) => (row && typeof row === "object" ? row : null))
+    .filter(Boolean);
+}
+
 async function openOrder(id) {
   try {
     const res = await api("get_order", { id });
     const order = res?.item && typeof res.item === "object" ? res.item : {};
+    const cur = currencySymbol(order.currency || "USD");
     const materials = Array.isArray(order.materials) ? order.materials : [];
+    const parsedServices = parseServicesFromNote(order?.note || "");
+    const services = parsedServices.services || [];
+    const cleanNote = parsedServices.cleanNote || "";
+    const status = statusVisual(order.status || "");
+    const payments = parsePayments(order);
+    const mediaUrls = collectMediaUrls(order);
 
-    let materialsHtml = `<div style="font-size:13px; opacity:0.7;">Материалов пока нет</div>`;
-
-    if (materials.length) {
-      materialsHtml = materials.map((m) => `
-        <div style="border-bottom:1px solid #1f2937; padding:6px 0;">
-          <div><b>${escapeHtml(m.item_name || "Материал")}</b></div>
-          <div style="font-size:13px; opacity:0.8;">
-            Кол-во: ${formatMoney(m.quantity)} ${escapeHtml(m.unit || "")}
-            |
-            Себестоимость: ${formatMoney(m.total_cost || 0)} ${currencySymbol(m.currency || order.currency || "USD")}
-          </div>
-        </div>
-      `).join("");
-    }
+    const sectionCard = (title, body) => `
+      <div style="
+        border:1px solid rgba(148,163,184,.22);
+        border-radius:16px;
+        padding:12px;
+        margin-bottom:10px;
+        background:linear-gradient(180deg, rgba(15,23,42,.82) 0%, rgba(2,6,23,.9) 100%);
+      ">
+        <div style="font-size:12px; font-weight:700; letter-spacing:.08em; color:#94a3b8; margin-bottom:10px;">${title}</div>
+        ${body}
+      </div>
+    `;
 
     openModal(`
-      <h3 style="margin-top:0;">${orderLabel(order)}</h3>
-      <p>Статус: ${escapeHtml(order.status || "")}</p>
-      <p>Клиент: ${escapeHtml(order.client_name || "—")}</p>
-      <p>Авто: ${escapeHtml(order.car_model || "—")}</p>
-      <p>Сумма: ${formatMoney(order.total || 0)} ${currencySymbol(order.currency || "USD")}</p>
-      <p>Материалы: ${formatMoney(order.material_cost || 0)} ${currencySymbol(order.currency || "USD")}</p>
-      <p>Себестоимость: ${formatMoney(order.total_cost || 0)} ${currencySymbol(order.currency || "USD")}</p>
-      <p>Прибыль: ${formatMoney(order.profit || 0)} ${currencySymbol(order.currency || "USD")}</p>
-      <p>Оплачено: ${formatMoney(order.paid || 0)} ${currencySymbol(order.currency || "USD")}</p>
-      <p>Долг: ${formatMoney(order.due || 0)} ${currencySymbol(order.currency || "USD")}</p>
+      <div style="
+        border:1px solid rgba(59,130,246,.28);
+        border-radius:18px;
+        padding:14px;
+        margin-bottom:10px;
+        background:radial-gradient(circle at top right, rgba(37,99,235,.24) 0%, rgba(15,23,42,.94) 42%, rgba(2,6,23,.95) 100%);
+      ">
+        <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+          <div>
+            <div style="font-size:12px; letter-spacing:.08em; color:#94a3b8;">ORDER</div>
+            <div style="font-size:22px; font-weight:800; margin-top:3px;">${orderLabel(order)}</div>
+          </div>
+          <span style="
+            background:${status.bg};
+            color:${status.color};
+            border:1px solid ${status.border};
+            border-radius:999px;
+            padding:6px 10px;
+            font-size:11px;
+            font-weight:800;
+            letter-spacing:.04em;
+            white-space:nowrap;
+          ">${status.label}</span>
+        </div>
 
-      ${renderOrderGallery(order)}
+        <div style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div style="padding:8px; border-radius:12px; background:rgba(15,23,42,.65); border:1px solid rgba(148,163,184,.18);">
+            <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">Клиент</div>
+            <div style="font-size:14px; font-weight:700;">${escapeHtml(order.client_name || "—")}</div>
+          </div>
+          <div style="padding:8px; border-radius:12px; background:rgba(15,23,42,.65); border:1px solid rgba(148,163,184,.18);">
+            <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">Автомобиль</div>
+            <div style="font-size:14px; font-weight:700;">${escapeHtml(order.car_model || "—")}</div>
+          </div>
+          <div style="padding:8px; border-radius:12px; background:rgba(15,23,42,.65); border:1px solid rgba(148,163,184,.18);">
+            <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">Тип</div>
+            <div style="font-size:14px; font-weight:700;">${escapeHtml(order.type || "—")}</div>
+          </div>
+          <div style="padding:8px; border-radius:12px; background:rgba(15,23,42,.65); border:1px solid rgba(148,163,184,.18);">
+            <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">Валюта</div>
+            <div style="font-size:14px; font-weight:700;">${escapeHtml(order.currency || "USD")}</div>
+          </div>
+        </div>
 
-      <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
-  ${btn("+ Оплата", `addPayment('${id}')`)}
-  ${btn("Редактировать", `closeModal(); startEditOrder('${id}')`)}
-  ${btn("Удалить", `handleDeleteOrder('${id}')`, "background:rgba(239,68,68,.15); color:#fecaca; border-color:rgba(239,68,68,.35);")}
-</div>
-      <hr style="border-color:#1f2937;">
-      <h4>Материалы</h4>
-      <div style="max-height:220px; overflow:auto;">${materialsHtml}</div>
+        <div style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+          <div style="padding:8px; border-radius:12px; border:1px solid rgba(148,163,184,.18);">
+            <div style="font-size:11px; color:#94a3b8;">Intake</div>
+            <div style="font-weight:700; font-size:13px;">${displayDate(order.intake_date)}</div>
+          </div>
+          <div style="padding:8px; border-radius:12px; border:1px solid rgba(148,163,184,.18);">
+            <div style="font-size:11px; color:#94a3b8;">Start</div>
+            <div style="font-weight:700; font-size:13px;">${displayDate(order.start_date)}</div>
+          </div>
+          <div style="padding:8px; border-radius:12px; border:1px solid rgba(148,163,184,.18);">
+            <div style="font-size:11px; color:#94a3b8;">End</div>
+            <div style="font-weight:700; font-size:13px;">${displayDate(order.end_date)}</div>
+          </div>
+        </div>
+      </div>
+
+      ${sectionCard("FINANCE", `
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div style="padding:9px; border-radius:12px; border:1px solid rgba(148,163,184,.18);"><div style="font-size:11px; color:#94a3b8;">Total</div><div style="font-size:17px; font-weight:800;">${formatMoney(order.total || 0)} ${cur}</div></div>
+          <div style="padding:9px; border-radius:12px; border:1px solid rgba(148,163,184,.18);"><div style="font-size:11px; color:#94a3b8;">Prepaid</div><div style="font-size:17px; font-weight:800;">${formatMoney(order.prepaid || 0)} ${cur}</div></div>
+          <div style="padding:9px; border-radius:12px; border:1px solid rgba(148,163,184,.18);"><div style="font-size:11px; color:#94a3b8;">Paid</div><div style="font-size:17px; font-weight:800;">${formatMoney(order.paid || 0)} ${cur}</div></div>
+          <div style="padding:9px; border-radius:12px; border:1px solid rgba(239,68,68,.35); background:rgba(239,68,68,.08);"><div style="font-size:11px; color:#fca5a5;">Due</div><div style="font-size:17px; font-weight:800; color:#fecaca;">${formatMoney(order.due || 0)} ${cur}</div></div>
+          <div style="padding:9px; border-radius:12px; border:1px solid rgba(148,163,184,.18);"><div style="font-size:11px; color:#94a3b8;">Total Cost</div><div style="font-size:17px; font-weight:800;">${formatMoney(order.total_cost || 0)} ${cur}</div></div>
+          <div style="padding:9px; border-radius:12px; border:1px solid ${asNumber(order.profit, 0) >= 0 ? "rgba(34,197,94,.35)" : "rgba(239,68,68,.35)"}; background:${asNumber(order.profit, 0) >= 0 ? "rgba(34,197,94,.08)" : "rgba(239,68,68,.08)"};"><div style="font-size:11px; color:${asNumber(order.profit, 0) >= 0 ? "#86efac" : "#fca5a5"};">Profit</div><div style="font-size:17px; font-weight:800; color:${asNumber(order.profit, 0) >= 0 ? "#bbf7d0" : "#fecaca"};">${formatMoney(order.profit || 0)} ${cur}</div></div>
+        </div>
+      `)}
+
+      ${sectionCard("SERVICES", services.length
+        ? services.map((service) => `
+          <div style="padding:9px 10px; border-radius:10px; border:1px solid rgba(148,163,184,.2); margin-bottom:7px; font-size:14px;">
+            ${escapeHtml(service)}
+          </div>
+        `).join("")
+        : `<div style="padding:10px; border-radius:10px; border:1px dashed rgba(148,163,184,.35); color:#94a3b8; font-size:13px;">Услуги пока не добавлены</div>`
+      )}
+
+      ${sectionCard("MATERIALS", materials.length
+        ? materials.map((m) => `
+          <div style="padding:9px 10px; border-radius:10px; border:1px solid rgba(148,163,184,.2); margin-bottom:7px;">
+            <div style="font-weight:700; font-size:14px; margin-bottom:3px;">${escapeHtml(m.item_name || "Материал")}</div>
+            <div style="font-size:12px; color:#94a3b8;">
+              ${formatMoney(m.quantity || 0)} ${escapeHtml(m.unit || "")} · ${formatMoney(m.total_cost || 0)} ${currencySymbol(m.currency || order.currency || "USD")}
+            </div>
+          </div>
+        `).join("")
+        : `<div style="padding:10px; border-radius:10px; border:1px dashed rgba(148,163,184,.35); color:#94a3b8; font-size:13px;">Материалы не добавлены</div>`
+      )}
+
+      ${sectionCard("PAYMENTS", payments.length
+        ? payments.map((p) => `
+          <div style="padding:9px 10px; border-radius:10px; border:1px solid rgba(148,163,184,.2); margin-bottom:7px; display:flex; justify-content:space-between; gap:8px;">
+            <div>
+              <div style="font-size:14px; font-weight:700;">${formatMoney(p.amount || 0)} ${currencySymbol(p.currency || order.currency || "USD")}</div>
+              <div style="font-size:12px; color:#94a3b8;">${displayDate(p.created_at || p.date || p.paid_at || "")}</div>
+            </div>
+            <div style="font-size:12px; color:#94a3b8; text-align:right;">${escapeHtml(p.method || p.type || "")}</div>
+          </div>
+        `).join("")
+        : `<div style="padding:10px; border-radius:10px; border:1px dashed rgba(148,163,184,.35); color:#94a3b8; font-size:13px;">Платежей пока нет</div>`
+      )}
+
+      ${sectionCard("MEDIA", mediaUrls.length
+        ? `<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            ${mediaUrls.map((url) => {
+              const safe = escapeHtml(url);
+              const isVideo = /\.(mp4|webm|mov|m4v)$/i.test(url);
+              if (isVideo) {
+                return `<video src="${safe}" controls style="width:100%; border-radius:12px; border:1px solid rgba(148,163,184,.2);"></video>`;
+              }
+              return `<img src="${safe}" style="width:100%; border-radius:12px; border:1px solid rgba(148,163,184,.2);">`;
+            }).join("")}
+          </div>`
+        : `<div style="padding:10px; border-radius:10px; border:1px dashed rgba(148,163,184,.35); color:#94a3b8; font-size:13px;">Медиафайлы отсутствуют</div>`
+      )}
+
+      ${sectionCard("COMMENT / NOTES", cleanNote
+        ? `<div style="font-size:14px; line-height:1.45; white-space:pre-wrap;">${escapeHtml(cleanNote)}</div>`
+        : `<div style="color:#94a3b8; font-size:13px;">Комментарий не добавлен</div>`
+      )}
+
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
+        ${btn("+ Оплата", `addPayment('${id}')`, "background:#1d4ed8; border-color:#3b82f6;")}
+        ${btn("Редактировать", `closeModal(); startEditOrder('${id}')`)}
+        ${btn("Удалить", `handleDeleteOrder('${id}')`, "background:rgba(239,68,68,.15); color:#fecaca; border-color:rgba(239,68,68,.35);")}
+      </div>
     `);
   } catch (e) {
     console.error(e);
