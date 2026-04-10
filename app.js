@@ -1500,7 +1500,7 @@ async function deleteInventoryItem(id) {
   if (!ok) return;
 
   try {
-    await api("delete_inventory", { id });
+    await api("delete_inventory_item", { id });
     await loadInventory();
     loadDashboard();
     safeAlert("Позиция удалена");
