@@ -437,45 +437,175 @@ async function loadDashboard() {
   try {
     const data = await api("dashboard");
     const stats = data.stats || {};
-    const activeOrders = Array.isArray(data.active_orders) ? data.active_orders : [];
+    const dashboardActiveOrders = Array.isArray(data.active_orders) ? data.active_orders : [];
+    const activeOrders = dashboardActiveOrders.filter((order) => isActiveOrderStatus(order?.status));
     const lowStock = Array.isArray(data.low_stock) ? data.low_stock : [];
+    const totalClients = asNumber(
+      data.clients_count ?? stats.clients_count ?? stats.total_clients,
+      0
+    );
+    const totalInventory = asNumber(
+      data.inventory_count ?? stats.inventory_count ?? stats.total_inventory,
+      0
+    );
+    const lowStockCount = asNumber(
+      stats.low_stock_count ?? lowStock.length,
+      lowStock.length
+    );
+    const activeCount = asNumber(
+      stats.active_count ?? stats.total_in_work ?? activeOrders.length,
+      activeOrders.length
+    );
+    const now = new Date();
+
+    const attentionItems = activeOrders.reduce((acc, order) => {
+      const orderId = String(order?.id || "");
+      const status = String(order?.status || "").toLowerCase();
+      const createdAt = parseDateValue(getOrderDate(order, ["created_at", "createdAt"]));
+      const startDate = parseDateValue(getOrderDate(order, ["start_date", "startDate", "intake_date", "received_at"]));
+      const endDateRaw = getOrderDate(order, ["end_date", "endDate", "due_date", "planned_end_date"]);
+      const endDate = parseDateValue(endDateRaw);
+      const updatedAt = parseDateValue(getOrderDate(order, ["updated_at", "updatedAt"]));
+      const ageDays = daysBetween(createdAt, now);
+      const inProgressDays = daysBetween(startDate || updatedAt || createdAt, now);
+
+      if (status === "in_progress" && !endDateRaw) {
+        acc.push({
+          level: "high",
+          text: `Заказ ${orderLabel(order)} в работе без даты завершения`,
+          orderId,
+        });
+      }
+
+      if (status === "in_progress" && inProgressDays !== null && inProgressDays >= 7) {
+        acc.push({
+          level: "medium",
+          text: `Заказ ${orderLabel(order)} в работе ${inProgressDays} дн.`,
+          orderId,
+        });
+      }
+
+      if (status === "new" && ageDays !== null && ageDays >= 2) {
+        acc.push({
+          level: "medium",
+          text: `Новый заказ ${orderLabel(order)} ожидает продвижения ${ageDays} дн.`,
+          orderId,
+        });
+      }
+
+      if (endDate && endDate < now && status !== "ready") {
+        acc.push({
+          level: "high",
+          text: `Заказ ${orderLabel(order)} просрочен по дате ${displayDate(endDateRaw)}`,
+          orderId,
+        });
+      }
+
+      return acc;
+    }, []);
+
+    const quickActions = [
+      { label: "➕ Новый заказ", action: "openCreateOrder()" },
+      { label: "📦 Открыть заказы", action: "showTab('orders')" },
+      { label: "🧰 Открыть склад", action: "showTab('inventory')" },
+      { label: "👤 Открыть клиентов", action: "showTab('clients')" },
+    ];
 
     el.innerHTML = `
       <div style="padding:16px;">
-        ${card(`
-          <div style="font-weight:700; margin-bottom:8px;">📊 Оперативная сводка</div>
-          <div>Активных заказов: ${stats.active_count || 0}</div>
-          <div>В работе: ${stats.total_in_work || 0}</div>
-          <div>Клиентов: ${data.clients_count || 0}</div>
-          <div>Товаров: ${data.inventory_count || 0}</div>
-        `)}
-
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
-          ${btn("+ Заказ", "openCreateOrder()")}
-          ${btn("+ Клиент", "openCreateClient()")}
+        <div style="
+          display:grid;
+          grid-template-columns:repeat(2,minmax(0,1fr));
+          gap:8px;
+          margin-bottom:12px;
+        ">
+          ${card(`
+            <div style="font-size:12px; color:#9ca3af;">Активные заказы</div>
+            <div style="font-size:24px; font-weight:800; margin-top:4px;">${activeCount}</div>
+          `, "margin-bottom:0; background:linear-gradient(180deg,#111827,#0f172a);")}
+          ${card(`
+            <div style="font-size:12px; color:#9ca3af;">Клиенты</div>
+            <div style="font-size:24px; font-weight:800; margin-top:4px;">${totalClients}</div>
+          `, "margin-bottom:0; background:linear-gradient(180deg,#111827,#0f172a);")}
+          ${card(`
+            <div style="font-size:12px; color:#9ca3af;">Позиции на складе</div>
+            <div style="font-size:24px; font-weight:800; margin-top:4px;">${totalInventory}</div>
+          `, "margin-bottom:0; background:linear-gradient(180deg,#111827,#0f172a);")}
+          ${card(`
+            <div style="font-size:12px; color:#9ca3af;">Low stock</div>
+            <div style="font-size:24px; font-weight:800; margin-top:4px; color:#fbbf24;">${lowStockCount}</div>
+          `, "margin-bottom:0; background:linear-gradient(180deg,#111827,#0f172a);")}
         </div>
 
-        <h3 style="margin:12px 0;">📦 Активные заказы</h3>
+        <h3 style="margin:12px 0 8px 0;">🚀 Быстрые действия</h3>
+        ${card(`
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            ${quickActions.map((item) => btn(item.label, item.action, "width:100%; background:#0f172a;")).join("")}
+          </div>
+        `)}
+
+        <h3 style="margin:12px 0;">🛠 Сейчас в работе</h3>
         ${activeOrders.length
           ? activeOrders.map((o) => `
               <div onclick="openOrder('${o.id}')" style="cursor:pointer;">
                 ${card(`
-                  <div style="font-weight:700;">${orderLabel(o)}</div>
-                  <div style="font-size:14px; opacity:0.8;">Статус: ${escapeHtml(o.status || "")}</div>
-                  <div style="font-size:14px; opacity:0.8;">Клиент: ${escapeHtml(o.client_name || "—")}</div>
-                  <div style="font-size:14px; opacity:0.8;">Авто: ${escapeHtml(o.car_model || "—")}</div>
+                  <div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;">
+                    <div style="font-weight:700;">${escapeHtml(o.client_name || "Клиент не указан")}</div>
+                    <span style="
+                      padding:4px 8px;
+                      border-radius:999px;
+                      font-size:11px;
+                      background:${statusVisual(o.status || "").bg};
+                      color:${statusVisual(o.status || "").color};
+                      border:1px solid ${statusVisual(o.status || "").border};
+                    ">${statusVisual(o.status || "").label}</span>
+                  </div>
+                  <div style="font-size:13px; opacity:0.86; margin-top:6px;">${escapeHtml(o.car_model || "Авто не указано")}</div>
+                  <div style="font-size:13px; color:#9ca3af; margin-top:6px;">
+                    Тип: ${escapeHtml(o.order_type || o.type || "—")}
+                  </div>
+                  <div style="font-size:12px; color:#9ca3af; margin-top:6px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
+                    <div>Приём: ${displayDate(getOrderDate(o, ["intake_date", "received_at", "created_at"]))}</div>
+                    <div>Старт: ${displayDate(getOrderDate(o, ["start_date", "started_at"]))}</div>
+                    <div>Финиш: ${displayDate(getOrderDate(o, ["end_date", "due_date", "planned_end_date"]))}</div>
+                  </div>
+                  <div style="margin-top:10px; font-size:12px; color:#93c5fd;">Открыть заказ →</div>
                 `)}
               </div>
             `).join("")
-          : card("Нет активных заказов")}
+          : card("Нет заказов в работе")}
 
-        <h3 style="margin:12px 0;">⚠️ Заканчивается</h3>
+        <h3 style="margin:12px 0;">⚠️ Требует внимания</h3>
+        ${attentionItems.length
+          ? attentionItems.slice(0, 8).map((item) => `
+              <div onclick="${item.orderId ? `openOrder('${item.orderId}')` : ""}" style="${item.orderId ? "cursor:pointer;" : ""}">
+                ${card(`
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="
+                      width:8px; height:8px; border-radius:999px; display:inline-block;
+                      background:${item.level === "high" ? "#f87171" : "#fbbf24"};
+                    "></span>
+                    <span style="font-size:13px;">${item.text}</span>
+                  </div>
+                `)}
+              </div>
+            `).join("")
+          : card("Критичных операционных рисков не найдено")}
+
+        <h3 style="margin:12px 0;">📉 Low stock</h3>
         ${lowStock.length
           ? lowStock.map((i) => `
               ${card(`
-                <b>${escapeHtml(i.name || "")}</b><br>
-                Остаток: ${formatMoney(i.quantity || 0)}<br>
-                Мин. остаток: ${formatMoney(i.min_quantity || 0)}
+                <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
+                  <div>
+                    <div style="font-weight:700;">${escapeHtml(i.name || "")}</div>
+                    <div style="font-size:12px; color:#9ca3af; margin-top:3px;">${escapeHtml(i.category || "Без категории")}</div>
+                  </div>
+                  <div style="text-align:right; font-size:13px;">
+                    <div>Текущий: ${formatMoney(i.quantity || 0)} ${escapeHtml(i.unit || "")}</div>
+                    <div style="color:#fca5a5;">Мин: ${formatMoney(i.min_quantity || 0)} ${escapeHtml(i.unit || "")}</div>
+                  </div>
+                </div>
               `)}
             `).join("")
           : card("Склад в норме")}
@@ -625,6 +755,33 @@ function displayDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return escapeHtml(String(value));
   const [y, m, d] = raw.split("-");
   return `${d}.${m}.${y}`;
+}
+
+function parseDateValue(value) {
+  if (!value) return null;
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return null;
+  return dt;
+}
+
+function daysBetween(from, to = new Date()) {
+  if (!from || !to) return null;
+  const diff = to.getTime() - from.getTime();
+  if (!Number.isFinite(diff)) return null;
+  return Math.floor(diff / (1000 * 60 * 60 * 24));
+}
+
+function isActiveOrderStatus(status = "") {
+  const key = String(status || "").trim().toLowerCase();
+  const closedStatuses = new Set(["closed", "cancelled", "delivered"]);
+  return !closedStatuses.has(key);
+}
+
+function getOrderDate(order = {}, keys = []) {
+  for (const key of keys) {
+    if (order[key]) return order[key];
+  }
+  return null;
 }
 
 function collectMediaUrls(order = {}) {
