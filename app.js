@@ -909,7 +909,16 @@ function startEditOrder(orderId) {
   }
 
   state.editingOrderId = order.id;
-  openCreateOrder(order);
+  (async () => {
+    try {
+      const res = await api("get_order", { id: order.id });
+      const fullOrder = res?.item ? { ...order, ...res.item } : order;
+      openCreateOrder(fullOrder);
+    } catch (e) {
+      console.warn("Could not load full order for edit, fallback to list item:", e?.message || e);
+      openCreateOrder(order);
+    }
+  })();
 }
 
 function setPaidPreset(percent) {
@@ -1099,7 +1108,14 @@ async function uploadOrderMediaIfNeeded() {
       file_base64: base64,
     });
 
-    const url = res.public_url || res.url || null;
+    const url =
+      res?.public_url ||
+      res?.url ||
+      res?.item?.public_url ||
+      res?.item?.url ||
+      res?.data?.public_url ||
+      res?.data?.url ||
+      null;
     if (url) uploadedUrls.push(url);
   }
 
@@ -1240,8 +1256,13 @@ async function createOrder() {
   }
 }
 async function addPayment(order_id) {
-  const amount = prompt("Сумма");
-  if (!amount) return;
+  const raw = prompt("Сумма");
+  if (raw == null) return;
+  const amount = Number(String(raw).trim().replace(",", "."));
+  if (!Number.isFinite(amount) || amount <= 0) {
+    safeAlert("Укажи корректную сумму оплаты");
+    return;
+  }
 
   try {
     const res = await api("get_order", { id: order_id });
@@ -1249,7 +1270,7 @@ async function addPayment(order_id) {
 
     await api("add_payment", {
       order_id,
-      amount: Number(amount),
+      amount,
       currency: order.currency || "USD",
     });
 
@@ -1404,7 +1425,6 @@ async function createInventoryItem(type = "product") {
   const category = allowedCategories.includes(selectedCategory) ? selectedCategory : fallbackCategory;
 
   const payload = {
-    item_type: isFilm ? "film" : "product",
     category,
     brand: document.getElementById("inv_brand")?.value.trim(),
     name: document.getElementById("inv_name")?.value.trim(),
@@ -1453,7 +1473,6 @@ async function updateInventoryItem(id, type = "product") {
 
   const payload = {
     id,
-    item_type: isFilm ? "film" : "product",
     category,
     brand: document.getElementById("inv_brand")?.value.trim(),
     name: document.getElementById("inv_name")?.value.trim(),
