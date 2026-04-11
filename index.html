@@ -144,8 +144,61 @@
   </style>
 </head>
 
-<body>
-  <div class="app">
+<body class="app-loading">
+  <style>
+    body.app-loading {
+      overflow: hidden;
+    }
+
+    body.app-loading .app {
+      display: none !important;
+    }
+
+    .startup-splash {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+      z-index: 9999;
+      background:
+        radial-gradient(120% 80% at 10% 0%, rgba(37,99,235,.20) 0%, rgba(2,6,23,0) 55%),
+        linear-gradient(180deg, #020617 0%, #020b1d 100%);
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body.app-loading .startup-splash {
+      display: flex;
+    }
+
+    .startup-splash__box {
+      max-width: 320px;
+    }
+
+    .startup-splash__title {
+      margin: 0 0 8px;
+      font-size: 24px;
+      font-weight: 800;
+    }
+
+    .startup-splash__sub {
+      margin: 0;
+      color: #94a3b8;
+      font-size: 14px;
+    }
+  </style>
+
+  <div class="startup-splash" id="startupSplash" aria-live="polite">
+    <div class="startup-splash__box">
+      <h1 class="startup-splash__title">Wrap 1654 Manager</h1>
+      <p class="startup-splash__sub">Запуск приложения…</p>
+    </div>
+  </div>
+
+  <div class="app" aria-hidden="true">
 
     <div class="topbar">
       <h1 class="topbar-title">Wrap 1654 Manager</h1>
