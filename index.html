@@ -144,13 +144,13 @@
   </style>
 </head>
 
-<body class="app-loading">
+<body class="app-booting">
   <style>
-    body.app-loading {
+    body.app-booting {
       overflow: hidden;
     }
 
-    body.app-loading .app {
+    body.app-booting #appRoot {
       display: none !important;
     }
 
@@ -170,7 +170,8 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
-    body.app-loading .startup-splash {
+    body.app-booting .startup-splash,
+    body.startup-failed .startup-splash {
       display: flex;
     }
 
@@ -189,83 +190,20 @@
       color: #94a3b8;
       font-size: 14px;
     }
+
+    body.startup-failed .startup-splash__sub {
+      color: #fca5a5;
+    }
   </style>
 
   <div class="startup-splash" id="startupSplash" aria-live="polite">
     <div class="startup-splash__box">
       <h1 class="startup-splash__title">Wrap 1654 Manager</h1>
-      <p class="startup-splash__sub">Запуск приложения…</p>
+      <p class="startup-splash__sub" id="startupSplashText">Запуск приложения…</p>
     </div>
   </div>
 
-  <div class="app" aria-hidden="true">
-
-    <div class="topbar">
-      <h1 class="topbar-title">Wrap 1654 Manager</h1>
-      <div class="topbar-sub">Управление заказами, клиентами и складом</div>
-      <div id="userInfo">👋 Загрузка...</div>
-    </div>
-
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="dashboard">Главная</button>
-      <button class="tab-btn" data-tab="orders">Заказы</button>
-      <button class="tab-btn" data-tab="clients">Клиенты</button>
-      <button class="tab-btn" data-tab="inventory">Склад</button>
-    </div>
-
-    <section class="tab-content" data-tab-content="dashboard">
-      <div class="card">
-        <div class="card-title">Статистика</div>
-        <div id="dashboardStats">Загрузка...</div>
-      </div>
-    </section>
-
-    <section class="tab-content" data-tab-content="orders">
-      <div class="card">
-        <div class="card-title">Новый заказ</div>
-
-<div class="form-group">
-  <label>Клиент</label>
-  <div class="input-row">
-    <select id="orderClientId"></select>
-    <button type="button" class="secondary-btn" id="openQuickClientBtn">+ Клиент</button>
-  </div>
-</div>        <input id="orderCarModel" placeholder="Авто">
-        <textarea id="orderServices" placeholder="Услуги"></textarea>
-
-        <input id="orderAmount" type="number" placeholder="Сумма">
-
-        <select id="orderCurrency">
-          <option value="UAH">UAH</option>
-          <option value="USD">USD</option>
-        </select>
-
-        <button class="primary-btn">Создать заказ</button>
-      </div>
-      
-<button class="danger-btn" onclick="handleDeleteOrder('${order.id}')">Удалить</button>
-      
-      <div class="card">
-        <div class="card-title">Заказы</div>
-        <div id="ordersList" class="list"></div>
-      </div>
-    </section>
-
-    <section class="tab-content" data-tab-content="clients">
-      <div class="card">
-        <div class="card-title">Клиенты</div>
-        <div id="clientsList"></div>
-      </div>
-    </section>
-
-    <section class="tab-content" data-tab-content="inventory">
-      <div class="card">
-        <div class="card-title">Склад</div>
-        <div id="inventoryList"></div>
-      </div>
-    </section>
-
-  </div>
+  <div id="appRoot" aria-hidden="true"></div>
 
   <script src="./app.js"></script>
 </body>
