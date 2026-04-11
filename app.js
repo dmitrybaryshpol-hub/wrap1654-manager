@@ -2792,22 +2792,45 @@ async function addMaterialToOrder(order_id) {
   }
 
   const purchasePrice = asNumber(item.purchase_price ?? item.retail_price, 0);
-  const payload = {
+  const basePayload = {
     order_id,
     inventory_item_id: item.id,
+    item_id: item.id,
     quantity,
+    qty: quantity,
     unit: unit || item.unit || "pcs",
     item_name: item.name || null,
+    material_name: item.name || null,
     purchase_price: purchasePrice,
+    unit_cost: purchasePrice,
     total_cost: quantity * purchasePrice,
+    total_price: quantity * purchasePrice,
     currency: item.currency || "USD",
   };
 
-  const actions = ["add_order_material", "create_order_material", "attach_order_material"];
+  const attempts = [
+    { action: "add_material_to_order", payload: basePayload },
+    { action: "add_order_material", payload: basePayload },
+    { action: "create_order_material", payload: basePayload },
+    { action: "attach_order_material", payload: basePayload },
+    {
+      action: "create_order_material",
+      payload: {
+        order_id,
+        item_id: item.id,
+        material_name: item.name || null,
+        qty: quantity,
+        unit: unit || item.unit || "pcs",
+        unit_cost: purchasePrice,
+        total_price: quantity * purchasePrice,
+        currency: item.currency || "USD",
+      },
+    },
+  ];
   let lastError = null;
-  for (const action of actions) {
+  for (const attempt of attempts) {
     try {
-      await api(action, payload);
+      await api(attempt.action, attempt.payload);
       await applyInventoryReserveDelta(item.id, quantity, {
         order_id,
         reason: "add_material",
@@ -2820,7 +2843,7 @@ async function addMaterialToOrder(order_id) {
       return;
     } catch (e) {
       lastError = e;
-      console.warn(`Material action failed: ${action}`, e?.message || e);
+      console.warn(`Material action failed: ${attempt.action}`, e?.message || e);
     }
   }
 
