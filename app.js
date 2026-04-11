@@ -24,6 +24,34 @@ const state = {
   editingOrderId: null,
   orderServices: [],
 };
+
+function getAppRoot() {
+  return document.getElementById("appRoot");
+}
+
+function setStartupSplash(message, isError = false) {
+  const splashText = document.getElementById("startupSplashText");
+  if (splashText) splashText.textContent = String(message || "");
+  document.body.classList.toggle("startup-failed", Boolean(isError));
+}
+
+function keepAppHidden() {
+  const appRoot = getAppRoot();
+  if (appRoot) appRoot.setAttribute("aria-hidden", "true");
+  document.body.classList.add("app-booting");
+}
+
+function revealApp() {
+  const appRoot = getAppRoot();
+  if (appRoot) appRoot.setAttribute("aria-hidden", "false");
+  document.body.classList.remove("startup-failed");
+  document.body.classList.remove("app-booting");
+}
+
+function afterNextPaint() {
+  return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
 function escapeHtml(str = "") {
   return String(str)
     .replaceAll("&", "&amp;")
@@ -93,7 +121,13 @@ function safeConfirm(text) {
 }
 
 function renderBlockedScreen(title, text = "Открой приложение внутри Telegram") {
-  document.body.innerHTML = `
+  keepAppHidden();
+  setStartupSplash(text, true);
+
+  const appRoot = getAppRoot();
+  if (!appRoot) return;
+
+  appRoot.innerHTML = `
     <div style="
       min-height:100vh;
       display:flex;
@@ -370,7 +404,10 @@ function bindServicesEditor(initialServices = []) {
 }
 
 function renderLayout() {
-  document.body.innerHTML = `
+  const appRoot = getAppRoot();
+  if (!appRoot) return;
+
+  appRoot.innerHTML = `
     <style>
       :root{
         --app-bg:#060913;
@@ -641,6 +678,9 @@ function renderLayout() {
 }
 
 async function initApp() {
+  keepAppHidden();
+  setStartupSplash("Запуск приложения…");
+
   try {
     if (!tg || !tg.initData) {
       renderBlockedScreen("Доступ закрыт");
@@ -652,15 +692,21 @@ async function initApp() {
     tg.setHeaderColor("#0f172a");
     tg.setBackgroundColor("#0b1120");
 
+    setStartupSplash("Проверка доступа…");
     const auth = await api("auth");
     if (!auth?.user) {
       throw new Error("Unauthorized");
     }
 
     state.user = auth.user;
+
+    setStartupSplash("Подготовка интерфейса…");
     await loadClientsToState();
     renderLayout();
     showTab("dashboard");
+
+    await afterNextPaint();
+    revealApp();
   } catch (e) {
     console.error("INIT ERROR:", e);
     renderBlockedScreen(
