@@ -2808,24 +2808,45 @@ async function addMaterialToOrder(order_id) {
     currency: item.currency || "USD",
   };
 
+  const compactPayload = {
+    order_id,
+    item_id: item.id,
+    inventory_item_id: item.id,
+    material_name: item.name || null,
+    qty: quantity,
+    quantity,
+    unit: unit || item.unit || "pcs",
+    unit_cost: purchasePrice,
+    purchase_price: purchasePrice,
+    total_price: quantity * purchasePrice,
+    total_cost: quantity * purchasePrice,
+    currency: item.currency || "USD",
+  };
+
+  const nestedPayload = {
+    order_id,
+    material: compactPayload,
+    order_material: compactPayload,
+    payload: compactPayload,
+  };
+
   const attempts = [
     { action: "add_material_to_order", payload: basePayload },
     { action: "add_order_material", payload: basePayload },
     { action: "create_order_material", payload: basePayload },
     { action: "attach_order_material", payload: basePayload },
-    {
-      action: "create_order_material",
-      payload: {
-        order_id,
-        item_id: item.id,
-        material_name: item.name || null,
-        qty: quantity,
-        unit: unit || item.unit || "pcs",
-        unit_cost: purchasePrice,
-        total_price: quantity * purchasePrice,
-        currency: item.currency || "USD",
-      },
-    },
+    { action: "add_material", payload: compactPayload },
+    { action: "create_material", payload: compactPayload },
+    { action: "add_order_item", payload: compactPayload },
+    { action: "create_order_item", payload: compactPayload },
+    { action: "insert_order_material", payload: compactPayload },
+    { action: "upsert_order_material", payload: compactPayload },
+    { action: "add_material_to_order", payload: compactPayload },
+    { action: "add_order_material", payload: compactPayload },
+    { action: "create_order_material", payload: compactPayload },
+    { action: "attach_order_material", payload: compactPayload },
+    { action: "add_order_material", payload: nestedPayload },
+    { action: "create_order_material", payload: nestedPayload },
   ];
   let lastError = null;
   for (const attempt of attempts) {
