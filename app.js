@@ -2838,66 +2838,28 @@ async function addMaterialToOrder(order_id) {
   }
 
   const purchasePrice = asNumber(item.purchase_price ?? item.retail_price, 0);
-  const basePayload = {
+  const payload = {
     order_id,
+    material_id: item.id,
+    inventory_id: item.id,
     inventory_item_id: item.id,
     item_id: item.id,
-    quantity,
     qty: quantity,
+    quantity,
     unit: unit || item.unit || "pcs",
-    item_name: item.name || null,
     material_name: item.name || null,
     purchase_price: purchasePrice,
     unit_cost: purchasePrice,
     total_cost: quantity * purchasePrice,
-    total_price: quantity * purchasePrice,
     currency: item.currency || "USD",
   };
 
-  const compactPayload = {
-    order_id,
-    item_id: item.id,
-    inventory_item_id: item.id,
-    material_name: item.name || null,
-    qty: quantity,
-    quantity,
-    unit: unit || item.unit || "pcs",
-    unit_cost: purchasePrice,
-    purchase_price: purchasePrice,
-    total_price: quantity * purchasePrice,
-    total_cost: quantity * purchasePrice,
-    currency: item.currency || "USD",
-  };
-
-  const nestedPayload = {
-    order_id,
-    material: compactPayload,
-    order_material: compactPayload,
-    payload: compactPayload,
-  };
-
-  const attempts = [
-    { action: "add_material_to_order", payload: basePayload },
-    { action: "add_order_material", payload: basePayload },
-    { action: "create_order_material", payload: basePayload },
-    { action: "attach_order_material", payload: basePayload },
-    { action: "add_material", payload: compactPayload },
-    { action: "create_material", payload: compactPayload },
-    { action: "add_order_item", payload: compactPayload },
-    { action: "create_order_item", payload: compactPayload },
-    { action: "insert_order_material", payload: compactPayload },
-    { action: "upsert_order_material", payload: compactPayload },
-    { action: "add_material_to_order", payload: compactPayload },
-    { action: "add_order_material", payload: compactPayload },
-    { action: "create_order_material", payload: compactPayload },
-    { action: "attach_order_material", payload: compactPayload },
-    { action: "add_order_material", payload: nestedPayload },
-    { action: "create_order_material", payload: nestedPayload },
-  ];
+  const attempts = ["add_order_material", "create_order_material"];
   let lastError = null;
-  for (const attempt of attempts) {
+
+  for (const action of attempts) {
     try {
-      await api(attempt.action, attempt.payload);
+      await api(action, payload);
       await applyInventoryReserveDelta(item.id, quantity, {
         order_id,
         reason: "add_material",
@@ -2910,11 +2872,14 @@ async function addMaterialToOrder(order_id) {
       return;
     } catch (e) {
       lastError = e;
-      console.warn(`Material action failed: ${attempt.action}`, e?.message || e);
+      const message = String(e?.message || "").toLowerCase();
+      const isUnknownAction = message.includes("unknown action");
+      console.warn(`Material action failed: ${action}`, e?.message || e);
+      if (!isUnknownAction) break;
     }
   }
 
-  safeAlert(lastError?.message || "На бэкенде нет поддержки добавления материалов к заказу");
+  safeAlert(lastError?.message || "Не удалось добавить материал к заказу");
 }
 
 function findInventoryById(itemId) {
