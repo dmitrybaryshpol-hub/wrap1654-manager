@@ -781,7 +781,7 @@ async function loadDashboard() {
             <div class="kpi-value" style="color:#fde68a;">${buckets.unplanned.length}</div>
           </div>
           <div class="kpi-tile">
-            <div class="kpi-label">Low stock</div>
+            <div class="kpi-label">Низкий остаток</div>
             <div class="kpi-value" style="color:#fbbf24;">${lowStockCount}</div>
           </div>
         </div>
@@ -877,7 +877,7 @@ async function loadDashboard() {
           </div>
         `, "margin-bottom:10px; background:linear-gradient(180deg,#19130a,#120f08); border:1px solid rgba(250,204,21,.35);")}
 
-        <h3 style="margin:12px 0;">📉 Low stock</h3>
+        <h3 style="margin:12px 0;">📉 Низкий остаток</h3>
         ${lowStock.length
           ? lowStock.slice(0, 6).map((i) => `
               ${card(`
@@ -898,7 +898,7 @@ async function loadDashboard() {
     `;
   } catch (e) {
     console.error(e);
-    el.innerHTML = `<div style="padding:16px;">Ошибка загрузки Dashboard</div>`;
+    el.innerHTML = `<div style="padding:16px;">Ошибка загрузки дашборда</div>`;
   }
 }
 
@@ -1582,7 +1582,7 @@ function getInventoryStockState(item = {}) {
   if (available <= 0) {
     return {
       key: "out",
-      label: "Out of stock",
+      label: "Нет в наличии",
       tone: "rgba(239,68,68,.25)",
       border: "#dc2626",
       color: "#fca5a5",
@@ -1592,7 +1592,7 @@ function getInventoryStockState(item = {}) {
   if (minQuantity > 0 && available <= minQuantity * 0.5) {
     return {
       key: "critical",
-      label: "Critical",
+      label: "Критично",
       tone: "rgba(239,68,68,.2)",
       border: "#b91c1c",
       color: "#fca5a5",
@@ -1602,7 +1602,7 @@ function getInventoryStockState(item = {}) {
   if (minQuantity > 0 && available <= minQuantity) {
     return {
       key: "low",
-      label: "Low",
+      label: "Низкий",
       tone: "rgba(245,158,11,.22)",
       border: "#d97706",
       color: "#fcd34d",
@@ -1611,7 +1611,7 @@ function getInventoryStockState(item = {}) {
 
   return {
     key: "normal",
-    label: "Normal",
+    label: "Норма",
     tone: "rgba(16,185,129,.2)",
     border: "#047857",
     color: "#6ee7b7",
@@ -1629,23 +1629,23 @@ function inventoryMovementDateValue(movement = {}) {
 
 function normalizeMovementTypeLabel(value = "") {
   const raw = String(value || "").trim();
-  if (!raw) return "Movement";
+  if (!raw) return "Движение";
   const key = raw.toLowerCase();
   const map = {
-    reserve: "Reserve",
-    reserved: "Reserve",
-    unreserve: "Unreserve",
-    release: "Release",
-    in: "Stock in",
-    intake: "Stock in",
-    receipt: "Stock in",
-    out: "Stock out",
-    расход: "Stock out",
-    writeoff: "Write-off",
-    correction: "Correction",
-    adjustment: "Adjustment",
-    usage: "Used in order",
-    consume: "Used in order",
+    reserve: "Резерв",
+    reserved: "Резерв",
+    unreserve: "Снять резерв",
+    release: "Снятие резерва",
+    in: "Приход",
+    intake: "Приход",
+    receipt: "Приход",
+    out: "Расход",
+    расход: "Расход",
+    writeoff: "Списание",
+    correction: "Коррекция",
+    adjustment: "Корректировка",
+    usage: "Использовано в заказе",
+    consume: "Использовано в заказе",
   };
   if (map[key]) return map[key];
   return raw.charAt(0).toUpperCase() + raw.slice(1);
@@ -1882,32 +1882,32 @@ async function openOrder(id) {
 
         <div style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
           <div style="padding:8px; border-radius:12px; border:1px solid rgba(148,163,184,.18);">
-            <div style="font-size:11px; color:#94a3b8;">Intake</div>
+            <div style="font-size:11px; color:#94a3b8;">Приём</div>
             <div style="font-weight:700; font-size:13px;">${displayDate(order.intake_date)}</div>
           </div>
           <div style="padding:8px; border-radius:12px; border:1px solid rgba(148,163,184,.18);">
-            <div style="font-size:11px; color:#94a3b8;">Start</div>
+            <div style="font-size:11px; color:#94a3b8;">Старт</div>
             <div style="font-weight:700; font-size:13px;">${displayDate(order.start_date)}</div>
           </div>
           <div style="padding:8px; border-radius:12px; border:1px solid rgba(148,163,184,.18);">
-            <div style="font-size:11px; color:#94a3b8;">End</div>
+            <div style="font-size:11px; color:#94a3b8;">Финиш</div>
             <div style="font-weight:700; font-size:13px;">${displayDate(order.end_date)}</div>
           </div>
         </div>
       </div>
 
-      ${sectionCard("FINANCE", `
+      ${sectionCard("ФИНАНСЫ", `
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-          <div style="padding:9px; border-radius:12px; border:1px solid rgba(148,163,184,.18);"><div style="font-size:11px; color:#94a3b8;">Total</div><div style="font-size:17px; font-weight:800;">${formatMoney(order.total || 0)} ${cur}</div></div>
-          <div style="padding:9px; border-radius:12px; border:1px solid rgba(148,163,184,.18);"><div style="font-size:11px; color:#94a3b8;">Prepaid</div><div style="font-size:17px; font-weight:800;">${formatMoney(order.prepaid || 0)} ${cur}</div></div>
-          <div style="padding:9px; border-radius:12px; border:1px solid rgba(148,163,184,.18);"><div style="font-size:11px; color:#94a3b8;">Paid</div><div style="font-size:17px; font-weight:800;">${formatMoney(order.paid || 0)} ${cur}</div></div>
-          <div style="padding:9px; border-radius:12px; border:1px solid rgba(239,68,68,.35); background:rgba(239,68,68,.08);"><div style="font-size:11px; color:#fca5a5;">Due</div><div style="font-size:17px; font-weight:800; color:#fecaca;">${formatMoney(order.due || 0)} ${cur}</div></div>
-          <div style="padding:9px; border-radius:12px; border:1px solid rgba(148,163,184,.18);"><div style="font-size:11px; color:#94a3b8;">Total Cost</div><div style="font-size:17px; font-weight:800;">${formatMoney(order.total_cost || 0)} ${cur}</div></div>
-          <div style="padding:9px; border-radius:12px; border:1px solid ${asNumber(order.profit, 0) >= 0 ? "rgba(34,197,94,.35)" : "rgba(239,68,68,.35)"}; background:${asNumber(order.profit, 0) >= 0 ? "rgba(34,197,94,.08)" : "rgba(239,68,68,.08)"};"><div style="font-size:11px; color:${asNumber(order.profit, 0) >= 0 ? "#86efac" : "#fca5a5"};">Profit</div><div style="font-size:17px; font-weight:800; color:${asNumber(order.profit, 0) >= 0 ? "#bbf7d0" : "#fecaca"};">${formatMoney(order.profit || 0)} ${cur}</div></div>
+          <div style="padding:9px; border-radius:12px; border:1px solid rgba(148,163,184,.18);"><div style="font-size:11px; color:#94a3b8;">Итого</div><div style="font-size:17px; font-weight:800;">${formatMoney(order.total || 0)} ${cur}</div></div>
+          <div style="padding:9px; border-radius:12px; border:1px solid rgba(148,163,184,.18);"><div style="font-size:11px; color:#94a3b8;">Предоплата</div><div style="font-size:17px; font-weight:800;">${formatMoney(order.prepaid || 0)} ${cur}</div></div>
+          <div style="padding:9px; border-radius:12px; border:1px solid rgba(148,163,184,.18);"><div style="font-size:11px; color:#94a3b8;">Оплачено</div><div style="font-size:17px; font-weight:800;">${formatMoney(order.paid || 0)} ${cur}</div></div>
+          <div style="padding:9px; border-radius:12px; border:1px solid rgba(239,68,68,.35); background:rgba(239,68,68,.08);"><div style="font-size:11px; color:#fca5a5;">К оплате</div><div style="font-size:17px; font-weight:800; color:#fecaca;">${formatMoney(order.due || 0)} ${cur}</div></div>
+          <div style="padding:9px; border-radius:12px; border:1px solid rgba(148,163,184,.18);"><div style="font-size:11px; color:#94a3b8;">Себестоимость</div><div style="font-size:17px; font-weight:800;">${formatMoney(order.total_cost || 0)} ${cur}</div></div>
+          <div style="padding:9px; border-radius:12px; border:1px solid ${asNumber(order.profit, 0) >= 0 ? "rgba(34,197,94,.35)" : "rgba(239,68,68,.35)"}; background:${asNumber(order.profit, 0) >= 0 ? "rgba(34,197,94,.08)" : "rgba(239,68,68,.08)"};"><div style="font-size:11px; color:${asNumber(order.profit, 0) >= 0 ? "#86efac" : "#fca5a5"};">Прибыль</div><div style="font-size:17px; font-weight:800; color:${asNumber(order.profit, 0) >= 0 ? "#bbf7d0" : "#fecaca"};">${formatMoney(order.profit || 0)} ${cur}</div></div>
         </div>
       `)}
 
-      ${sectionCard("SERVICES", services.length
+      ${sectionCard("УСЛУГИ", services.length
         ? services.map((service) => `
           <div style="padding:9px 10px; border-radius:10px; border:1px solid rgba(148,163,184,.2); margin-bottom:7px; font-size:14px;">
             ${escapeHtml(service)}
@@ -1916,7 +1916,7 @@ async function openOrder(id) {
         : `<div style="padding:10px; border-radius:10px; border:1px dashed rgba(148,163,184,.35); color:#94a3b8; font-size:13px;">Услуги пока не добавлены</div>`
       )}
 
-      ${sectionCard("MATERIALS", `
+      ${sectionCard("МАТЕРИАЛЫ", `
         <div style="padding:10px; border-radius:12px; border:1px solid rgba(148,163,184,.22); background:rgba(2,6,23,.55); margin-bottom:10px;">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
             <div>
@@ -1966,19 +1966,19 @@ async function openOrder(id) {
         }
       `)}
 
-      ${sectionCard("PAYMENTS", `
+      ${sectionCard("ПЛАТЕЖИ", `
         <div style="padding:10px; border-radius:12px; border:1px solid rgba(59,130,246,.25); background:rgba(30,64,175,.12); margin-bottom:10px;">
           <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
             <div style="padding:9px; border-radius:10px; border:1px solid rgba(148,163,184,.18); background:rgba(15,23,42,.45);">
-              <div style="font-size:11px; color:#94a3b8;">Prepaid</div>
+              <div style="font-size:11px; color:#94a3b8;">Предоплата</div>
               <div style="font-size:16px; font-weight:800;">${formatMoney(order.prepaid || 0)} ${cur}</div>
             </div>
             <div style="padding:9px; border-radius:10px; border:1px solid rgba(148,163,184,.18); background:rgba(15,23,42,.45);">
-              <div style="font-size:11px; color:#94a3b8;">Paid</div>
+              <div style="font-size:11px; color:#94a3b8;">Оплачено</div>
               <div style="font-size:16px; font-weight:800;">${formatMoney(order.paid || 0)} ${cur}</div>
             </div>
             <div style="padding:9px; border-radius:10px; border:1px solid rgba(239,68,68,.35); background:rgba(239,68,68,.08);">
-              <div style="font-size:11px; color:#fca5a5;">Due</div>
+              <div style="font-size:11px; color:#fca5a5;">К оплате</div>
               <div style="font-size:16px; font-weight:800; color:#fecaca;">${formatMoney(order.due || 0)} ${cur}</div>
             </div>
           </div>
@@ -3152,32 +3152,32 @@ function renderInventoryCard(item, type = "product") {
 
     <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; margin-top:10px;">
       <div style="background:#0b1220; border:1px solid #1e293b; border-radius:10px; padding:8px;">
-        <div style="font-size:11px; opacity:.65;">Quantity</div>
+        <div style="font-size:11px; opacity:.65;">Количество</div>
         <div style="font-size:14px; font-weight:700;">${formatMoney(item.quantity)} ${escapeHtml(item.unit || "pcs")}</div>
       </div>
       <div style="background:#0b1220; border:1px solid #1e293b; border-radius:10px; padding:8px;">
-        <div style="font-size:11px; opacity:.65;">Reserved</div>
+        <div style="font-size:11px; opacity:.65;">Резерв</div>
         <div style="font-size:14px; font-weight:700;">${formatMoney(item.reserved_quantity || 0)} ${escapeHtml(item.unit || "pcs")}</div>
       </div>
       <div style="background:${isLow ? "rgba(127,29,29,.25)" : "#0b1220"}; border:1px solid ${isLow ? "#7f1d1d" : "#1e293b"}; border-radius:10px; padding:8px;">
-        <div style="font-size:11px; opacity:.72;">Available</div>
+        <div style="font-size:11px; opacity:.72;">Доступно</div>
         <div style="font-size:15px; font-weight:800; color:${isLow ? "#fca5a5" : "#fff"};">${formatMoney(available)} ${escapeHtml(item.unit || "pcs")}</div>
       </div>
       <div style="background:#0b1220; border:1px solid #1e293b; border-radius:10px; padding:8px;">
-        <div style="font-size:11px; opacity:.65;">Min stock</div>
+        <div style="font-size:11px; opacity:.65;">Мин. остаток</div>
         <div style="font-size:14px; font-weight:700;">${formatMoney(item.min_quantity || 0)} ${escapeHtml(item.unit || "pcs")}</div>
       </div>
     </div>
     <div style="margin-top:8px; font-size:11px; color:#94a3b8;">
-      Available = Quantity - Reserved
+      Доступно = Количество - Резерв
     </div>
     <div style="margin-top:6px; height:6px; border-radius:999px; background:#0b1220; border:1px solid #1e293b; overflow:hidden;">
       <div style="height:100%; width:${usagePercent}%; background:${isLow ? "#f87171" : "#34d399"};"></div>
     </div>
 
     <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:10px; font-size:12px; opacity:.9;">
-      <span>Purchase: ${formatMoney(item.purchase_price || 0)} ${currency}</span>
-      <span>Retail: ${formatMoney(item.retail_price || 0)} ${currency}</span>
+      <span>Закупка: ${formatMoney(item.purchase_price || 0)} ${currency}</span>
+      <span>Розница: ${formatMoney(item.retail_price || 0)} ${currency}</span>
     </div>
     ${item.note ? `<div style="font-size:12px; opacity:0.75; margin-top:6px;">Заметка: ${escapeHtml(item.note)}</div>` : ""}
     <div style="margin-top:10px;">
@@ -3266,7 +3266,7 @@ function renderInventoryTab() {
           <span style="font-weight:700; color:${lowOnly ? "#fecaca" : "#dbeafe"};">Только low/critical/out of stock</span>
         </label>
         <div style="margin-top:8px; font-size:12px; opacity:.75;">
-          Найдено: ${filteredItems.length} • Low stock: ${lowStockCount}
+          Найдено: ${filteredItems.length} • Низкий остаток: ${lowStockCount}
         </div>
       </div>
 
@@ -3586,7 +3586,7 @@ async function loadFinance() {
   el.innerHTML = `<div style="padding:16px;">Загрузка...</div>`;
 
   try {
-    const summaryRes = await api("get_finance_summary");
+    const summaryRes = await api("get_finance_summary", { period: "all_time" });
     const summary = summaryRes && typeof summaryRes === "object" ? summaryRes : {};
 
     const ordersRes = await api("get_orders");
@@ -3596,7 +3596,10 @@ async function loadFinance() {
     const expensesRes = await api("get_expenses");
     const expenses = Array.isArray(expensesRes?.items) ? expensesRes.items : [];
 
-    const revenue = asNumber(summary.orders_revenue, 0);
+    const paidFromOrders = orders.reduce((sum, o) => sum + Math.max(0, asNumber(o.paid, 0)), 0);
+    const accruedFromOrders = orders.reduce((sum, o) => sum + Math.max(0, asNumber(o.total, 0)), 0);
+    const revenue = asNumber(summary.revenue ?? summary.orders_paid_total ?? summary.orders_revenue, paidFromOrders);
+    const accrued = asNumber(summary.accrued ?? summary.orders_total ?? summary.accrued_total, accruedFromOrders);
     const expenseTotal = asNumber(summary.expenses_total, 0);
     const netProfit = asNumber(summary.net_profit, asNumber(summary.gross_profit, 0) - expenseTotal);
     const unpaidFromSummary = asNumber(
@@ -3638,11 +3641,16 @@ async function loadFinance() {
         </div>
 
         ${card(`
-          <div style="font-size:12px; letter-spacing:.07em; color:#c4b5fd; font-weight:800; margin-bottom:10px;">FINANCE SNAPSHOT</div>
+          <div style="font-size:12px; letter-spacing:.07em; color:#c4b5fd; font-weight:800; margin-bottom:2px;">ФИНАНСЫ</div>
+          <div style="font-size:11px; color:#94a3b8; margin-bottom:10px;">Период: за всё время</div>
           <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px;">
             <div class="kpi-card" style="border-color:rgba(37,99,235,.35); background:linear-gradient(180deg, rgba(30,58,138,.22), rgba(9,15,30,.95));">
               <div style="font-size:11px; color:#93c5fd; margin-bottom:4px;">Выручка</div>
               <div style="font-size:21px; font-weight:900;">${formatMoney(revenue)} ₴</div>
+            </div>
+            <div class="kpi-card" style="border-color:rgba(124,58,237,.35); background:linear-gradient(180deg, rgba(76,29,149,.24), rgba(9,15,30,.95));">
+              <div style="font-size:11px; color:#c4b5fd; margin-bottom:4px;">Начислено</div>
+              <div style="font-size:21px; font-weight:900;">${formatMoney(accrued)} ₴</div>
             </div>
             <div class="kpi-card" style="border-color:rgba(251,146,60,.35); background:linear-gradient(180deg, rgba(124,45,18,.24), rgba(9,15,30,.95));">
               <div style="font-size:11px; color:#fdba74; margin-bottom:4px;">Расходы</div>
