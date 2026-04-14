@@ -14,11 +14,20 @@ const state = {
   clients: [],
   inventory: [],
   inventoryMovementsByItem: {},
-  inventoryFilters: {
-    search: "",
-    category: "all",
-    brand: "all",
-    lowOnly: false,
+  inventoryView: "film",
+  inventoryFiltersByView: {
+    film: {
+      search: "",
+      category: "all",
+      brand: "all",
+      lowOnly: false,
+    },
+    products: {
+      search: "",
+      category: "all",
+      brand: "all",
+      lowOnly: false,
+    },
   },
 
   editingOrderId: null,
@@ -78,6 +87,11 @@ const PRODUCT_CATEGORY_LABELS = {
   accessories: "Аксессуары",
   other: "Другое",
 };
+const FILM_CATEGORY_LABELS = {
+  ppf: "PPF",
+  vinyl: "Vinyl / Винил",
+  tint: "Tint",
+};
 const LEGACY_FILM_MARKERS = new Set(["film"]);
 const LEGACY_PRODUCT_MARKERS = new Set(["product"]);
 
@@ -104,7 +118,15 @@ function defaultCategoryByType(type = "product") {
 function getInventoryCategoryLabel(category = "") {
   const normalized = normalizeInventoryCategory(category);
   const key = normalized || String(category || "").trim();
+  if (FILM_CATEGORY_LABELS[key]) return FILM_CATEGORY_LABELS[key];
   return PRODUCT_CATEGORY_LABELS[key] || key || "Без категории";
+}
+
+function getFilmSortPriority(category = "") {
+  const normalized = normalizeInventoryCategory(category);
+  if (normalized === "ppf") return 1;
+  if (normalized === "vinyl") return 2;
+  return 3;
 }
 
 function formatMoney(value) {
@@ -3130,12 +3152,18 @@ async function removeOrderMaterial(order_id, material_id, inventory_item_id, qua
 
 
 function updateInventoryFilters() {
-  state.inventoryFilters = {
+  const view = state.inventoryView === "products" ? "products" : "film";
+  state.inventoryFiltersByView[view] = {
     search: document.getElementById("inv_search")?.value || "",
     category: document.getElementById("inv_filter_category")?.value || "all",
     brand: document.getElementById("inv_filter_brand")?.value || "all",
     lowOnly: Boolean(document.getElementById("inv_filter_low_only")?.checked),
   };
+  renderInventoryTab();
+}
+
+function setInventoryView(view = "film") {
+  state.inventoryView = view === "products" ? "products" : "film";
   renderInventoryTab();
 }
 
@@ -3225,16 +3253,20 @@ function renderInventoryTab() {
   const el = document.getElementById("inventory");
   if (!el) return;
   const allItems = Array.isArray(state.inventory) ? state.inventory : [];
-  const filters = state.inventoryFilters || {};
+  const activeView = state.inventoryView === "products" ? "products" : "film";
+  const filters = state.inventoryFiltersByView?.[activeView] || {};
   const search = String(filters.search || "").trim().toLowerCase();
   const selectedCategory = String(filters.category || "all");
   const selectedBrand = String(filters.brand || "all");
   const lowOnly = Boolean(filters.lowOnly);
 
-  const categories = Array.from(new Set(allItems.map((item) => item.normalized_category || item.category || "other"))).sort((a, b) => a.localeCompare(b, "uk"));
-  const brands = Array.from(new Set(allItems.map((item) => String(item.brand || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "uk"));
+  const allFilmItems = allItems.filter((item) => item.normalized_group === "film");
+  const allProductItems = allItems.filter((item) => item.normalized_group === "product");
+  const sourceItems = activeView === "film" ? allFilmItems : allProductItems;
+  const categories = Array.from(new Set(sourceItems.map((item) => item.normalized_category || item.category || "other"))).sort((a, b) => a.localeCompare(b, "uk"));
+  const brands = Array.from(new Set(sourceItems.map((item) => String(item.brand || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "uk"));
 
-  const filteredItems = allItems.filter((item) => {
+  const filteredItems = sourceItems.filter((item) => {
     if (search && !String(item.name || "").toLowerCase().includes(search)) return false;
     const itemCategory = item.normalized_category || item.category || "other";
     if (selectedCategory !== "all" && itemCategory !== selectedCategory) return false;
@@ -3244,9 +3276,23 @@ function renderInventoryTab() {
     return true;
   });
 
-  const filmItems = filteredItems.filter((i) => i.normalized_group === "film");
-  const productItems = filteredItems.filter((i) => i.normalized_group === "product");
+  const sortedItems = filteredItems
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      if (activeView === "film") {
+        const priorityDiff = getFilmSortPriority(a.item.normalized_category || a.item.category) - getFilmSortPriority(b.item.normalized_category || b.item.category);
+        if (priorityDiff !== 0) return priorityDiff;
+      }
+      const byName = String(a.item.name || "").localeCompare(String(b.item.name || ""), "uk");
+      if (byName !== 0) return byName;
+      return a.index - b.index;
+    })
+    .map(({ item }) => item);
   const lowStockCount = filteredItems.filter(isInventoryLowStock).length;
+  const viewType = activeView === "film" ? "film" : "product";
+  const viewTitle = activeView === "film" ? "Плёнка" : "Товары";
+  const categoryLabel = activeView === "film" ? "Все типы плёнки" : "Все категории";
+  const countLabel = activeView === "film" ? "плёнки" : "товаров";
 
   el.innerHTML = `
     <div style="padding:16px;">
@@ -3255,10 +3301,15 @@ function renderInventoryTab() {
         ${btn("+ Товар", "openCreateInventoryItem('product')")}
       </div>
 
+      <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; margin-bottom:12px;">
+        <button onclick="setInventoryView('film')" style="padding:10px 12px; border-radius:12px; border:1px solid ${activeView === "film" ? "rgba(167,139,250,.55)" : "rgba(148,163,184,.3)"}; background:${activeView === "film" ? "rgba(76,29,149,.35)" : "rgba(15,23,42,.55)"}; color:${activeView === "film" ? "#ede9fe" : "#dbeafe"}; font-weight:700; cursor:pointer;">Плёнка</button>
+        <button onclick="setInventoryView('products')" style="padding:10px 12px; border-radius:12px; border:1px solid ${activeView === "products" ? "rgba(167,139,250,.55)" : "rgba(148,163,184,.3)"}; background:${activeView === "products" ? "rgba(76,29,149,.35)" : "rgba(15,23,42,.55)"}; color:${activeView === "products" ? "#ede9fe" : "#dbeafe"}; font-weight:700; cursor:pointer;">Товары</button>
+      </div>
+
       <div style="background:linear-gradient(180deg, rgba(15,23,42,.95), rgba(11,17,32,.95)); border:1px solid rgba(167,139,250,.22); border-radius:16px; padding:11px; margin-bottom:12px; box-shadow:inset 0 1px 0 rgba(255,255,255,.02);">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
-          <div style="font-size:13px; font-weight:800;">Фильтры склада</div>
-          <span class="soft-chip">${filteredItems.length} поз.</span>
+          <div style="font-size:13px; font-weight:800;">Фильтры: ${viewTitle}</div>
+          <span class="soft-chip">${filteredItems.length} ${countLabel}</span>
         </div>
         <input
           id="inv_search"
@@ -3269,7 +3320,7 @@ function renderInventoryTab() {
         >
         <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px;">
           <select id="inv_filter_category" onchange="updateInventoryFilters()" style="width:100%; background:#0b1120; color:#fff; border:1px solid rgba(167,139,250,.23); border-radius:11px; padding:10px;">
-            <option value="all" ${selectedCategory === "all" ? "selected" : ""}>Все категории</option>
+            <option value="all" ${selectedCategory === "all" ? "selected" : ""}>${categoryLabel}</option>
             ${categories.map((category) => `<option value="${escapeHtml(category)}" ${selectedCategory === category ? "selected" : ""}>${escapeHtml(getInventoryCategoryLabel(category))}</option>`).join("")}
           </select>
           <select id="inv_filter_brand" onchange="updateInventoryFilters()" style="width:100%; background:#0b1120; color:#fff; border:1px solid rgba(167,139,250,.23); border-radius:11px; padding:10px;">
@@ -3286,15 +3337,12 @@ function renderInventoryTab() {
         </div>
       </div>
 
-      <h3 style="margin:0 0 8px 0;">Плёнка</h3>
-      ${renderInventoryGroup(filmItems, "film", "Плёнка")}
-
-      <h3 style="margin:14px 0 8px 0;">Товар</h3>
-      ${renderInventoryGroup(productItems, "product", "Товар")}
+      <h3 style="margin:0 0 8px 0;">${viewTitle}</h3>
+      ${renderInventoryGroup(sortedItems, viewType, viewTitle)}
     </div>
   `;
 
-  const toPrefetch = [...filmItems, ...productItems].slice(0, 8);
+  const toPrefetch = sortedItems.slice(0, 8);
   toPrefetch.forEach((item) => {
     ensureInventoryMovementsForItem(item.id);
   });
