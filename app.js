@@ -67,7 +67,17 @@ function asNumber(value, fallback = 0) {
 }
 
 const FILM_CATEGORIES = ["vinyl", "ppf", "tint"];
-const PRODUCT_CATEGORIES = ["consumables", "chemicals", "tools", "accessories", "other"];
+const PRODUCT_CATEGORIES = ["aroma_selective", "gyeon", "srb", "consumables", "chemicals", "tools", "accessories", "other"];
+const PRODUCT_CATEGORY_LABELS = {
+  aroma_selective: "Aroma selective",
+  gyeon: "Gyeon",
+  srb: "SRB",
+  consumables: "Расходники",
+  chemicals: "Химия",
+  tools: "Инструменты",
+  accessories: "Аксессуары",
+  other: "Другое",
+};
 const LEGACY_FILM_MARKERS = new Set(["film"]);
 const LEGACY_PRODUCT_MARKERS = new Set(["product"]);
 
@@ -89,6 +99,12 @@ function inventoryCategoryGroup(category = "") {
 
 function defaultCategoryByType(type = "product") {
   return type === "film" ? FILM_CATEGORIES[0] : PRODUCT_CATEGORIES[0];
+}
+
+function getInventoryCategoryLabel(category = "") {
+  const normalized = normalizeInventoryCategory(category);
+  const key = normalized || String(category || "").trim();
+  return PRODUCT_CATEGORY_LABELS[key] || key || "Без категории";
 }
 
 function formatMoney(value) {
@@ -884,7 +900,7 @@ async function loadDashboard() {
                 <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
                   <div>
                     <div style="font-weight:700;">${escapeHtml(i.name || "")}</div>
-                    <div style="font-size:12px; color:#9ca3af; margin-top:3px;">${escapeHtml(i.category || "Без категории")}</div>
+                    <div style="font-size:12px; color:#9ca3af; margin-top:3px;">${escapeHtml(getInventoryCategoryLabel(i.category || i.normalized_category))}</div>
                   </div>
                   <div style="text-align:right; font-size:13px;">
                     <div>Текущий: ${formatMoney(i.quantity || 0)} ${escapeHtml(i.unit || "")}</div>
@@ -3137,7 +3153,7 @@ function renderInventoryCard(item, type = "product") {
       <div>
         <div style="font-weight:800; font-size:15px; line-height:1.35;">${escapeHtml(item.name || "Без названия")}</div>
         <div style="font-size:12px; opacity:.7; margin-top:3px;">
-          ${escapeHtml(item.brand || "Без бренда")} • ${escapeHtml(item.normalized_category || item.category || "other")}
+          ${escapeHtml(item.brand || "Без бренда")} • ${escapeHtml(getInventoryCategoryLabel(item.normalized_category || item.category || "other"))}
         </div>
       </div>
       ${renderToneBadge(stock.label, { bg: stock.tone, color: stock.color, border: stock.border })}
@@ -3254,7 +3270,7 @@ function renderInventoryTab() {
         <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px;">
           <select id="inv_filter_category" onchange="updateInventoryFilters()" style="width:100%; background:#0b1120; color:#fff; border:1px solid rgba(167,139,250,.23); border-radius:11px; padding:10px;">
             <option value="all" ${selectedCategory === "all" ? "selected" : ""}>Все категории</option>
-            ${categories.map((category) => `<option value="${escapeHtml(category)}" ${selectedCategory === category ? "selected" : ""}>${escapeHtml(category)}</option>`).join("")}
+            ${categories.map((category) => `<option value="${escapeHtml(category)}" ${selectedCategory === category ? "selected" : ""}>${escapeHtml(getInventoryCategoryLabel(category))}</option>`).join("")}
           </select>
           <select id="inv_filter_brand" onchange="updateInventoryFilters()" style="width:100%; background:#0b1120; color:#fff; border:1px solid rgba(167,139,250,.23); border-radius:11px; padding:10px;">
             <option value="all" ${selectedBrand === "all" ? "selected" : ""}>Все бренды</option>
@@ -3337,7 +3353,7 @@ function openInventoryItemForm({ mode = "create", type = "product", item = null 
     <h3 style="margin-top:0;">${title}</h3>
     <select id="inv_category" style="width:100%; margin-bottom:8px;">
       ${allowedCategories.map((category) => `
-        <option value="${category}" ${category === selectedCategory ? "selected" : ""}>${category}</option>
+        <option value="${category}" ${category === selectedCategory ? "selected" : ""}>${escapeHtml(getInventoryCategoryLabel(category))}</option>
       `).join("")}
     </select>
     <input id="inv_brand" placeholder="Бренд" value="${escapeHtml(item?.brand || "")}" style="width:100%; margin-bottom:8px;">
@@ -3416,7 +3432,7 @@ async function createInventoryItem(type = "product") {
     return;
   }
   if (!isFilm && !PRODUCT_CATEGORIES.includes(payload.category)) {
-    safeAlert("Для товара выбери категорию: consumables, chemicals, tools, accessories или other");
+    safeAlert("Для товара выбери категорию: Aroma selective, Gyeon, SRB, Расходники, Химия, Инструменты, Аксессуары или Другое");
     return;
   }
 
@@ -3464,7 +3480,7 @@ async function updateInventoryItem(id, type = "product") {
     return;
   }
   if (!isFilm && !PRODUCT_CATEGORIES.includes(payload.category)) {
-    safeAlert("Для товара выбери категорию: consumables, chemicals, tools, accessories или other");
+    safeAlert("Для товара выбери категорию: Aroma selective, Gyeon, SRB, Расходники, Химия, Инструменты, Аксессуары или Другое");
     return;
   }
 
