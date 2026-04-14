@@ -20,13 +20,13 @@ const state = {
       search: "",
       category: "all",
       brand: "all",
-      lowOnly: false,
+      stock: "all",
     },
     products: {
       search: "",
       category: "all",
       brand: "all",
-      lowOnly: false,
+      stock: "all",
     },
   },
 
@@ -122,11 +122,29 @@ function getInventoryCategoryLabel(category = "") {
   return PRODUCT_CATEGORY_LABELS[key] || key || "Без категории";
 }
 
-function getFilmSortPriority(category = "") {
-  const normalized = normalizeInventoryCategory(category);
-  if (normalized === "ppf") return 1;
-  if (normalized === "vinyl") return 2;
+function getFilmTypePriority(item = {}) {
+  const value = String(
+    item.normalized_category
+    || item.type
+    || item.category
+    || ""
+  ).toLowerCase();
+
+  if (value.includes("ppf")) return 1;
+  if (value.includes("vinyl") || value.includes("винил")) return 2;
   return 3;
+}
+
+function isFilmInventoryItem(item = {}) {
+  const categoryGroup = inventoryCategoryGroup(item.category);
+  if (categoryGroup === "film") return true;
+
+  const normalizedType = String(item.type || "").trim().toLowerCase();
+  if (normalizedType.includes("ppf")) return true;
+  if (normalizedType.includes("vinyl") || normalizedType.includes("винил")) return true;
+  if (normalizedType.includes("film") || normalizedType.includes("пл")) return true;
+
+  return false;
 }
 
 function formatMoney(value) {
@@ -1600,7 +1618,7 @@ function normalizeInventoryItems(items = []) {
   return (Array.isArray(items) ? items : []).map((item) => ({
     ...item,
     normalized_category: normalizeInventoryCategory(item.category),
-    normalized_group: inventoryCategoryGroup(item.category),
+    normalized_group: isFilmInventoryItem(item) ? "film" : "product",
   }));
 }
 
@@ -3157,7 +3175,7 @@ function updateInventoryFilters() {
     search: document.getElementById("inv_search")?.value || "",
     category: document.getElementById("inv_filter_category")?.value || "all",
     brand: document.getElementById("inv_filter_brand")?.value || "all",
-    lowOnly: Boolean(document.getElementById("inv_filter_low_only")?.checked),
+    stock: document.getElementById("inv_filter_stock")?.value || "all",
   };
   renderInventoryTab();
 }
@@ -3258,11 +3276,11 @@ function renderInventoryTab() {
   const search = String(filters.search || "").trim().toLowerCase();
   const selectedCategory = String(filters.category || "all");
   const selectedBrand = String(filters.brand || "all");
-  const lowOnly = Boolean(filters.lowOnly);
+  const selectedStock = String(filters.stock || "all");
 
-  const allFilmItems = allItems.filter((item) => item.normalized_group === "film");
-  const allProductItems = allItems.filter((item) => item.normalized_group === "product");
-  const sourceItems = activeView === "film" ? allFilmItems : allProductItems;
+  const filmItems = allItems.filter((item) => item.normalized_group === "film");
+  const productItems = allItems.filter((item) => item.normalized_group === "product");
+  const sourceItems = activeView === "film" ? filmItems : productItems;
   const categories = Array.from(new Set(sourceItems.map((item) => item.normalized_category || item.category || "other"))).sort((a, b) => a.localeCompare(b, "uk"));
   const brands = Array.from(new Set(sourceItems.map((item) => String(item.brand || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "uk"));
 
@@ -3272,7 +3290,8 @@ function renderInventoryTab() {
     if (selectedCategory !== "all" && itemCategory !== selectedCategory) return false;
     const itemBrand = String(item.brand || "").trim() || "—";
     if (selectedBrand !== "all" && itemBrand !== selectedBrand) return false;
-    if (lowOnly && !isInventoryLowStock(item)) return false;
+    const stock = getInventoryStockState(item);
+    if (selectedStock !== "all" && stock.key !== selectedStock) return false;
     return true;
   });
 
@@ -3280,10 +3299,10 @@ function renderInventoryTab() {
     .map((item, index) => ({ item, index }))
     .sort((a, b) => {
       if (activeView === "film") {
-        const priorityDiff = getFilmSortPriority(a.item.normalized_category || a.item.category) - getFilmSortPriority(b.item.normalized_category || b.item.category);
+        const priorityDiff = getFilmTypePriority(a.item) - getFilmTypePriority(b.item);
         if (priorityDiff !== 0) return priorityDiff;
       }
-      const byName = String(a.item.name || "").localeCompare(String(b.item.name || ""), "uk");
+      const byName = String(a.item.name || "").localeCompare(String(b.item.name || ""), "ru");
       if (byName !== 0) return byName;
       return a.index - b.index;
     })
@@ -3328,10 +3347,14 @@ function renderInventoryTab() {
             ${brands.map((brand) => `<option value="${escapeHtml(brand)}" ${selectedBrand === brand ? "selected" : ""}>${escapeHtml(brand)}</option>`).join("")}
           </select>
         </div>
-        <label style="display:flex; align-items:center; gap:9px; margin-top:10px; font-size:13px; cursor:pointer; padding:8px 10px; border-radius:11px; border:1px solid ${lowOnly ? "rgba(248,113,113,.4)" : "rgba(148,163,184,.26)"}; background:${lowOnly ? "rgba(69,10,10,.35)" : "rgba(15,23,42,.55)"};">
-          <input id="inv_filter_low_only" type="checkbox" ${lowOnly ? "checked" : ""} onchange="updateInventoryFilters()" style="width:16px; height:16px; accent-color:#f87171; margin:0;">
-          <span style="font-weight:700; color:${lowOnly ? "#fecaca" : "#dbeafe"};">Только low/critical/out of stock</span>
-        </label>
+        <div style="margin-top:10px;">
+          <select id="inv_filter_stock" onchange="updateInventoryFilters()" style="width:100%; background:#0b1120; color:#fff; border:1px solid rgba(167,139,250,.23); border-radius:11px; padding:10px;">
+            <option value="all" ${selectedStock === "all" ? "selected" : ""}>low / critical / out of stock: все</option>
+            <option value="low" ${selectedStock === "low" ? "selected" : ""}>Только low stock</option>
+            <option value="critical" ${selectedStock === "critical" ? "selected" : ""}>Только critical stock</option>
+            <option value="out" ${selectedStock === "out" ? "selected" : ""}>Только out of stock</option>
+          </select>
+        </div>
         <div style="margin-top:8px; font-size:12px; opacity:.75;">
           Найдено: ${filteredItems.length} • Низкий остаток: ${lowStockCount}
         </div>
