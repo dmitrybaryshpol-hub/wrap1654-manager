@@ -15,6 +15,7 @@ const state = {
   inventory: [],
   inventoryMovementsByItem: {},
   inventoryView: "film",
+  ordersStatusFilter: "all",
   inventoryFiltersByView: {
     film: {
       search: "",
@@ -965,62 +966,9 @@ async function loadOrders() {
 
   try {
     const res = await api("get_orders");
-    const orders = res.items || [];
-    state.orders = orders;
-    
-    el.innerHTML = `
-      <div style="padding:16px;">
-        <div style="display:flex; gap:8px; margin-bottom:14px;">
-          ${btn("+ Новый заказ", "openCreateOrder()")}
-        </div>
-        ${orders.length
-          ? orders.map((o) => `
-              <div onclick="openOrder('${o.id}')" style="cursor:pointer;">
-                ${card(`
-  <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
-    <div>
-      <div style="font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#94a3b8;">Заказ</div>
-      <div style="font-size:18px; font-weight:900; margin-top:2px; color:#f5f3ff;">${orderLabel(o)}</div>
-    </div>
-    ${renderStatusBadge(o.status || "")}
-  </div>
-
-  <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;">
-    <div style="padding:9px 10px; border-radius:11px; background:rgba(15,23,42,.72); border:1px solid rgba(167,139,250,.2);">
-      <div style="font-size:11px; color:#94a3b8;">Клиент</div>
-      <div style="font-size:13px; font-weight:700; margin-top:3px;">${escapeHtml(o.client_name || "—")}</div>
-    </div>
-    <div style="padding:9px 10px; border-radius:11px; background:rgba(15,23,42,.72); border:1px solid rgba(167,139,250,.2);">
-      <div style="font-size:11px; color:#94a3b8;">Авто</div>
-      <div style="font-size:13px; font-weight:700; margin-top:3px;">${escapeHtml(o.car_model || "—")}</div>
-    </div>
-  </div>
-
-  <div style="display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:10px;">
-    <div style="padding:8px 9px; border-radius:10px; border:1px solid rgba(148,163,184,.22); background:rgba(9,14,27,.7);">
-      <div style="font-size:10px; color:#94a3b8;">Сумма</div>
-      <div style="font-size:14px; font-weight:800; margin-top:3px;">${formatMoney(o.total || 0)} ${currencySymbol(o.currency || "USD")}</div>
-    </div>
-    <div style="padding:8px 9px; border-radius:10px; border:1px solid rgba(52,211,153,.24); background:rgba(6,31,23,.45);">
-      <div style="font-size:10px; color:#86efac;">Оплачено</div>
-      <div style="font-size:14px; font-weight:800; margin-top:3px; color:#bbf7d0;">${formatMoney(o.paid || 0)} ${currencySymbol(o.currency || "USD")}</div>
-    </div>
-    <div style="padding:8px 9px; border-radius:10px; border:1px solid rgba(248,113,113,.3); background:rgba(69,10,10,.34);">
-      <div style="font-size:10px; color:#fca5a5;">Долг</div>
-      <div style="font-size:14px; font-weight:800; margin-top:3px; color:#fecaca;">${formatMoney(o.due || 0)} ${currencySymbol(o.currency || "USD")}</div>
-    </div>
-  </div>
-
-  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
-    <button onclick="event.stopPropagation(); openOrder('${o.id}')" class="ui-btn ui-btn-secondary">Открыть</button>
-    <button onclick="event.stopPropagation(); startEditOrder('${o.id}')" class="ui-btn ui-btn-secondary">Редактировать</button>
-    <button onclick="event.stopPropagation(); handleDeleteOrder('${o.id}')" class="ui-btn ui-btn-danger">Удалить</button>
-  </div>
-`)}              </div>
-            `).join("")
-          : card(renderEmptyState({ icon: "📭", title: "Заказов пока нет", description: "Создайте первый заказ — он сразу появится в этом списке." }))}
-      </div>
-    `;
+    state.orders = Array.isArray(res.items) ? sortOrdersForView(res.items) : [];
+    state.ordersStatusFilter = "all";
+    renderOrdersList();
   } catch (e) {
     console.error(e);
     el.innerHTML = `<div style="padding:16px;">Ошибка загрузки заказов</div>`;
@@ -1577,6 +1525,177 @@ function isActiveOrderStatus(status = "") {
   const key = String(status || "").trim().toLowerCase();
   const closedStatuses = new Set(["closed", "cancelled", "delivered"]);
   return !closedStatuses.has(key);
+}
+
+function normalizeOrderStatus(status = "") {
+  return String(status || "").trim().toLowerCase();
+}
+
+function getOrderStatusPriority(status = "") {
+  const key = normalizeOrderStatus(status);
+  if (key === "new") return 0;
+  if (key === "in_progress") return 1;
+  if (key === "ready") return 2;
+  if (key === "closed") return 3;
+
+  if (!isActiveOrderStatus(key)) return 5;
+  return 2.5;
+}
+
+function parseOrderDateValue(value) {
+  if (value == null) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.getTime();
+  const timestamp = Date.parse(String(value));
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+function getOrderRecencyValue(order = {}) {
+  const dateCandidates = [
+    order.created_at,
+    order.createdAt,
+    order.date_created,
+    order.created,
+    order.inserted_at,
+    order.insertedAt,
+    order.updated_at,
+    order.updatedAt,
+  ];
+
+  for (const candidate of dateCandidates) {
+    const timestamp = parseOrderDateValue(candidate);
+    if (timestamp != null) return timestamp;
+  }
+
+  const numericCandidates = [
+    order.id,
+    order.order_id,
+    order.order_number,
+    order.number,
+  ];
+
+  for (const candidate of numericCandidates) {
+    const raw = String(candidate ?? "").replace(/[^\d.-]/g, "");
+    if (!raw) continue;
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+
+  return 0;
+}
+
+function sortOrdersForView(orders = []) {
+  const list = Array.isArray(orders) ? [...orders] : [];
+  return list.sort((a, b) => {
+    const statusDiff = getOrderStatusPriority(a?.status) - getOrderStatusPriority(b?.status);
+    if (statusDiff !== 0) return statusDiff;
+
+    const recencyDiff = getOrderRecencyValue(b) - getOrderRecencyValue(a);
+    if (recencyDiff !== 0) return recencyDiff;
+
+    return String(b?.id || "").localeCompare(String(a?.id || ""), "ru");
+  });
+}
+
+function filterOrdersByStatus(orders = [], statusFilter = "all") {
+  const key = normalizeOrderStatus(statusFilter);
+  const list = Array.isArray(orders) ? orders : [];
+  if (!key || key === "all") return list;
+  return list.filter((order) => normalizeOrderStatus(order?.status) === key);
+}
+
+function renderOrdersStatusFilter() {
+  const options = [
+    { key: "all", label: "Все" },
+    { key: "new", label: "Новые" },
+    { key: "in_progress", label: "В работе" },
+    { key: "ready", label: "Готовые" },
+    { key: "closed", label: "Закрытые" },
+  ];
+
+  return `
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+      ${options.map(({ key, label }) => {
+        const isActive = state.ordersStatusFilter === key;
+        return `
+          <button
+            class="ui-btn ui-btn-secondary"
+            onclick="setOrdersStatusFilter('${key}')"
+            style="${isActive
+              ? "background:rgba(167,139,250,.22); border-color:rgba(196,181,253,.55); color:#f5f3ff;"
+              : ""}"
+          >${label}</button>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function setOrdersStatusFilter(filter = "all") {
+  state.ordersStatusFilter = normalizeOrderStatus(filter) || "all";
+  renderOrdersList();
+}
+
+function renderOrdersList() {
+  const el = document.getElementById("orders");
+  if (!el) return;
+
+  const sortedOrders = sortOrdersForView(state.orders);
+  const filteredOrders = filterOrdersByStatus(sortedOrders, state.ordersStatusFilter);
+
+  el.innerHTML = `
+    <div style="padding:16px;">
+      <div style="display:flex; gap:8px; margin-bottom:14px;">
+        ${btn("+ Новый заказ", "openCreateOrder()")}
+      </div>
+      ${renderOrdersStatusFilter()}
+      ${filteredOrders.length
+        ? filteredOrders.map((o) => `
+            <div onclick="openOrder('${o.id}')" style="cursor:pointer;">
+              ${card(`
+<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+  <div>
+    <div style="font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#94a3b8;">Заказ</div>
+    <div style="font-size:18px; font-weight:900; margin-top:2px; color:#f5f3ff;">${orderLabel(o)}</div>
+  </div>
+  ${renderStatusBadge(o.status || "")}
+</div>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;">
+  <div style="padding:9px 10px; border-radius:11px; background:rgba(15,23,42,.72); border:1px solid rgba(167,139,250,.2);">
+    <div style="font-size:11px; color:#94a3b8;">Клиент</div>
+    <div style="font-size:13px; font-weight:700; margin-top:3px;">${escapeHtml(o.client_name || "—")}</div>
+  </div>
+  <div style="padding:9px 10px; border-radius:11px; background:rgba(15,23,42,.72); border:1px solid rgba(167,139,250,.2);">
+    <div style="font-size:11px; color:#94a3b8;">Авто</div>
+    <div style="font-size:13px; font-weight:700; margin-top:3px;">${escapeHtml(o.car_model || "—")}</div>
+  </div>
+</div>
+
+<div style="display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:10px;">
+  <div style="padding:8px 9px; border-radius:10px; border:1px solid rgba(148,163,184,.22); background:rgba(9,14,27,.7);">
+    <div style="font-size:10px; color:#94a3b8;">Сумма</div>
+    <div style="font-size:14px; font-weight:800; margin-top:3px;">${formatMoney(o.total || 0)} ${currencySymbol(o.currency || "USD")}</div>
+  </div>
+  <div style="padding:8px 9px; border-radius:10px; border:1px solid rgba(52,211,153,.24); background:rgba(6,31,23,.45);">
+    <div style="font-size:10px; color:#86efac;">Оплачено</div>
+    <div style="font-size:14px; font-weight:800; margin-top:3px; color:#bbf7d0;">${formatMoney(o.paid || 0)} ${currencySymbol(o.currency || "USD")}</div>
+  </div>
+  <div style="padding:8px 9px; border-radius:10px; border:1px solid rgba(248,113,113,.3); background:rgba(69,10,10,.34);">
+    <div style="font-size:10px; color:#fca5a5;">Долг</div>
+    <div style="font-size:14px; font-weight:800; margin-top:3px; color:#fecaca;">${formatMoney(o.due || 0)} ${currencySymbol(o.currency || "USD")}</div>
+  </div>
+</div>
+
+<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
+  <button onclick="event.stopPropagation(); openOrder('${o.id}')" class="ui-btn ui-btn-secondary">Открыть</button>
+  <button onclick="event.stopPropagation(); startEditOrder('${o.id}')" class="ui-btn ui-btn-secondary">Редактировать</button>
+  <button onclick="event.stopPropagation(); handleDeleteOrder('${o.id}')" class="ui-btn ui-btn-danger">Удалить</button>
+</div>
+`)}            </div>
+          `).join("")
+        : card(renderEmptyState({ icon: "📭", title: "Заказов пока нет", description: "Создайте первый заказ — он сразу появится в этом списке." }))}
+    </div>
+  `;
 }
 
 function isOrderCompletionStatus(status = "") {
@@ -3907,6 +4026,7 @@ window.showTab = showTab;
 window.openCreateOrder = openCreateOrder;
 window.createOrder = createOrder;
 window.setPaidPreset = setPaidPreset;
+window.setOrdersStatusFilter = setOrdersStatusFilter;
 window.addOrderService = addOrderService;
 window.removeOrderService = removeOrderService;
 window.openOrder = openOrder;
