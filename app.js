@@ -1536,9 +1536,9 @@ function getOrderStatusPriority(status = "") {
   if (key === "new") return 0;
   if (key === "in_progress") return 1;
   if (key === "ready") return 2;
-  if (key === "closed") return 3;
+  if (key === "closed") return 4;
 
-  if (!isActiveOrderStatus(key)) return 5;
+  if (!isActiveOrderStatus(key)) return 3.5;
   return 2.5;
 }
 
@@ -1604,13 +1604,18 @@ function filterOrdersByStatus(orders = [], statusFilter = "all") {
 }
 
 function renderOrdersStatusFilter() {
+  const hasReady = (Array.isArray(state.orders) ? state.orders : [])
+    .some((order) => normalizeOrderStatus(order?.status) === "ready");
+
   const options = [
     { key: "all", label: "Все" },
     { key: "new", label: "Новые" },
     { key: "in_progress", label: "В работе" },
-    { key: "ready", label: "Готовые" },
     { key: "closed", label: "Закрытые" },
   ];
+  if (hasReady) {
+    options.splice(3, 0, { key: "ready", label: "Готовые" });
+  }
 
   return `
     <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
@@ -1631,7 +1636,14 @@ function renderOrdersStatusFilter() {
 }
 
 function setOrdersStatusFilter(filter = "all") {
-  state.ordersStatusFilter = normalizeOrderStatus(filter) || "all";
+  const normalized = normalizeOrderStatus(filter) || "all";
+  const hasReady = (Array.isArray(state.orders) ? state.orders : [])
+    .some((order) => normalizeOrderStatus(order?.status) === "ready");
+  if (normalized === "ready" && !hasReady) {
+    state.ordersStatusFilter = "all";
+  } else {
+    state.ordersStatusFilter = normalized;
+  }
   renderOrdersList();
 }
 
@@ -2279,6 +2291,14 @@ async function openCreateOrder(order = null) {
       <input id="end_date" type="date" style="width:100%;">
     </div>
 
+    <div style="margin-bottom:12px; padding:12px; border-radius:12px; border:1px solid #1f2937; background:#020617;">
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+        <input id="add_to_calendar" type="checkbox">
+        <span style="font-weight:600;">Добавить в Google Календарь</span>
+      </label>
+      <div style="font-size:12px; opacity:.7; margin-top:8px;">Приглашение получат только разрешённые пользователи</div>
+    </div>
+
     <div style="
       background:#020617;
       padding:12px;
@@ -2460,6 +2480,7 @@ async function openCreateOrder(order = null) {
     document.getElementById("intake_date").value = order.intake_date || "";
     document.getElementById("start_date").value = order.start_date || "";
     document.getElementById("end_date").value = order.end_date || "";
+    document.getElementById("add_to_calendar").checked = Boolean(order.add_to_calendar);
     document.getElementById("total").value = String(order.total ?? 0);
     if (isEdit) {
       document.getElementById("subtotal").value = String(order.subtotal ?? 0);
@@ -2733,6 +2754,7 @@ async function createOrder() {
   const end_date = document.getElementById("end_date")?.value || null;
 
   const total = asNumber(document.getElementById("total")?.value, 0);
+  const add_to_calendar = Boolean(document.getElementById("add_to_calendar")?.checked);
   const subtotal = isEdit
     ? asNumber(document.getElementById("subtotal")?.value, 0)
     : total;
@@ -2829,6 +2851,7 @@ async function createOrder() {
       due,
       currency,
       note,
+      add_to_calendar,
       media_urls,
       media_url: media_urls[0] || media_url || null,
     };
@@ -2839,10 +2862,11 @@ async function createOrder() {
       const shouldConsumeOnCompletion =
         !isOrderCompletionStatus(previousStatus) && isOrderCompletionStatus(nextStatus);
 
-      await api("update_order", {
+      const updateRes = await api("update_order", {
         id: state.editingOrderId,
         ...payload,
       });
+      const calendarWarning = updateRes?.calendar_warning || updateRes?.warning || "";
 
       if (shouldConsumeOnCompletion) {
         try {
@@ -2868,11 +2892,12 @@ async function createOrder() {
           safeAlert(`Заказ обновлён, но списание материалов не завершено: ${consumeError?.message || "ошибка"}`);
         }
       } else {
-        safeAlert("Заказ обновлён");
+        safeAlert(calendarWarning ? `Заказ обновлён.\n\n⚠️ ${calendarWarning}` : "Заказ обновлён");
       }
     } else {
-      await api("create_order", payload);
-      safeAlert("Заказ создан");
+      const createRes = await api("create_order", payload);
+      const calendarWarning = createRes?.calendar_warning || createRes?.warning || "";
+      safeAlert(calendarWarning ? `Заказ создан.\n\n⚠️ ${calendarWarning}` : "Заказ создан");
     }
 
     state.editingOrderId = null;
