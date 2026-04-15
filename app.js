@@ -5,7 +5,7 @@ const API_URL = "https://hbciwqgfccdfnzrhiops.supabase.co/functions/v1/smart-han
 const state = {
   user: null,
   currentTab: "dashboard",
-  calendarView: "day",
+  calendarView: "week",
   calendarAnchor: new Date(),
   fxRate: 0,
   fxUpdatedAt: null,
@@ -1353,6 +1353,11 @@ function formatCalendarTitle(date, view = "day") {
     const to = addDays(from, 6);
     return `${formatDateFromDate(from)} — ${formatDateFromDate(to)}`;
   }
+  if (view === "two_weeks") {
+    const from = startOfWeek(target);
+    const to = addDays(from, 13);
+    return `${formatDateFromDate(from)} — ${formatDateFromDate(to)}`;
+  }
   return target.toLocaleDateString("ru-RU", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
 }
 
@@ -1565,6 +1570,175 @@ function renderCalendarOpsSection(title, subtitle, groups = [], tone = {}) {
   `, `margin-bottom:10px; background:linear-gradient(180deg,#0b1220,#0a1020); border:1px solid ${border};`);
 }
 
+function hasTimePart(raw = "") {
+  return typeof raw === "string" && raw.includes("T");
+}
+
+function formatTimePart(raw = "") {
+  const dt = parseDateValue(raw);
+  if (!dt) return "";
+  return dt.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+}
+
+function getTimelineRangeForOrder(order = {}) {
+  const intakeRaw = getOrderDate(order, ["intake_date", "received_at"]);
+  const startRaw = getOrderDate(order, ["start_date", "started_at"]);
+  const endRaw = getOrderDate(order, ["end_date", "due_date", "planned_end_date"]);
+
+  const intakeDate = parseDateOnly(intakeRaw);
+  const startDate = parseDateOnly(startRaw);
+  const endDate = parseDateOnly(endRaw);
+
+  let from = startDate || intakeDate || endDate;
+  let to = endDate || startDate || intakeDate;
+  if (from && to && to < from) to = from;
+
+  return {
+    from,
+    to,
+    intakeRaw,
+    startRaw,
+    endRaw,
+  };
+}
+
+function getStatusLineColor(status = "") {
+  const key = String(status || "").toLowerCase();
+  if (key === "new") return "#60a5fa";
+  if (key === "in_progress") return "#facc15";
+  if (key === "ready") return "#2dd4bf";
+  if (key === "closed") return "#818cf8";
+  return "#94a3b8";
+}
+
+function buildTimelineRows(orders = [], rangeStart, rangeEnd) {
+  const rows = [];
+  const unplanned = [];
+
+  (Array.isArray(orders) ? orders : []).forEach((order) => {
+    const range = getTimelineRangeForOrder(order);
+    if (!range.from || !range.to) {
+      unplanned.push(order);
+      return;
+    }
+    if (range.to < rangeStart || range.from > rangeEnd) return;
+
+    const visual = statusVisual(order.status || "");
+    const startInside = range.from < rangeStart ? rangeStart : range.from;
+    const endInside = range.to > rangeEnd ? rangeEnd : range.to;
+    const span = Math.max(1, Math.round((endInside.getTime() - startInside.getTime()) / (24 * 60 * 60 * 1000)) + 1);
+    const offset = Math.max(0, Math.round((startInside.getTime() - rangeStart.getTime()) / (24 * 60 * 60 * 1000)));
+
+    const markers = [
+      { raw: range.intakeRaw, label: "Заезд" },
+      { raw: range.startRaw, label: "Старт" },
+      { raw: range.endRaw, label: "Выдача" },
+    ]
+      .map((item) => {
+        const date = parseDateOnly(item.raw);
+        if (!date || date < rangeStart || date > rangeEnd) return null;
+        const dayOffset = Math.round((date.getTime() - rangeStart.getTime()) / (24 * 60 * 60 * 1000));
+        return {
+          ...item,
+          dayOffset,
+          time: hasTimePart(item.raw) ? formatTimePart(item.raw) : "",
+        };
+      })
+      .filter(Boolean);
+
+    rows.push({
+      orderId: order.id,
+      clientName: order.client_name || "Клиент",
+      carModel: order.car_model || "Машина",
+      compactDates: `${displayDate(range.from)} → ${displayDate(range.to)}`,
+      status: order.status || "",
+      statusVisual: visual,
+      left: `${(offset / Math.max(1, (rangeEnd.getTime() - rangeStart.getTime()) / (24 * 60 * 60 * 1000) + 1)) * 100}%`,
+      width: `${(span / Math.max(1, (rangeEnd.getTime() - rangeStart.getTime()) / (24 * 60 * 60 * 1000) + 1)) * 100}%`,
+      barColor: getStatusLineColor(order.status || ""),
+      markers,
+    });
+  });
+
+  rows.sort((a, b) => getOrderStatusPriority(a.status) - getOrderStatusPriority(b.status));
+  return { rows, unplanned };
+}
+
+function renderTimelineCalendar({ rows = [], columns = [], viewDays = 7, rangeStart, unplanned = [] } = {}) {
+  return card(`
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px;">
+      <div>
+        <div style="font-size:15px; font-weight:800;">Timeline planner</div>
+        <div class="ui-secondary-text" style="margin-top:2px;">Горизонталь — дни, вертикаль — заказы</div>
+      </div>
+      <span class="soft-chip">${rows.length}</span>
+    </div>
+
+    <div class="timeline-calendar">
+      <div class="timeline-header">
+        <div class="timeline-order-col">Заказ</div>
+        <div class="timeline-days" style="grid-template-columns:repeat(${viewDays}, minmax(64px,1fr));">
+          ${columns.map((day) => `
+            <div class="timeline-day-cell ${isSameDay(day, new Date()) ? "is-today" : ""}">
+              <div>${escapeHtml(day.toLocaleDateString("ru-RU", { weekday: "short" }))}</div>
+              <strong>${escapeHtml(day.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" }))}</strong>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+
+      <div class="timeline-body">
+        ${rows.length
+          ? rows.map((row) => `
+              <button class="timeline-row-btn" onclick="openOrderFromCalendar('${escapeHtml(String(row.orderId || ""))}')">
+                <div class="timeline-order-col">
+                  <div class="timeline-order-title">${escapeHtml(row.carModel)}</div>
+                  <div class="timeline-order-sub">${escapeHtml(row.clientName)}</div>
+                </div>
+                <div class="timeline-track-wrap">
+                  <div class="timeline-track-grid" style="grid-template-columns:repeat(${viewDays}, minmax(64px,1fr));">
+                    ${columns.map((day) => `<div class="timeline-grid-cell ${isSameDay(day, rangeStart) ? "is-start" : ""}"></div>`).join("")}
+                  </div>
+                  <div class="timeline-bar" style="left:${row.left}; width:${row.width}; --timeline-status:${row.barColor};">
+                    <div class="timeline-bar-main">
+                      <span>${escapeHtml(row.carModel)}</span>
+                      <span>${escapeHtml(row.compactDates)}</span>
+                    </div>
+                    <div class="timeline-bar-sub">
+                      <span>${renderToneBadge(row.statusVisual.label, { bg: row.statusVisual.bg, color: row.statusVisual.color, border: row.statusVisual.border })}</span>
+                    </div>
+                    ${row.markers.map((marker) => `
+                      <span class="timeline-marker" style="left:calc(${((marker.dayOffset + 0.5) / viewDays) * 100}% - 2px);">
+                        <span>${escapeHtml(marker.label)}${marker.time ? ` · ${escapeHtml(marker.time)}` : ""}</span>
+                      </span>
+                    `).join("")}
+                  </div>
+                </div>
+              </button>
+            `).join("")
+          : `<div style="padding:24px 8px;">${renderEmptyState({ icon: "🧭", title: "Календарь пуст", description: "Лэйаут сохранён — заказы появятся здесь полосами по дням." })}</div>`
+        }
+      </div>
+    </div>
+
+    ${unplanned.length
+      ? `
+        <div style="margin-top:12px; border-top:1px solid rgba(148,163,184,.2); padding-top:10px;">
+          <div style="font-size:12px; color:#fcd34d; margin-bottom:8px;">Без полной даты (${unplanned.length})</div>
+          <div style="display:flex; flex-wrap:wrap; gap:6px;">
+            ${unplanned.slice(0, 8).map((order) => `
+              <button onclick="openOrderFromCalendar('${escapeHtml(String(order.id || ""))}')" style="border:1px solid rgba(250,204,21,.35); border-radius:999px; padding:6px 10px; background:rgba(66,32,6,.3); color:#fde68a; font-size:11px;">
+                ${escapeHtml(order.car_model || "Машина")}
+              </button>
+            `).join("")}
+          </div>
+        </div>
+      `
+      : ""
+    }
+  `, "overflow:hidden;");
+}
+
 async function openOrderFromCalendar(orderId) {
   if (!orderId) return;
   showTab("orders");
@@ -1573,13 +1747,17 @@ async function openOrderFromCalendar(orderId) {
 
 function shiftCalendarAnchor(direction = 1) {
   const base = state.calendarAnchor || new Date();
-  const amount = state.calendarView === "week" ? 7 * direction : direction;
+  const amount = state.calendarView === "week"
+    ? 7 * direction
+    : state.calendarView === "two_weeks"
+      ? 14 * direction
+      : direction;
   state.calendarAnchor = addDays(base, amount);
   loadCalendar();
 }
 
 function setCalendarView(view = "day") {
-  state.calendarView = view === "week" ? "week" : "day";
+  state.calendarView = ["day", "week", "two_weeks"].includes(view) ? view : "week";
   loadCalendar();
 }
 
@@ -1601,22 +1779,22 @@ async function loadCalendar() {
       state.orders = orders;
     }
 
-    const events = buildCalendarEvents(orders);
-    const { buckets, soonHorizonDays } = buildCalendarOperationalBuckets(orders, { soonHorizonDays: 3 });
     const anchor = startOfDay(state.calendarAnchor || new Date());
     state.calendarAnchor = anchor;
-
-    const dayEvents = events.filter((x) => isSameDay(x.date, anchor));
-    const weekStart = startOfWeek(anchor);
-    const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+    const viewDays = state.calendarView === "day" ? 1 : state.calendarView === "two_weeks" ? 14 : 7;
+    const rangeStart = state.calendarView === "day" ? anchor : startOfWeek(anchor);
+    const rangeEnd = addDays(rangeStart, viewDays - 1);
+    const timelineRows = buildTimelineRows(orders, rangeStart, rangeEnd);
+    const timelineColumns = Array.from({ length: viewDays }, (_, i) => addDays(rangeStart, i));
 
     el.innerHTML = `
       <div style="padding:14px 12px 18px;">
         <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;">
-          <div style="font-size:17px; font-weight:800;">Календарь задач</div>
-          <div style="display:flex; gap:6px;">
+          <div style="font-size:17px; font-weight:800;">Календарь загрузки студии</div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
             <button onclick="setCalendarView('day')" style="padding:8px 10px; border-radius:10px; border:1px solid ${state.calendarView === "day" ? "rgba(96,165,250,.45)" : "#374151"}; background:${state.calendarView === "day" ? "rgba(59,130,246,.2)" : "#111827"}; color:#fff;">День</button>
             <button onclick="setCalendarView('week')" style="padding:8px 10px; border-radius:10px; border:1px solid ${state.calendarView === "week" ? "rgba(96,165,250,.45)" : "#374151"}; background:${state.calendarView === "week" ? "rgba(59,130,246,.2)" : "#111827"}; color:#fff;">Неделя</button>
+            <button onclick="setCalendarView('two_weeks')" style="padding:8px 10px; border-radius:10px; border:1px solid ${state.calendarView === "two_weeks" ? "rgba(96,165,250,.45)" : "#374151"}; background:${state.calendarView === "two_weeks" ? "rgba(59,130,246,.2)" : "#111827"}; color:#fff;">2 недели</button>
           </div>
         </div>
         <div style="display:flex; gap:6px; margin-bottom:12px;">
@@ -1631,119 +1809,17 @@ async function loadCalendar() {
               <div style="font-size:13px; color:#94a3b8; margin-bottom:6px;">Период</div>
               <div style="font-size:16px; font-weight:700;">${escapeHtml(formatCalendarTitle(anchor, state.calendarView))}</div>
             </div>
-            <span class="soft-chip">${state.calendarView === "day" ? "Day" : "Week"}</span>
+            <span class="soft-chip">${state.calendarView === "day" ? "1 день" : state.calendarView === "week" ? "7 дней" : "14 дней"}</span>
           </div>
         `)}
-
-        ${renderCalendarOpsSection(
-          "Сегодня",
-          "Критичные события текущего дня",
-          [
-            {
-              label: "Заезды сегодня",
-              items: buckets.today.arrivals,
-              hint: (item) => `Приём: ${displayDate(item.intakeDateRaw)}`,
-            },
-            {
-              label: "Старты сегодня",
-              items: buckets.today.starts,
-              hint: (item) => `Старт: ${displayDate(item.startDateRaw)}`,
-            },
-            {
-              label: "Выдачи сегодня",
-              items: buckets.today.completions,
-              hint: (item) => `Финиш: ${displayDate(item.endDateRaw)}`,
-            },
-          ],
-          { border: "rgba(96,165,250,.4)", accent: "#bfdbfe" }
-        )}
-
-        ${renderCalendarOpsSection(
-          "Скоро",
-          `План на ближайшие ${soonHorizonDays} дня`,
-          [
-            {
-              label: "Ближайшие заезды",
-              items: buckets.soon.arrivals,
-              hint: (item) => `Приём: ${displayDate(item.intakeDateRaw)}`,
-            },
-            {
-              label: "Ближайшие старты",
-              items: buckets.soon.starts,
-              hint: (item) => `Старт: ${displayDate(item.startDateRaw)}`,
-            },
-            {
-              label: "Ближайшие выдачи",
-              items: buckets.soon.completions,
-              hint: (item) => `Финиш: ${displayDate(item.endDateRaw)}`,
-            },
-          ],
-          { border: "rgba(52,211,153,.35)", accent: "#86efac" }
-        )}
-
-        ${card(`
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
-            <div>
-              <div style="font-size:15px; font-weight:800; color:#fca5a5;">Просрочено</div>
-              <div style="font-size:12px; color:#94a3b8; margin-top:2px;">Дата завершения прошла, а заказ не закрыт</div>
-            </div>
-            <span class="soft-chip" style="border-color:rgba(248,113,113,.4); color:#fecaca; background:rgba(69,10,10,.38);">${buckets.overdue.length}</span>
-          </div>
-          <div style="margin-top:8px;">
-            ${buckets.overdue.length
-              ? buckets.overdue.map((item) => renderCalendarOpsOrderCard(item, `Финиш: ${displayDate(item.endDateRaw)}`)).join("")
-              : `<div style="font-size:12px; color:#6b7280;">Просроченных заказов нет</div>`
-            }
-          </div>
-        `, "margin-bottom:10px; background:linear-gradient(180deg,#180f14,#150b12); border:1px solid rgba(248,113,113,.35);")}
-
-        ${card(`
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
-            <div>
-              <div style="font-size:15px; font-weight:800; color:#fcd34d;">Незапланировано</div>
-              <div style="font-size:12px; color:#94a3b8; margin-top:2px;">Активные заказы без полной даты старта/финиша</div>
-            </div>
-            <span class="soft-chip" style="border-color:rgba(250,204,21,.4); color:#fde68a; background:rgba(66,32,6,.38);">${buckets.unplanned.length}</span>
-          </div>
-          <div style="margin-top:8px;">
-            ${buckets.unplanned.length
-              ? buckets.unplanned.map((item) => {
-                  const missing = [
-                    !parseDateOnly(item.startDateRaw) ? "нет даты старта" : null,
-                    !parseDateOnly(item.endDateRaw) ? "нет даты финиша" : null,
-                  ].filter(Boolean).join(", ");
-                  return renderCalendarOpsOrderCard(item, missing || "Неполный график");
-                }).join("")
-              : `<div style="font-size:12px; color:#6b7280;">Пробелов планирования не найдено</div>`
-            }
-          </div>
-        `, "margin-bottom:10px; background:linear-gradient(180deg,#19130a,#120f08); border:1px solid rgba(250,204,21,.35);")}
-
-        ${state.calendarView === "day"
-          ? card(`
-              <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                <div style="font-size:14px; font-weight:700;">События на день</div>
-                <div class="ui-secondary-text">${dayEvents.length}</div>
-              </div>
-              ${dayEvents.length
-                ? dayEvents.map(renderCalendarEventCard).join("")
-                : renderEmptyState({ icon: "🗓️", title: "Нет событий на дату", description: "Выберите другой день или переключитесь на недельный вид." })
-              }
-            `)
-          : weekDays.map((day) => {
-              const items = events.filter((x) => isSameDay(x.date, day));
-              return card(`
-                <div style="display:flex; justify-content:space-between; margin-bottom:9px;">
-                  <div style="font-size:14px; font-weight:700;">${escapeHtml(formatDayLabel(day))}</div>
-                  <div class="ui-secondary-text">${items.length}</div>
-                </div>
-                ${items.length
-                  ? items.map(renderCalendarEventCard).join("")
-                  : renderEmptyState({ icon: "🕒", title: "Событий нет", description: "На этот день ничего не запланировано." })
-                }
-              `);
-            }).join("")
-        }
+        ${renderTimelineCalendar({
+          rows: timelineRows.rows,
+          columns: timelineColumns,
+          viewDays,
+          rangeStart,
+          rangeEnd,
+          unplanned: timelineRows.unplanned,
+        })}
       </div>
     `;
   } catch (e) {
