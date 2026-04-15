@@ -16,6 +16,7 @@ const state = {
   inventoryMovementsByItem: {},
   inventoryView: "film",
   ordersStatusFilter: "all",
+  clientsSearch: "",
   inventoryFiltersByView: {
     film: {
       search: "",
@@ -689,6 +690,7 @@ function renderLayout() {
       <div id="app">
         <div id="dashboard" class="tab"></div>
         <div id="orders" class="tab" style="display:none"></div>
+        <div id="clients" class="tab" style="display:none"></div>
         <div id="calendar" class="tab" style="display:none"></div>
         <div id="inventory" class="tab" style="display:none"></div>
         <div id="finance" class="tab" style="display:none"></div>
@@ -715,6 +717,10 @@ function renderLayout() {
       <button class="nav-btn" data-nav="orders" onclick="showTab('orders')" style="flex:1;">
         <span class="nav-icon">📦</span>
         <span class="nav-label">Заказы</span>
+      </button>
+      <button class="nav-btn" data-nav="clients" onclick="showTab('clients')" style="flex:1;">
+        <span class="nav-icon">👤</span>
+        <span class="nav-label">Клиенты</span>
       </button>
       <button class="nav-btn" data-nav="calendar" onclick="showTab('calendar')" style="flex:1;">
         <span class="nav-icon">🗓️</span>
@@ -788,9 +794,241 @@ function showTab(tab) {
 
   if (tab === "dashboard") loadDashboard();
   if (tab === "orders") loadOrders();
+  if (tab === "clients") loadClientsTab();
   if (tab === "calendar") loadCalendar();
   if (tab === "inventory") loadInventory();
   if (tab === "finance") loadFinance();
+}
+
+function getClientDisplayName(client = {}) {
+  return String(client?.full_name || client?.name || client?.client_name || "").trim();
+}
+
+function normalizeClientName(value = "") {
+  return String(value || "").trim().toLowerCase();
+}
+
+function getOrderClientName(order = {}) {
+  return String(order?.client_name || order?.client?.full_name || order?.customer_name || "").trim();
+}
+
+function getVisitSortTimestamp(order = {}) {
+  const date = parseDateValue(order?.created_at || order?.date || order?.updated_at || order?.intake_date || "");
+  if (date) return date.getTime();
+  const idAsNumber = Number(order?.id);
+  return Number.isFinite(idAsNumber) ? idAsNumber : 0;
+}
+
+function sortVisitsDesc(visits = []) {
+  return [...visits].sort((a, b) => getVisitSortTimestamp(b) - getVisitSortTimestamp(a));
+}
+
+function getOrderTotalMoney(order = {}) {
+  return asNumber(order?.total ?? order?.price_total ?? order?.amount_total ?? order?.sum_total, 0);
+}
+
+function getOrderPaidMoney(order = {}) {
+  return asNumber(order?.paid ?? order?.paid_total ?? order?.amount_paid, 0);
+}
+
+function getOrderDueMoney(order = {}) {
+  const dueFromOrder = asNumber(order?.due ?? order?.debt ?? order?.amount_due, NaN);
+  if (Number.isFinite(dueFromOrder)) return dueFromOrder;
+  return Math.max(0, getOrderTotalMoney(order) - getOrderPaidMoney(order));
+}
+
+function getClientVisits(client = {}, allOrders = []) {
+  const clientId = String(client?.id || "").trim();
+  const clientName = normalizeClientName(getClientDisplayName(client));
+
+  return sortVisitsDesc((Array.isArray(allOrders) ? allOrders : []).filter((order) => {
+    const orderClientId = String(order?.client_id || "").trim();
+    if (clientId && orderClientId && clientId === orderClientId) return true;
+    if (clientId && orderClientId) return false;
+
+    const orderClientName = normalizeClientName(getOrderClientName(order));
+    return Boolean(clientName && orderClientName && clientName === orderClientName);
+  }));
+}
+
+function buildClientSummary(client = {}, allOrders = []) {
+  const visits = getClientVisits(client, allOrders);
+  const totalSpent = visits.reduce((sum, order) => sum + getOrderTotalMoney(order), 0);
+  const lastVisitDate = visits.length
+    ? (visits[0]?.created_at || visits[0]?.date || visits[0]?.updated_at || "")
+    : "";
+  const cars = [...new Set(
+    visits
+      .map((order) => String(order?.car_model || order?.car_number || "").trim())
+      .filter(Boolean)
+  )];
+
+  return {
+    visits,
+    visitsCount: visits.length,
+    totalSpent,
+    lastVisitDate,
+    cars,
+  };
+}
+
+function filterClientsList(clients = [], search = "") {
+  const query = normalizeClientName(search);
+  if (!query) return clients;
+
+  return clients.filter((client) => {
+    const name = normalizeClientName(getClientDisplayName(client));
+    const phone = normalizeClientName(client?.phone || client?.contact || "");
+    const instagram = normalizeClientName(client?.instagram || "");
+    return name.includes(query) || phone.includes(query) || instagram.includes(query);
+  });
+}
+
+async function loadClientsTab() {
+  const el = document.getElementById("clients");
+  if (!el) return;
+  el.innerHTML = `<div style="padding:16px;">Загрузка...</div>`;
+
+  try {
+    const [clientsRes, ordersRes] = await Promise.all([
+      api("get_clients"),
+      api("get_orders"),
+    ]);
+
+    state.clients = Array.isArray(clientsRes?.items) ? clientsRes.items : [];
+    state.orders = Array.isArray(ordersRes?.items) ? ordersRes.items : [];
+
+    renderClientsList();
+  } catch (e) {
+    console.error(e);
+    el.innerHTML = `<div style="padding:16px;">Ошибка загрузки клиентов</div>`;
+  }
+}
+
+function renderClientsList() {
+  const el = document.getElementById("clients");
+  if (!el) return;
+
+  const filteredClients = filterClientsList(state.clients || [], state.clientsSearch || "");
+  const sortedClients = [...filteredClients].sort((a, b) => {
+    const aSummary = buildClientSummary(a, state.orders || []);
+    const bSummary = buildClientSummary(b, state.orders || []);
+    return getVisitSortTimestamp(bSummary.visits[0] || {}) - getVisitSortTimestamp(aSummary.visits[0] || {});
+  });
+
+  el.innerHTML = `
+    <div style="padding:16px;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+        ${btn("+ Новый клиент", "openCreateClient()")}
+      </div>
+
+      ${card(`
+        <div style="font-size:12px; color:#94a3b8; margin-bottom:8px;">Поиск по имени, телефону или Instagram</div>
+        <input
+          id="clients_search"
+          placeholder="Найти клиента..."
+          value="${escapeHtml(state.clientsSearch || "")}"
+          oninput="onClientsSearchInput(this.value)"
+          style="margin-bottom:0;"
+        />
+      `)}
+
+      ${sortedClients.length
+        ? sortedClients.map((client) => {
+            const summary = buildClientSummary(client, state.orders || []);
+            const clientName = getClientDisplayName(client) || "Без имени";
+            return card(`
+              <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+                <div style="min-width:0;">
+                  <div style="font-size:16px; font-weight:800;">${escapeHtml(clientName)}</div>
+                  ${client.phone || client.contact
+                    ? `<div style="margin-top:3px; font-size:13px; color:#94a3b8;">📞 ${escapeHtml(client.phone || client.contact)}</div>`
+                    : ""}
+                  <div style="margin-top:7px; font-size:13px; color:#cbd5e1;">Визитов: <b>${summary.visitsCount}</b></div>
+                  ${summary.lastVisitDate
+                    ? `<div style="margin-top:3px; font-size:13px; color:#cbd5e1;">Последний визит: <b>${displayDate(summary.lastVisitDate)}</b></div>`
+                    : ""}
+                  ${summary.totalSpent > 0
+                    ? `<div style="margin-top:3px; font-size:13px; color:#cbd5e1;">Сумма заказов: <b>${formatMoney(summary.totalSpent)} ₴</b></div>`
+                    : ""}
+                </div>
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                  ${btn("Карточка", `openClientCard('${String(client.id)}')`, "white-space:nowrap;", "secondary")}
+                </div>
+              </div>
+            `);
+          }).join("")
+        : card(renderEmptyState({
+          icon: "👤",
+          title: "Клиенты не найдены",
+          description: "Проверьте строку поиска или добавьте нового клиента.",
+        }))}
+    </div>
+  `;
+}
+
+function onClientsSearchInput(value = "") {
+  state.clientsSearch = String(value || "");
+  renderClientsList();
+}
+
+async function openClientCard(clientId) {
+  if (!state.orders?.length) {
+    try {
+      const ordersRes = await api("get_orders");
+      state.orders = Array.isArray(ordersRes?.items) ? ordersRes.items : [];
+    } catch (e) {
+      console.error("Failed to load orders for client card", e);
+    }
+  }
+
+  const client = (state.clients || []).find((item) => String(item.id) === String(clientId));
+  if (!client) {
+    safeAlert("Клиент не найден");
+    return;
+  }
+
+  const summary = buildClientSummary(client, state.orders || []);
+  const clientName = getClientDisplayName(client) || "Без имени";
+  const carsLabel = summary.cars.length ? summary.cars.join(", ") : "";
+
+  openModal(`
+    <h3 style="margin-top:0;">${escapeHtml(clientName)}</h3>
+    <div style="font-size:13px; color:#cbd5e1; margin-bottom:4px;">Визитов: <b>${summary.visitsCount}</b></div>
+    ${summary.lastVisitDate
+      ? `<div style="font-size:13px; color:#cbd5e1; margin-bottom:4px;">Последний визит: <b>${displayDate(summary.lastVisitDate)}</b></div>`
+      : ""}
+    ${carsLabel
+      ? `<div style="font-size:13px; color:#cbd5e1; margin-bottom:4px;">Машины: <b>${escapeHtml(carsLabel)}</b></div>`
+      : ""}
+    ${summary.totalSpent > 0
+      ? `<div style="font-size:13px; color:#cbd5e1; margin-bottom:10px;">Сумма заказов: <b>${formatMoney(summary.totalSpent)} ₴</b></div>`
+      : ""}
+
+    <div style="margin:12px 0 8px; font-size:15px; font-weight:800;">История посещений</div>
+    ${summary.visits.length
+      ? `
+      <div style="display:grid; gap:8px;">
+        ${summary.visits.map((order) => `
+          <div style="border:1px solid rgba(148,163,184,.3); border-radius:12px; padding:10px; background:rgba(2,6,23,.45);">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+              <div style="font-size:13px; color:#cbd5e1;">
+                <div style="font-size:14px; font-weight:700; color:#f8fafc;">Заказ #${escapeHtml(order.id || "—")}</div>
+                <div style="margin-top:2px;">Дата: ${displayDate(order.created_at || order.date || order.updated_at || "")}</div>
+                <div style="margin-top:2px;">Авто: ${escapeHtml(order.car_model || order.car_number || "—")}</div>
+                <div style="margin-top:2px;">Статус: ${escapeHtml(statusVisual(order.status).label)}</div>
+                <div style="margin-top:2px;">Сумма: ${formatMoney(getOrderTotalMoney(order))} ₴</div>
+                ${getOrderPaidMoney(order) > 0 ? `<div style="margin-top:2px;">Оплачено: ${formatMoney(getOrderPaidMoney(order))} ₴</div>` : ""}
+                ${getOrderDueMoney(order) > 0 ? `<div style="margin-top:2px; color:#fda4af;">Долг: ${formatMoney(getOrderDueMoney(order))} ₴</div>` : ""}
+              </div>
+              ${btn("Открыть", `openOrder('${String(order.id)}'); closeModal();`, "padding:8px 10px; white-space:nowrap;", "secondary")}
+            </div>
+          </div>
+        `).join("")}
+      </div>
+      `
+      : `<div style="font-size:13px; color:#94a3b8;">У клиента пока нет посещений.</div>`}
+  `);
 }
 
 async function loadDashboard() {
