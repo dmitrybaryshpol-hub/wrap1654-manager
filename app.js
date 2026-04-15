@@ -1605,9 +1605,9 @@ function getTimelineRangeForOrder(order = {}) {
 function getStatusLineColor(status = "") {
   const key = String(status || "").toLowerCase();
   if (key === "new") return "#60a5fa";
-  if (key === "in_progress") return "#facc15";
-  if (key === "ready") return "#2dd4bf";
-  if (key === "closed") return "#818cf8";
+  if (key === "in_progress") return "#f59e0b";
+  if (key === "ready") return "#34d399";
+  if (key === "closed") return "#94a3b8";
   return "#94a3b8";
 }
 
@@ -1650,9 +1650,11 @@ function buildTimelineRows(orders = [], rangeStart, rangeEnd) {
       orderId: order.id,
       clientName: order.client_name || "Клиент",
       carModel: order.car_model || "Машина",
-      compactDates: `${displayDate(range.from)} → ${displayDate(range.to)}`,
+      compactDates: `${displayDate(range.from).slice(0, 5)} → ${displayDate(range.to).slice(0, 5)}`,
       status: order.status || "",
       statusVisual: visual,
+      rangeFrom: range.from,
+      rangeTo: range.to,
       left: `${(offset / Math.max(1, (rangeEnd.getTime() - rangeStart.getTime()) / (24 * 60 * 60 * 1000) + 1)) * 100}%`,
       width: `${(span / Math.max(1, (rangeEnd.getTime() - rangeStart.getTime()) / (24 * 60 * 60 * 1000) + 1)) * 100}%`,
       barColor: getStatusLineColor(order.status || ""),
@@ -1664,20 +1666,86 @@ function buildTimelineRows(orders = [], rangeStart, rangeEnd) {
   return { rows, unplanned };
 }
 
+function renderDayModeAgenda({ orders = [], day }) {
+  const items = [];
+  (Array.isArray(orders) ? orders : []).forEach((order) => {
+    const range = getTimelineRangeForOrder(order);
+    const from = range.from;
+    const to = range.to;
+    if (!from || !to || day < from || day > to) return;
+    const milestones = [
+      { label: "Заезд", value: range.intakeRaw },
+      { label: "Старт", value: range.startRaw },
+      { label: "Выдача", value: range.endRaw },
+    ]
+      .map((point) => {
+        const pointDate = parseDateOnly(point.value);
+        if (!pointDate || !isSameDay(pointDate, day)) return null;
+        return {
+          label: point.label,
+          time: hasTimePart(point.value) ? formatTimePart(point.value) : "",
+        };
+      })
+      .filter(Boolean);
+
+    items.push({
+      id: order.id,
+      car: order.car_model || "Машина",
+      client: order.client_name || "Клиент",
+      status: statusVisual(order.status || ""),
+      color: getStatusLineColor(order.status || ""),
+      period: `${displayDate(from).slice(0, 5)} → ${displayDate(to).slice(0, 5)}`,
+      milestones,
+    });
+  });
+
+  return card(`
+    <div class="calendar-day-panel">
+      <div class="calendar-day-title">
+        <strong>${escapeHtml(day.toLocaleDateString("ru-RU", { weekday: "long", day: "2-digit", month: "long" }))}</strong>
+        <span>${items.length} ${items.length === 1 ? "заказ" : items.length < 5 ? "заказа" : "заказов"}</span>
+      </div>
+      ${items.length
+        ? `<div class="calendar-day-list">
+            ${items.map((item) => `
+              <button class="calendar-day-item" onclick="openOrderFromCalendar('${escapeHtml(String(item.id || ""))}')">
+                <span class="calendar-day-item-line" style="--status-line:${item.color};"></span>
+                <div class="calendar-day-item-main">
+                  <div class="calendar-day-item-top">
+                    <strong>${escapeHtml(item.car)}</strong>
+                    ${renderToneBadge(item.status.label, { bg: item.status.bg, color: item.status.color, border: item.status.border })}
+                  </div>
+                  <div class="calendar-day-item-meta">${escapeHtml(item.client)} · ${escapeHtml(item.period)}</div>
+                  <div class="calendar-day-milestones">
+                    ${item.milestones.length
+                      ? item.milestones.map((point) => `<span>${escapeHtml(point.label)}${point.time ? ` · ${escapeHtml(point.time)}` : ""}</span>`).join("")
+                      : `<span>Без этапов на сегодня</span>`
+                    }
+                  </div>
+                </div>
+              </button>
+            `).join("")}
+          </div>`
+        : `<div class="calendar-day-empty">Нет заказов на выбранный день.</div>`
+      }
+    </div>
+  `, "overflow:hidden;");
+}
+
 function renderTimelineCalendar({ rows = [], columns = [], viewDays = 7, rangeStart, unplanned = [] } = {}) {
   return card(`
-    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px;">
+    <div class="planner-caption">
       <div>
-        <div style="font-size:15px; font-weight:800;">Timeline planner</div>
-        <div class="ui-secondary-text" style="margin-top:2px;">Горизонталь — дни, вертикаль — заказы</div>
+        <div class="planner-title">Timeline planner</div>
+        <div class="planner-subtitle">Горизонталь — дни, вертикаль — заказы</div>
       </div>
       <span class="soft-chip">${rows.length}</span>
     </div>
 
     <div class="timeline-calendar">
       <div class="timeline-header">
-        <div class="timeline-order-col">Заказ</div>
-        <div class="timeline-days" style="grid-template-columns:repeat(${viewDays}, minmax(64px,1fr));">
+        <div class="timeline-order-col">Авто / клиент</div>
+        <div class="timeline-days" style="grid-template-columns:repeat(${viewDays}, minmax(72px,1fr));">
           ${columns.map((day) => `
             <div class="timeline-day-cell ${isSameDay(day, new Date()) ? "is-today" : ""}">
               <div>${escapeHtml(day.toLocaleDateString("ru-RU", { weekday: "short" }))}</div>
@@ -1691,51 +1759,45 @@ function renderTimelineCalendar({ rows = [], columns = [], viewDays = 7, rangeSt
         ${rows.length
           ? rows.map((row) => `
               <button class="timeline-row-btn" onclick="openOrderFromCalendar('${escapeHtml(String(row.orderId || ""))}')">
-                <div class="timeline-order-col">
+                <div class="timeline-order-col timeline-order-meta">
                   <div class="timeline-order-title">${escapeHtml(row.carModel)}</div>
                   <div class="timeline-order-sub">${escapeHtml(row.clientName)}</div>
                 </div>
                 <div class="timeline-track-wrap">
-                  <div class="timeline-track-grid" style="grid-template-columns:repeat(${viewDays}, minmax(64px,1fr));">
-                    ${columns.map((day) => `<div class="timeline-grid-cell ${isSameDay(day, rangeStart) ? "is-start" : ""}"></div>`).join("")}
+                  <div class="timeline-track-grid" style="grid-template-columns:repeat(${viewDays}, minmax(72px,1fr));">
+                    ${columns.map(() => `<div class="timeline-grid-cell"></div>`).join("")}
                   </div>
                   <div class="timeline-bar" style="left:${row.left}; width:${row.width}; --timeline-status:${row.barColor};">
                     <div class="timeline-bar-main">
                       <span>${escapeHtml(row.carModel)}</span>
                       <span>${escapeHtml(row.compactDates)}</span>
                     </div>
-                    <div class="timeline-bar-sub">
-                      <span>${renderToneBadge(row.statusVisual.label, { bg: row.statusVisual.bg, color: row.statusVisual.color, border: row.statusVisual.border })}</span>
+                    <div class="timeline-bar-sub">${renderToneBadge(row.statusVisual.label, { bg: row.statusVisual.bg, color: row.statusVisual.color, border: row.statusVisual.border })}</div>
+                    <div class="timeline-markers-row">
+                      ${row.markers.map((marker) => `
+                        <span class="timeline-marker-chip" style="left:calc(${((marker.dayOffset + 0.5) / viewDays) * 100}% - 12px);">
+                          ${escapeHtml(marker.label)}${marker.time ? ` · ${escapeHtml(marker.time)}` : ""}
+                        </span>
+                      `).join("")}
                     </div>
-                    ${row.markers.map((marker) => `
-                      <span class="timeline-marker" style="left:calc(${((marker.dayOffset + 0.5) / viewDays) * 100}% - 2px);">
-                        <span>${escapeHtml(marker.label)}${marker.time ? ` · ${escapeHtml(marker.time)}` : ""}</span>
-                      </span>
-                    `).join("")}
                   </div>
                 </div>
               </button>
             `).join("")
-          : `<div style="padding:24px 8px;">${renderEmptyState({ icon: "🧭", title: "Календарь пуст", description: "Лэйаут сохранён — заказы появятся здесь полосами по дням." })}</div>`
+          : `<div class="timeline-empty">${renderEmptyState({ icon: "🧭", title: "Нет заказов в этом периоде", description: "Сетка дней сохранена — новые заказы появятся здесь полосами." })}</div>`
         }
       </div>
     </div>
-
-    ${unplanned.length
-      ? `
-        <div style="margin-top:12px; border-top:1px solid rgba(148,163,184,.2); padding-top:10px;">
-          <div style="font-size:12px; color:#fcd34d; margin-bottom:8px;">Без полной даты (${unplanned.length})</div>
-          <div style="display:flex; flex-wrap:wrap; gap:6px;">
-            ${unplanned.slice(0, 8).map((order) => `
-              <button onclick="openOrderFromCalendar('${escapeHtml(String(order.id || ""))}')" style="border:1px solid rgba(250,204,21,.35); border-radius:999px; padding:6px 10px; background:rgba(66,32,6,.3); color:#fde68a; font-size:11px;">
-                ${escapeHtml(order.car_model || "Машина")}
-              </button>
-            `).join("")}
-          </div>
+    ${unplanned.length ? `
+      <div class="timeline-unplanned">
+        <div class="timeline-unplanned-title">Без полной даты (${unplanned.length})</div>
+        <div class="timeline-unplanned-list">
+          ${unplanned.slice(0, 8).map((order) => `
+            <button onclick="openOrderFromCalendar('${escapeHtml(String(order.id || ""))}')">${escapeHtml(order.car_model || "Машина")}</button>
+          `).join("")}
         </div>
-      `
-      : ""
-    }
+      </div>
+    ` : ""}
   `, "overflow:hidden;");
 }
 
@@ -1788,38 +1850,40 @@ async function loadCalendar() {
     const timelineColumns = Array.from({ length: viewDays }, (_, i) => addDays(rangeStart, i));
 
     el.innerHTML = `
-      <div style="padding:14px 12px 18px;">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;">
-          <div style="font-size:17px; font-weight:800;">Календарь загрузки студии</div>
-          <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
-            <button onclick="setCalendarView('day')" style="padding:8px 10px; border-radius:10px; border:1px solid ${state.calendarView === "day" ? "rgba(96,165,250,.45)" : "#374151"}; background:${state.calendarView === "day" ? "rgba(59,130,246,.2)" : "#111827"}; color:#fff;">День</button>
-            <button onclick="setCalendarView('week')" style="padding:8px 10px; border-radius:10px; border:1px solid ${state.calendarView === "week" ? "rgba(96,165,250,.45)" : "#374151"}; background:${state.calendarView === "week" ? "rgba(59,130,246,.2)" : "#111827"}; color:#fff;">Неделя</button>
-            <button onclick="setCalendarView('two_weeks')" style="padding:8px 10px; border-radius:10px; border:1px solid ${state.calendarView === "two_weeks" ? "rgba(96,165,250,.45)" : "#374151"}; background:${state.calendarView === "two_weeks" ? "rgba(59,130,246,.2)" : "#111827"}; color:#fff;">2 недели</button>
+      <div class="calendar-screen">
+        <div class="calendar-topbar">
+          <div class="calendar-topbar-title">Календарь загрузки студии</div>
+          <div class="calendar-view-switch">
+            <button class="${state.calendarView === "day" ? "active" : ""}" onclick="setCalendarView('day')">День</button>
+            <button class="${state.calendarView === "week" ? "active" : ""}" onclick="setCalendarView('week')">Неделя</button>
+            <button class="${state.calendarView === "two_weeks" ? "active" : ""}" onclick="setCalendarView('two_weeks')">2 недели</button>
           </div>
         </div>
-        <div style="display:flex; gap:6px; margin-bottom:12px;">
-          <button onclick="shiftCalendarAnchor(-1)" style="flex:1; padding:9px; border-radius:10px; border:1px solid #374151; background:#111827; color:#fff;">←</button>
-          <button onclick="moveCalendarToToday()" style="flex:2; padding:9px; border-radius:10px; border:1px solid #374151; background:#111827; color:#fff;">Сегодня</button>
-          <button onclick="shiftCalendarAnchor(1)" style="flex:1; padding:9px; border-radius:10px; border:1px solid #374151; background:#111827; color:#fff;">→</button>
+        <div class="calendar-nav-row">
+          <button onclick="shiftCalendarAnchor(-1)">←</button>
+          <button onclick="moveCalendarToToday()" class="today-btn">Сегодня</button>
+          <button onclick="shiftCalendarAnchor(1)">→</button>
         </div>
-
         ${card(`
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+          <div class="calendar-period-card">
             <div>
-              <div style="font-size:13px; color:#94a3b8; margin-bottom:6px;">Период</div>
-              <div style="font-size:16px; font-weight:700;">${escapeHtml(formatCalendarTitle(anchor, state.calendarView))}</div>
+              <div class="calendar-period-caption">Период</div>
+              <div class="calendar-period-value">${escapeHtml(formatCalendarTitle(anchor, state.calendarView))}</div>
             </div>
             <span class="soft-chip">${state.calendarView === "day" ? "1 день" : state.calendarView === "week" ? "7 дней" : "14 дней"}</span>
           </div>
         `)}
-        ${renderTimelineCalendar({
-          rows: timelineRows.rows,
-          columns: timelineColumns,
-          viewDays,
-          rangeStart,
-          rangeEnd,
-          unplanned: timelineRows.unplanned,
-        })}
+        ${state.calendarView === "day"
+          ? renderDayModeAgenda({ orders, day: anchor })
+          : renderTimelineCalendar({
+              rows: timelineRows.rows,
+              columns: timelineColumns,
+              viewDays,
+              rangeStart,
+              rangeEnd,
+              unplanned: timelineRows.unplanned,
+            })
+        }
       </div>
     `;
   } catch (e) {
