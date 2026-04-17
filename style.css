@@ -1321,3 +1321,101 @@ textarea{
     grid-template-columns:minmax(108px, 120px) var(--timeline-day-columns, repeat(7, minmax(52px, 1fr)));
   }
 }
+
+/* ===== Calendar layout hotfix (mobile Telegram Mini App) ===== */
+#app,
+#calendar,
+.tab,
+.calendar-screen,
+.calendar-topbar,
+.calendar-view-switch,
+.calendar-nav-row,
+.calendar-period-card {
+  min-width: 0;
+}
+
+#app-shell {
+  overflow-x: clip;
+  padding-bottom: calc(146px + env(safe-area-inset-bottom, 0px));
+}
+
+#calendar {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.calendar-screen {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+}
+
+.calendar-grid-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.timeline-shell {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  overflow: visible;
+}
+
+.timeline-grid {
+  width: max-content;
+  min-width: 100%;
+  grid-template-columns: minmax(124px, 156px) var(--timeline-day-columns, repeat(7, minmax(56px, 1fr)));
+}
+
+.timeline-head-label,
+.timeline-order-label {
+  min-width: 124px;
+  max-width: 156px;
+}
+
+.timeline-order-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-day-head,
+.timeline-grid-day {
+  min-width: 52px;
+}
+
+.timeline-day-head {
+  justify-content: center;
+  align-items: center;
+}
+
+#bottom-nav {
+  overflow-x: hidden !important;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+#bottom-nav .nav-btn {
+  min-width: 0;
+}
+
+@media (max-width: 430px) {
+  .calendar-screen {
+    padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .timeline-grid {
+    grid-template-columns: minmax(116px, 136px) var(--timeline-day-columns, repeat(7, minmax(52px, 1fr)));
+  }
+
+  .timeline-head-label,
+  .timeline-order-label {
+    min-width: 116px;
+    max-width: 136px;
+  }
+}
