@@ -487,6 +487,7 @@ function renderLayout() {
       #app-shell{
         max-width:920px;
         margin:0 auto;
+        width:100%;
       }
       #bottom-nav{
         max-width:920px;
@@ -495,6 +496,7 @@ function renderLayout() {
         border-bottom:0;
         border-radius:22px 22px 0 0;
         backdrop-filter:blur(10px);
+        box-shadow:0 -8px 26px rgba(2,6,23,.46);
       }
       .nav-btn{
         border:1px solid transparent;
@@ -667,7 +669,7 @@ function renderLayout() {
       }
     </style>
     <div id="app-shell" style="
-      padding-bottom:92px;
+      padding-bottom:calc(128px + env(safe-area-inset-bottom, 0px));
       color:#fff;
       background:transparent;
       min-height:100vh;
@@ -705,7 +707,7 @@ function renderLayout() {
       display:flex;
       gap:8px;
       overflow-x:auto;
-      padding:10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+      padding:10px 10px calc(14px + env(safe-area-inset-bottom, 0px));
       background:rgba(13,17,31,.92);
       border-top:1px solid rgba(167,139,250,.2);
       z-index:20;
