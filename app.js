@@ -274,6 +274,10 @@ function syncSelectedClientToOrderForm() {
 function card(html, extra = "") {
   return `
     <div style="
+      width:100%;
+      max-width:100%;
+      min-width:0;
+      box-sizing:border-box;
       background:linear-gradient(180deg, rgba(24,28,45,.9) 0%, rgba(16,20,34,.95) 100%);
       border:1px solid rgba(167,139,250,.16);
       border-radius:18px;
@@ -1751,7 +1755,8 @@ function renderTimelineCalendar({ rows = [], columns = [], viewDays = 7, unplann
   const emptyRows = Array.from({ length: 4 }, (_, i) => i + 1);
 
   return card(`
-    <div class="timeline-shell ${viewDays === 14 ? "is-two-weeks" : ""}" style="--timeline-day-columns:${dayColumns};">
+    <div class="calendar-grid-scroll">
+      <div class="timeline-shell ${viewDays === 14 ? "is-two-weeks" : ""}" style="--timeline-day-columns:${dayColumns};">
       <div class="timeline-grid timeline-grid-head">
         <div class="timeline-head-label">Машина</div>
         ${columns.map((day) => `
@@ -1790,6 +1795,7 @@ function renderTimelineCalendar({ rows = [], columns = [], viewDays = 7, unplann
         }
       </div>
       ${!rows.length ? `<div class="timeline-empty-note">Нет заказов в этом периоде</div>` : ""}
+      </div>
     </div>
     ${unplanned.length ? `<div class="ui-secondary-text" style="margin-top:8px;">Без полной даты: ${unplanned.length}</div>` : ""}
   `, "overflow:hidden;");
