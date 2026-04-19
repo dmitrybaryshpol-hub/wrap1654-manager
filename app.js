@@ -7,6 +7,7 @@ const state = {
   currentTab: "dashboard",
   calendarView: "week",
   calendarAnchor: new Date(),
+  calendarScheduler: null,
   fxRate: 0,
   fxUpdatedAt: null,
 
@@ -1643,6 +1644,125 @@ function getStatusAccent(status = "") {
   return "is-neutral";
 }
 
+function getOrderMachine(order = {}) {
+  return String(order?.car_model || order?.car_number || order?.car || "Без машины").trim() || "Без машины";
+}
+
+function getSchedulerStatusColor(status = "") {
+  const key = String(status || "").trim().toLowerCase();
+  if (key === "new") return "#3b82f6";
+  if (key === "in_progress") return "#f59e0b";
+  if (key === "ready") return "#22c55e";
+  if (key === "paused" || key === "waiting") return "#94a3b8";
+  return "#6366f1";
+}
+
+function buildSchedulerResources(orders = []) {
+  const seen = new Set();
+  return (Array.isArray(orders) ? orders : [])
+    .map((order) => getOrderMachine(order))
+    .filter((machine) => {
+      const key = machine.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map((machine, index) => ({ name: machine, id: `machine_${index + 1}_${machine}` }));
+}
+
+function buildSchedulerEvents(orders = [], resources = []) {
+  const resourceIndex = new Map(resources.map((resource) => [resource.name.toLowerCase(), resource.id]));
+  return (Array.isArray(orders) ? orders : []).flatMap((order) => {
+    const range = getTimelineRangeForOrder(order);
+    if (!range.from || !range.to) return [];
+
+    const status = String(order?.status || "new").trim().toLowerCase();
+    const machine = getOrderMachine(order);
+    const clientName = String(order?.client_name || "—");
+    const serviceType = String(orderTypeLabel(order) || "—");
+    const statusLabel = statusVisual(status).label;
+    const eventColor = getSchedulerStatusColor(status);
+    const resourceId = resourceIndex.get(machine.toLowerCase()) || resources[0]?.id || "unassigned";
+
+    const endExclusive = addDays(range.to, 1);
+    return [{
+      id: String(order?.id || `${machine}-${range.from.getTime()}`),
+      resource: resourceId,
+      start: DayPilot.Date.fromDatePart(range.from),
+      end: DayPilot.Date.fromDatePart(endExclusive),
+      backColor: `${eventColor}33`,
+      borderColor: eventColor,
+      fontColor: "#f8fafc",
+      cssClass: "wrap-scheduler-event",
+      html: `
+        <div class="wrap-event-line"><strong>${escapeHtml(machine)}</strong></div>
+        <div class="wrap-event-line">${escapeHtml(clientName)}</div>
+        <div class="wrap-event-line">${escapeHtml(serviceType)}</div>
+        <div class="wrap-event-line wrap-event-status">${escapeHtml(statusLabel)}</div>
+      `,
+      orderId: order?.id,
+      status,
+      toolTip: `${machine}\n${clientName}\n${serviceType}\n${statusLabel}`,
+    }];
+  });
+}
+
+function renderDayPilotScheduler({ orders = [], rangeStart, viewDays = 7 }) {
+  const schedulerHost = document.getElementById("calendarScheduler");
+  if (!schedulerHost) return;
+
+  if (!window.DayPilot?.Scheduler || !window.DayPilot?.Date) {
+    schedulerHost.innerHTML = `<div class="calendar-fallback-note">Не удалось загрузить DayPilot Lite Scheduler.</div>`;
+    return;
+  }
+
+  const resources = buildSchedulerResources(orders);
+  const events = buildSchedulerEvents(orders, resources);
+  const isMobile = window.innerWidth <= 640;
+
+  const schedulerConfig = {
+    locale: "ru-ru",
+    theme: "scheduler_traditional",
+    startDate: DayPilot.Date.fromDatePart(rangeStart),
+    days: viewDays,
+    scale: "Day",
+    timeHeaders: viewDays === 1
+      ? [{ groupBy: "Day", format: "dddd, d MMMM" }]
+      : [{ groupBy: "Month", format: "MMMM yyyy" }, { groupBy: "Day", format: "d dd" }],
+    rowHeaderColumns: [{ title: "Машина", width: isMobile ? 140 : 220 }],
+    treeEnabled: false,
+    rowMinHeight: isMobile ? 78 : 70,
+    eventHeight: isMobile ? 72 : 64,
+    durationBarVisible: false,
+    cellWidth: viewDays === 14 ? (isMobile ? 62 : 78) : (isMobile ? 78 : 104),
+    resources,
+    events,
+    eventMoveHandling: "Disabled",
+    eventResizeHandling: "Disabled",
+    eventDeleteHandling: "Disabled",
+    onEventClick: async (args) => {
+      const id = args?.e?.data?.orderId;
+      if (!id) return;
+      await openOrderFromCalendar(id);
+    },
+    onBeforeEventRender: (args) => {
+      const statusColor = getSchedulerStatusColor(args.data.status);
+      args.data.borderColor = statusColor;
+      args.data.barColor = statusColor;
+      args.data.backColor = `${statusColor}2e`;
+    },
+  };
+
+  if (!state.calendarScheduler) {
+    state.calendarScheduler = new DayPilot.Scheduler("calendarScheduler", schedulerConfig);
+    state.calendarScheduler.init();
+    return;
+  }
+
+  Object.assign(state.calendarScheduler, schedulerConfig);
+  state.calendarScheduler.update();
+}
+
 function buildTimelineRows(orders = [], rangeStart, rangeEnd) {
   const rows = [];
   const unplanned = [];
@@ -1883,9 +2003,6 @@ async function loadCalendar() {
     state.calendarAnchor = anchor;
     const viewDays = state.calendarView === "day" ? 1 : state.calendarView === "two_weeks" ? 14 : 7;
     const rangeStart = state.calendarView === "day" ? anchor : startOfWeek(anchor);
-    const rangeEnd = addDays(rangeStart, viewDays - 1);
-    const timelineRows = buildTimelineRows(orders, rangeStart, rangeEnd);
-    const timelineColumns = Array.from({ length: viewDays }, (_, i) => addDays(rangeStart, i));
     const dayCountLabel = state.calendarView === "day" ? "1 день" : state.calendarView === "week" ? "7 дней" : "14 дней";
 
     el.innerHTML = `
@@ -1908,19 +2025,13 @@ async function loadCalendar() {
           <button class="calendar-nav-btn" onclick="shiftCalendarAnchor(1)" aria-label="Следующий период">→</button>
           <button onclick="moveCalendarToToday()" class="today-btn">Сегодня</button>
         </div>
-        ${state.calendarView === "day"
-          ? renderDayModeAgenda({ orders, day: anchor })
-          : renderTimelineCalendar({
-              rows: timelineRows.rows,
-              columns: timelineColumns,
-              viewDays,
-              rangeStart,
-              rangeEnd,
-              unplanned: timelineRows.unplanned,
-            })
-        }
+        <div class="calendar-scheduler-wrap">
+          <div id="calendarScheduler" class="calendar-scheduler-host" aria-label="Планировщик загрузки студии"></div>
+        </div>
       </div>
     `;
+
+    renderDayPilotScheduler({ orders, rangeStart, viewDays });
   } catch (e) {
     console.error(e);
     el.innerHTML = `<div style="padding:16px;">Ошибка загрузки календаря</div>`;
