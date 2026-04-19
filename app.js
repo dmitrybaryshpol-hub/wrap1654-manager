@@ -1625,25 +1625,6 @@ function getTimelineRangeForOrder(order = {}) {
   };
 }
 
-function getStatusLineColor(status = "") {
-  const key = String(status || "").toLowerCase();
-  if (key === "new") return "#60a5fa";
-  if (key === "in_progress") return "#fb923c";
-  if (key === "ready") return "#34d399";
-  if (key === "paused" || key === "waiting") return "#94a3b8";
-  if (key === "closed") return "#64748b";
-  return "#94a3b8";
-}
-
-function getStatusAccent(status = "") {
-  const key = String(status || "").toLowerCase();
-  if (key === "new") return "is-new";
-  if (key === "in_progress") return "is-progress";
-  if (key === "ready") return "is-ready";
-  if (key === "paused" || key === "waiting") return "is-paused";
-  return "is-neutral";
-}
-
 function getOrderMachine(order = {}) {
   return String(order?.car_model || order?.car_number || order?.car || "Без машины").trim() || "Без машины";
 }
@@ -1720,6 +1701,7 @@ function renderDayPilotScheduler({ orders = [], rangeStart, viewDays = 7 }) {
 
   const dayPilot = getDayPilotLite();
   if (!dayPilot) {
+    state.calendarScheduler = null;
     schedulerHost.innerHTML = `<div class="calendar-fallback-note">Не удалось загрузить DayPilot Lite Scheduler.</div>`;
     return;
   }
@@ -1761,210 +1743,12 @@ function renderDayPilotScheduler({ orders = [], rangeStart, viewDays = 7 }) {
     },
   };
 
-  if (!state.calendarScheduler) {
-    state.calendarScheduler = new dayPilot.Scheduler("calendarScheduler", schedulerConfig);
-    state.calendarScheduler.init();
-    return;
+  if (state.calendarScheduler?.dispose) {
+    state.calendarScheduler.dispose();
   }
 
-  Object.assign(state.calendarScheduler, schedulerConfig);
-  state.calendarScheduler.update();
-}
-
-function buildTimelineRows(orders = [], rangeStart, rangeEnd) {
-  const rows = [];
-  const unplanned = [];
-  const MS_PER_DAY = 24 * 60 * 60 * 1000;
-  const totalDays = Math.max(1, Math.round((rangeEnd.getTime() - rangeStart.getTime()) / MS_PER_DAY) + 1);
-
-  (Array.isArray(orders) ? orders : []).forEach((order) => {
-    const range = getTimelineRangeForOrder(order);
-    if (!range.from || !range.to) {
-      unplanned.push(order);
-      return;
-    }
-    if (range.to < rangeStart || range.from > rangeEnd) return;
-
-    const visual = statusVisual(order.status || "");
-    const visibleStart = range.from < rangeStart ? rangeStart : range.from;
-    const visibleEnd = range.to > rangeEnd ? rangeEnd : range.to;
-    const startIndex = Math.max(0, Math.round((visibleStart.getTime() - rangeStart.getTime()) / MS_PER_DAY));
-    const endIndex = Math.max(startIndex, Math.round((visibleEnd.getTime() - rangeStart.getTime()) / MS_PER_DAY));
-    const gridColumnStart = startIndex + 1;
-    const gridColumnEnd = Math.min(totalDays + 1, endIndex + 2);
-
-    const spanDays = Math.max(1, gridColumnEnd - gridColumnStart);
-    const totalDurationDays = Math.max(1, Math.round((range.to.getTime() - range.from.getTime()) / MS_PER_DAY) + 1);
-    const markers = [
-      { raw: range.intakeRaw, label: "Заезд" },
-      { raw: range.startRaw, label: "Старт" },
-      { raw: range.endRaw, label: "Выдача" },
-    ]
-      .map((item) => {
-        const date = parseDateOnly(item.raw);
-        if (!date || date < rangeStart || date > rangeEnd) return null;
-        const dayOffset = Math.round((date.getTime() - rangeStart.getTime()) / MS_PER_DAY);
-        const relativePos = spanDays <= 1
-          ? 50
-          : Math.min(100, Math.max(0, ((dayOffset - startIndex + 0.5) / spanDays) * 100));
-        return {
-          ...item,
-          dayColumn: dayOffset + 1,
-          dayOffset,
-          time: hasTimePart(item.raw) ? formatTimePart(item.raw) : "",
-          relativePos,
-        };
-      })
-      .filter(Boolean);
-
-    rows.push({
-      orderId: order.id,
-      clientName: order.client_name || "Клиент",
-      carModel: order.car_model || "Машина",
-      workType: orderTypeLabel(order),
-      compactDates: `${displayDate(range.from).slice(0, 5)} → ${displayDate(range.to).slice(0, 5)}`,
-      status: order.status || "",
-      statusVisual: visual,
-      rangeFrom: range.from,
-      rangeTo: range.to,
-      durationText: `${totalDurationDays} дн.`,
-      startsBeforeRange: range.from < rangeStart,
-      endsAfterRange: range.to > rangeEnd,
-      gridColumnStart,
-      gridColumnEnd,
-      spanDays,
-      barColor: getStatusLineColor(order.status || ""),
-      statusAccent: getStatusAccent(order.status || ""),
-      markers,
-    });
-  });
-
-  rows.sort((a, b) => getOrderStatusPriority(a.status) - getOrderStatusPriority(b.status));
-  return { rows, unplanned };
-}
-
-function renderDayModeAgenda({ orders = [], day }) {
-  const items = [];
-  (Array.isArray(orders) ? orders : []).forEach((order) => {
-    const range = getTimelineRangeForOrder(order);
-    const from = range.from;
-    const to = range.to;
-    if (!from || !to || day < from || day > to) return;
-    const milestones = [
-      { label: "Заезд", value: range.intakeRaw },
-      { label: "Старт", value: range.startRaw },
-      { label: "Выдача", value: range.endRaw },
-    ]
-      .map((point) => {
-        const pointDate = parseDateOnly(point.value);
-        if (!pointDate || !isSameDay(pointDate, day)) return null;
-        return {
-          label: point.label,
-          time: hasTimePart(point.value) ? formatTimePart(point.value) : "",
-        };
-      })
-      .filter(Boolean);
-
-    items.push({
-      id: order.id,
-      car: order.car_model || "Машина",
-      client: order.client_name || "Клиент",
-      status: statusVisual(order.status || ""),
-      statusText: String(order.status || "new"),
-      color: getStatusLineColor(order.status || ""),
-      workType: orderTypeLabel(order),
-      period: `${displayDate(from).slice(0, 5)} → ${displayDate(to).slice(0, 5)}`,
-      milestones,
-    });
-  });
-
-  return card(`
-    <div class="calendar-day-panel">
-      <div class="calendar-day-title">
-        <strong>${escapeHtml(day.toLocaleDateString("ru-RU", { weekday: "long", day: "2-digit", month: "long", year: "numeric" }))}</strong>
-        <span>${items.length} ${items.length === 1 ? "заказ" : items.length < 5 ? "заказа" : "заказов"}</span>
-      </div>
-      ${items.length
-        ? `<div class="calendar-day-list">
-            ${items.map((item) => `
-              <button class="calendar-day-item" onclick="openOrderFromCalendar('${escapeHtml(String(item.id || ""))}')">
-                <span class="calendar-day-item-line" style="--status-line:${item.color};"></span>
-                <div class="calendar-day-item-main">
-                  <div class="calendar-day-item-top">
-                    <strong>${escapeHtml(item.car)}</strong>
-                    ${renderToneBadge(item.status.label, { bg: item.status.bg, color: item.status.color, border: item.status.border })}
-                  </div>
-                  <div class="calendar-day-item-meta">${escapeHtml(item.client)} · ${escapeHtml(item.period)}</div>
-                  <div class="calendar-day-item-meta">${escapeHtml(item.workType)}</div>
-                  <div class="calendar-day-milestones">
-                    ${item.milestones.length
-                      ? item.milestones.map((point) => `<span>${escapeHtml(point.label)}${point.time ? ` · ${escapeHtml(point.time)}` : ""}</span>`).join("")
-                      : `<span>Без этапов на сегодня</span>`
-                    }
-                  </div>
-                </div>
-              </button>
-            `).join("")}
-          </div>`
-        : `<div class="calendar-day-empty">Нет заказов на выбранный день.</div>`
-      }
-    </div>
-  `, "overflow:hidden;");
-}
-
-function renderTimelineCalendar({ rows = [], columns = [], viewDays = 7, unplanned = [] } = {}) {
-  const dayMinWidth = viewDays === 14 ? "52px" : "62px";
-  const dayColumns = `repeat(${viewDays}, minmax(${dayMinWidth}, 1fr))`;
-  const emptyRows = Array.from({ length: 4 }, (_, i) => i + 1);
-
-  return card(`
-    <div class="calendar-grid-scroll">
-      <div class="timeline-shell ${viewDays === 14 ? "is-two-weeks" : ""}" style="--timeline-day-columns:${dayColumns};">
-      <div class="timeline-grid timeline-grid-head">
-        <div class="timeline-head-label">Машина / клиент</div>
-        ${columns.map((day) => `
-          <div class="timeline-day-head ${isSameDay(day, new Date()) ? "is-today" : ""} ${[0, 6].includes(day.getDay()) ? "is-weekend" : ""}">
-            <span>${escapeHtml(day.toLocaleDateString("ru-RU", { weekday: "short" }))}</span>
-            <strong>${escapeHtml(day.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" }))}</strong>
-          </div>
-        `).join("")}
-      </div>
-
-      <div class="timeline-grid timeline-grid-body">
-        ${rows.length
-          ? rows.map((row) => `
-              <button class="timeline-order-label" onclick="openOrderFromCalendar('${escapeHtml(String(row.orderId || ""))}')">
-                <div class="timeline-order-title">${escapeHtml(row.carModel)}</div>
-                <div class="timeline-order-subtitle">${escapeHtml(row.clientName)}</div>
-              </button>
-              <button class="timeline-order-track" onclick="openOrderFromCalendar('${escapeHtml(String(row.orderId || ""))}')">
-                ${columns.map((day) => `<span class="timeline-grid-day ${isSameDay(day, new Date()) ? "is-today" : ""} ${[0, 6].includes(day.getDay()) ? "is-weekend" : ""}"></span>`).join("")}
-                <span class="timeline-bar ${row.statusAccent} ${row.startsBeforeRange ? "is-clipped-start" : ""} ${row.endsAfterRange ? "is-clipped-end" : ""}" style="grid-column:${row.gridColumnStart} / ${row.gridColumnEnd}; --timeline-status:${row.barColor};">
-                  <span class="timeline-bar-main">${escapeHtml(row.carModel)}</span>
-                  <span class="timeline-bar-meta">${escapeHtml(row.clientName)} · ${escapeHtml(row.workType)}</span>
-                  <span class="timeline-bar-status">${escapeHtml(row.statusVisual.label)} · ${escapeHtml(row.durationText)}</span>
-                  ${row.markers.map((marker) => `
-                    <span class="timeline-marker" style="--marker-pos:${marker.relativePos}%;">
-                      <i></i>
-                      <span>${escapeHtml(marker.label)}${marker.time ? ` · ${escapeHtml(marker.time)}` : ""}</span>
-                    </span>
-                  `).join("")}
-                </span>
-              </button>
-            `).join("")
-          : emptyRows.map(() => `
-              <div class="timeline-order-label timeline-order-label-empty">—</div>
-              <div class="timeline-order-track timeline-order-track-empty">
-                ${columns.map((day) => `<span class="timeline-grid-day ${isSameDay(day, new Date()) ? "is-today" : ""} ${[0, 6].includes(day.getDay()) ? "is-weekend" : ""}"></span>`).join("")}
-              </div>
-            `).join("")
-        }
-      </div>
-      ${!rows.length ? `<div class="timeline-empty-note">Нет заказов в этом периоде</div>` : ""}
-      </div>
-    </div>
-    ${unplanned.length ? `<div class="ui-secondary-text" style="margin-top:8px;">Без полной даты: ${unplanned.length}</div>` : ""}
-  `, "overflow:hidden;");
+  state.calendarScheduler = new dayPilot.Scheduler("calendarScheduler", schedulerConfig);
+  state.calendarScheduler.init();
 }
 
 async function openOrderFromCalendar(orderId) {
