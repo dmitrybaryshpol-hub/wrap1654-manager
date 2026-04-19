@@ -1688,8 +1688,8 @@ function buildSchedulerEvents(orders = [], resources = []) {
     return [{
       id: String(order?.id || `${machine}-${range.from.getTime()}`),
       resource: resourceId,
-      start: DayPilot.Date.fromDatePart(range.from),
-      end: DayPilot.Date.fromDatePart(endExclusive),
+      start: window.DayPilot.Date.fromDatePart(range.from),
+      end: window.DayPilot.Date.fromDatePart(endExclusive),
       backColor: `${eventColor}33`,
       borderColor: eventColor,
       fontColor: "#f8fafc",
@@ -1707,11 +1707,19 @@ function buildSchedulerEvents(orders = [], resources = []) {
   });
 }
 
+function getDayPilotLite() {
+  const dayPilot = window.DayPilot;
+  if (dayPilot?.Scheduler && dayPilot?.Date?.fromDatePart) return dayPilot;
+  console.error("DayPilot Lite не загружен: window.DayPilot отсутствует или неполный.");
+  return null;
+}
+
 function renderDayPilotScheduler({ orders = [], rangeStart, viewDays = 7 }) {
   const schedulerHost = document.getElementById("calendarScheduler");
   if (!schedulerHost) return;
 
-  if (!window.DayPilot?.Scheduler || !window.DayPilot?.Date) {
+  const dayPilot = getDayPilotLite();
+  if (!dayPilot) {
     schedulerHost.innerHTML = `<div class="calendar-fallback-note">Не удалось загрузить DayPilot Lite Scheduler.</div>`;
     return;
   }
@@ -1723,7 +1731,7 @@ function renderDayPilotScheduler({ orders = [], rangeStart, viewDays = 7 }) {
   const schedulerConfig = {
     locale: "ru-ru",
     theme: "scheduler_traditional",
-    startDate: DayPilot.Date.fromDatePart(rangeStart),
+    startDate: dayPilot.Date.fromDatePart(rangeStart),
     days: viewDays,
     scale: "Day",
     timeHeaders: viewDays === 1
@@ -1754,7 +1762,7 @@ function renderDayPilotScheduler({ orders = [], rangeStart, viewDays = 7 }) {
   };
 
   if (!state.calendarScheduler) {
-    state.calendarScheduler = new DayPilot.Scheduler("calendarScheduler", schedulerConfig);
+    state.calendarScheduler = new dayPilot.Scheduler("calendarScheduler", schedulerConfig);
     state.calendarScheduler.init();
     return;
   }
