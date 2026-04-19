@@ -1276,7 +1276,8 @@ function statusVisual(status = "") {
     booked: { label: "BOOKED", bg: "rgba(147,197,253,.15)", color: "#bfdbfe", border: "rgba(147,197,253,.35)" },
     car_received: { label: "CAR RECEIVED", bg: "rgba(34,197,94,.15)", color: "#86efac", border: "rgba(34,197,94,.35)" },
     in_progress: { label: "IN PROGRESS", bg: "rgba(250,204,21,.12)", color: "#fde68a", border: "rgba(250,204,21,.4)" },
-    paused: { label: "PAUSED", bg: "rgba(251,146,60,.15)", color: "#fdba74", border: "rgba(251,146,60,.35)" },
+    paused: { label: "PAUSED", bg: "rgba(148,163,184,.15)", color: "#cbd5e1", border: "rgba(148,163,184,.35)" },
+    waiting: { label: "WAITING", bg: "rgba(148,163,184,.15)", color: "#cbd5e1", border: "rgba(148,163,184,.35)" },
     ready: { label: "READY", bg: "rgba(45,212,191,.15)", color: "#5eead4", border: "rgba(45,212,191,.35)" },
     delivered: { label: "DELIVERED", bg: "rgba(16,185,129,.15)", color: "#6ee7b7", border: "rgba(16,185,129,.35)" },
     closed: { label: "CLOSED", bg: "rgba(99,102,241,.15)", color: "#c7d2fe", border: "rgba(99,102,241,.35)" },
@@ -1628,6 +1629,7 @@ function getStatusLineColor(status = "") {
   if (key === "new") return "#60a5fa";
   if (key === "in_progress") return "#fb923c";
   if (key === "ready") return "#34d399";
+  if (key === "paused" || key === "waiting") return "#94a3b8";
   if (key === "closed") return "#64748b";
   return "#94a3b8";
 }
@@ -1637,6 +1639,7 @@ function getStatusAccent(status = "") {
   if (key === "new") return "is-new";
   if (key === "in_progress") return "is-progress";
   if (key === "ready") return "is-ready";
+  if (key === "paused" || key === "waiting") return "is-paused";
   return "is-neutral";
 }
 
@@ -1663,6 +1666,7 @@ function buildTimelineRows(orders = [], rangeStart, rangeEnd) {
     const gridColumnEnd = Math.min(totalDays + 1, endIndex + 2);
 
     const spanDays = Math.max(1, gridColumnEnd - gridColumnStart);
+    const totalDurationDays = Math.max(1, Math.round((range.to.getTime() - range.from.getTime()) / MS_PER_DAY) + 1);
     const markers = [
       { raw: range.intakeRaw, label: "Заезд" },
       { raw: range.startRaw, label: "Старт" },
@@ -1695,6 +1699,9 @@ function buildTimelineRows(orders = [], rangeStart, rangeEnd) {
       statusVisual: visual,
       rangeFrom: range.from,
       rangeTo: range.to,
+      durationText: `${totalDurationDays} дн.`,
+      startsBeforeRange: range.from < rangeStart,
+      endsAfterRange: range.to > rangeEnd,
       gridColumnStart,
       gridColumnEnd,
       spanDays,
@@ -1786,7 +1793,7 @@ function renderTimelineCalendar({ rows = [], columns = [], viewDays = 7, unplann
     <div class="calendar-grid-scroll">
       <div class="timeline-shell ${viewDays === 14 ? "is-two-weeks" : ""}" style="--timeline-day-columns:${dayColumns};">
       <div class="timeline-grid timeline-grid-head">
-        <div class="timeline-head-label">Машина / заказ</div>
+        <div class="timeline-head-label">Машина / клиент</div>
         ${columns.map((day) => `
           <div class="timeline-day-head ${isSameDay(day, new Date()) ? "is-today" : ""} ${[0, 6].includes(day.getDay()) ? "is-weekend" : ""}">
             <span>${escapeHtml(day.toLocaleDateString("ru-RU", { weekday: "short" }))}</span>
@@ -1804,10 +1811,10 @@ function renderTimelineCalendar({ rows = [], columns = [], viewDays = 7, unplann
               </button>
               <button class="timeline-order-track" onclick="openOrderFromCalendar('${escapeHtml(String(row.orderId || ""))}')">
                 ${columns.map((day) => `<span class="timeline-grid-day ${isSameDay(day, new Date()) ? "is-today" : ""} ${[0, 6].includes(day.getDay()) ? "is-weekend" : ""}"></span>`).join("")}
-                <span class="timeline-bar ${row.statusAccent}" style="grid-column:${row.gridColumnStart} / ${row.gridColumnEnd}; --timeline-status:${row.barColor};">
+                <span class="timeline-bar ${row.statusAccent} ${row.startsBeforeRange ? "is-clipped-start" : ""} ${row.endsAfterRange ? "is-clipped-end" : ""}" style="grid-column:${row.gridColumnStart} / ${row.gridColumnEnd}; --timeline-status:${row.barColor};">
                   <span class="timeline-bar-main">${escapeHtml(row.carModel)}</span>
                   <span class="timeline-bar-meta">${escapeHtml(row.clientName)} · ${escapeHtml(row.workType)}</span>
-                  <span class="timeline-bar-status">${escapeHtml(row.statusVisual.label)}</span>
+                  <span class="timeline-bar-status">${escapeHtml(row.statusVisual.label)} · ${escapeHtml(row.durationText)}</span>
                   ${row.markers.map((marker) => `
                     <span class="timeline-marker" style="--marker-pos:${marker.relativePos}%;">
                       <i></i>
