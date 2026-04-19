@@ -1367,6 +1367,21 @@ function formatCalendarTitle(date, view = "day") {
   return target.toLocaleDateString("ru-RU", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
 }
 
+function formatCalendarRangeCompact(date, view = "week") {
+  const target = startOfDay(date);
+  const from = view === "day" ? target : startOfWeek(target);
+  const to = view === "day" ? target : addDays(from, view === "two_weeks" ? 13 : 6);
+  const sameMonth = from.getMonth() === to.getMonth();
+  const sameYear = from.getFullYear() === to.getFullYear();
+  const fromLabel = from.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+  const toLabel = to.toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: sameMonth ? undefined : "short",
+    year: sameYear ? undefined : "numeric",
+  });
+  return view === "day" ? fromLabel : `${fromLabel} — ${toLabel}`;
+}
+
 function orderTypeLabel(order = {}) {
   return order.order_type || order.type || order.service_type || "—";
 }
@@ -1611,10 +1626,18 @@ function getTimelineRangeForOrder(order = {}) {
 function getStatusLineColor(status = "") {
   const key = String(status || "").toLowerCase();
   if (key === "new") return "#60a5fa";
-  if (key === "in_progress") return "#8b5cf6";
+  if (key === "in_progress") return "#fb923c";
   if (key === "ready") return "#34d399";
   if (key === "closed") return "#64748b";
   return "#94a3b8";
+}
+
+function getStatusAccent(status = "") {
+  const key = String(status || "").toLowerCase();
+  if (key === "new") return "is-new";
+  if (key === "in_progress") return "is-progress";
+  if (key === "ready") return "is-ready";
+  return "is-neutral";
 }
 
 function buildTimelineRows(orders = [], rangeStart, rangeEnd) {
@@ -1666,6 +1689,7 @@ function buildTimelineRows(orders = [], rangeStart, rangeEnd) {
       orderId: order.id,
       clientName: order.client_name || "Клиент",
       carModel: order.car_model || "Машина",
+      workType: orderTypeLabel(order),
       compactDates: `${displayDate(range.from).slice(0, 5)} → ${displayDate(range.to).slice(0, 5)}`,
       status: order.status || "",
       statusVisual: visual,
@@ -1675,6 +1699,7 @@ function buildTimelineRows(orders = [], rangeStart, rangeEnd) {
       gridColumnEnd,
       spanDays,
       barColor: getStatusLineColor(order.status || ""),
+      statusAccent: getStatusAccent(order.status || ""),
       markers,
     });
   });
@@ -1710,7 +1735,9 @@ function renderDayModeAgenda({ orders = [], day }) {
       car: order.car_model || "Машина",
       client: order.client_name || "Клиент",
       status: statusVisual(order.status || ""),
+      statusText: String(order.status || "new"),
       color: getStatusLineColor(order.status || ""),
+      workType: orderTypeLabel(order),
       period: `${displayDate(from).slice(0, 5)} → ${displayDate(to).slice(0, 5)}`,
       milestones,
     });
@@ -1733,6 +1760,7 @@ function renderDayModeAgenda({ orders = [], day }) {
                     ${renderToneBadge(item.status.label, { bg: item.status.bg, color: item.status.color, border: item.status.border })}
                   </div>
                   <div class="calendar-day-item-meta">${escapeHtml(item.client)} · ${escapeHtml(item.period)}</div>
+                  <div class="calendar-day-item-meta">${escapeHtml(item.workType)}</div>
                   <div class="calendar-day-milestones">
                     ${item.milestones.length
                       ? item.milestones.map((point) => `<span>${escapeHtml(point.label)}${point.time ? ` · ${escapeHtml(point.time)}` : ""}</span>`).join("")
@@ -1750,7 +1778,7 @@ function renderDayModeAgenda({ orders = [], day }) {
 }
 
 function renderTimelineCalendar({ rows = [], columns = [], viewDays = 7, unplanned = [] } = {}) {
-  const dayMinWidth = viewDays === 14 ? "44px" : "56px";
+  const dayMinWidth = viewDays === 14 ? "52px" : "62px";
   const dayColumns = `repeat(${viewDays}, minmax(${dayMinWidth}, 1fr))`;
   const emptyRows = Array.from({ length: 4 }, (_, i) => i + 1);
 
@@ -1758,9 +1786,9 @@ function renderTimelineCalendar({ rows = [], columns = [], viewDays = 7, unplann
     <div class="calendar-grid-scroll">
       <div class="timeline-shell ${viewDays === 14 ? "is-two-weeks" : ""}" style="--timeline-day-columns:${dayColumns};">
       <div class="timeline-grid timeline-grid-head">
-        <div class="timeline-head-label">Машина</div>
+        <div class="timeline-head-label">Машина / заказ</div>
         ${columns.map((day) => `
-          <div class="timeline-day-head ${isSameDay(day, new Date()) ? "is-today" : ""}">
+          <div class="timeline-day-head ${isSameDay(day, new Date()) ? "is-today" : ""} ${[0, 6].includes(day.getDay()) ? "is-weekend" : ""}">
             <span>${escapeHtml(day.toLocaleDateString("ru-RU", { weekday: "short" }))}</span>
             <strong>${escapeHtml(day.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" }))}</strong>
           </div>
@@ -1772,11 +1800,14 @@ function renderTimelineCalendar({ rows = [], columns = [], viewDays = 7, unplann
           ? rows.map((row) => `
               <button class="timeline-order-label" onclick="openOrderFromCalendar('${escapeHtml(String(row.orderId || ""))}')">
                 <div class="timeline-order-title">${escapeHtml(row.carModel)}</div>
+                <div class="timeline-order-subtitle">${escapeHtml(row.clientName)}</div>
               </button>
               <button class="timeline-order-track" onclick="openOrderFromCalendar('${escapeHtml(String(row.orderId || ""))}')">
-                ${columns.map((day) => `<span class="timeline-grid-day ${isSameDay(day, new Date()) ? "is-today" : ""}"></span>`).join("")}
-                <span class="timeline-bar" style="grid-column:${row.gridColumnStart} / ${row.gridColumnEnd}; --timeline-status:${row.barColor};">
-                  <span class="timeline-bar-main">${escapeHtml(row.carModel)}${row.clientName ? ` · ${escapeHtml(row.clientName)}` : ""}</span>
+                ${columns.map((day) => `<span class="timeline-grid-day ${isSameDay(day, new Date()) ? "is-today" : ""} ${[0, 6].includes(day.getDay()) ? "is-weekend" : ""}"></span>`).join("")}
+                <span class="timeline-bar ${row.statusAccent}" style="grid-column:${row.gridColumnStart} / ${row.gridColumnEnd}; --timeline-status:${row.barColor};">
+                  <span class="timeline-bar-main">${escapeHtml(row.carModel)}</span>
+                  <span class="timeline-bar-meta">${escapeHtml(row.clientName)} · ${escapeHtml(row.workType)}</span>
+                  <span class="timeline-bar-status">${escapeHtml(row.statusVisual.label)}</span>
                   ${row.markers.map((marker) => `
                     <span class="timeline-marker" style="--marker-pos:${marker.relativePos}%;">
                       <i></i>
@@ -1789,7 +1820,7 @@ function renderTimelineCalendar({ rows = [], columns = [], viewDays = 7, unplann
           : emptyRows.map(() => `
               <div class="timeline-order-label timeline-order-label-empty">—</div>
               <div class="timeline-order-track timeline-order-track-empty">
-                ${columns.map((day) => `<span class="timeline-grid-day ${isSameDay(day, new Date()) ? "is-today" : ""}"></span>`).join("")}
+                ${columns.map((day) => `<span class="timeline-grid-day ${isSameDay(day, new Date()) ? "is-today" : ""} ${[0, 6].includes(day.getDay()) ? "is-weekend" : ""}"></span>`).join("")}
               </div>
             `).join("")
         }
@@ -1848,11 +1879,12 @@ async function loadCalendar() {
     const rangeEnd = addDays(rangeStart, viewDays - 1);
     const timelineRows = buildTimelineRows(orders, rangeStart, rangeEnd);
     const timelineColumns = Array.from({ length: viewDays }, (_, i) => addDays(rangeStart, i));
+    const dayCountLabel = state.calendarView === "day" ? "1 день" : state.calendarView === "week" ? "7 дней" : "14 дней";
 
     el.innerHTML = `
       <div class="calendar-screen">
         <div class="calendar-topbar">
-          <div class="calendar-topbar-title">Календарь загрузки студии</div>
+          <div class="calendar-topbar-title">Календарь загрузки</div>
           <div class="calendar-view-switch">
             <button class="${state.calendarView === "day" ? "active" : ""}" onclick="setCalendarView('day')">День</button>
             <button class="${state.calendarView === "week" ? "active" : ""}" onclick="setCalendarView('week')">Неделя</button>
@@ -1860,19 +1892,15 @@ async function loadCalendar() {
           </div>
         </div>
         <div class="calendar-nav-row">
-          <button onclick="shiftCalendarAnchor(-1)">←</button>
-          <button onclick="moveCalendarToToday()" class="today-btn">Сегодня</button>
-          <button onclick="shiftCalendarAnchor(1)">→</button>
-        </div>
-        ${card(`
+          <button class="calendar-nav-btn" onclick="shiftCalendarAnchor(-1)" aria-label="Предыдущий период">←</button>
           <div class="calendar-period-card">
-            <div>
-              <div class="calendar-period-caption">Период</div>
-              <div class="calendar-period-value">${escapeHtml(formatCalendarTitle(anchor, state.calendarView))}</div>
-            </div>
-            <span class="soft-chip">${state.calendarView === "day" ? "1 день" : state.calendarView === "week" ? "7 дней" : "14 дней"}</span>
+            <div class="calendar-period-caption">${escapeHtml(formatCalendarTitle(anchor, state.calendarView))}</div>
+            <div class="calendar-period-value">${escapeHtml(formatCalendarRangeCompact(anchor, state.calendarView))}</div>
+            <span class="soft-chip">${dayCountLabel}</span>
           </div>
-        `)}
+          <button class="calendar-nav-btn" onclick="shiftCalendarAnchor(1)" aria-label="Следующий период">→</button>
+          <button onclick="moveCalendarToToday()" class="today-btn">Сегодня</button>
+        </div>
         ${state.calendarView === "day"
           ? renderDayModeAgenda({ orders, day: anchor })
           : renderTimelineCalendar({
