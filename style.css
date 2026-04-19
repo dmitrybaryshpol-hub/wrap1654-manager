@@ -1576,3 +1576,76 @@ textarea{
     max-width: 104px;
   }
 }
+
+/* ===== DayPilot Lite Scheduler integration ===== */
+.calendar-scheduler-wrap{
+  border:1px solid rgba(148,163,184,.22);
+  border-radius:18px;
+  overflow:hidden;
+  background:linear-gradient(180deg, rgba(8,12,24,.95), rgba(10,17,32,.92));
+}
+
+.calendar-scheduler-host{
+  width:100%;
+  min-height:360px;
+}
+
+.calendar-fallback-note{
+  color:#cbd5e1;
+  font-size:13px;
+  padding:16px;
+}
+
+#calendarScheduler .scheduler_default_main,
+#calendarScheduler .scheduler_default_corner,
+#calendarScheduler .scheduler_default_rowheader,
+#calendarScheduler .scheduler_default_colheader,
+#calendarScheduler .scheduler_default_matrix{
+  background:#0b1220 !important;
+  color:#f8fafc !important;
+  border-color:rgba(148,163,184,.18) !important;
+}
+
+#calendarScheduler .scheduler_default_colheader_inner,
+#calendarScheduler .scheduler_default_rowheader_inner{
+  color:#cbd5e1 !important;
+  font-weight:700;
+}
+
+#calendarScheduler .scheduler_default_cell{
+  background:#0b1220 !important;
+  border-color:rgba(148,163,184,.14) !important;
+}
+
+#calendarScheduler .scheduler_default_event{
+  border-radius:12px !important;
+  box-shadow:0 10px 24px rgba(2,6,23,.3);
+  padding:4px 7px !important;
+}
+
+#calendarScheduler .scheduler_default_event_inner{
+  background:transparent !important;
+  border:none !important;
+  color:#f8fafc !important;
+  font-size:11px;
+  line-height:1.25;
+}
+
+.wrap-event-line{
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.wrap-event-status{
+  opacity:.86;
+}
+
+@media (max-width: 640px){
+  .calendar-scheduler-host{
+    min-height:420px;
+  }
+  #calendarScheduler .scheduler_default_event_inner{
+    font-size:10px;
+  }
+}
