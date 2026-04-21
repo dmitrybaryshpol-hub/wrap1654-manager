@@ -35,6 +35,7 @@ const state = {
 
   editingOrderId: null,
   orderServices: [],
+  orderExtraWorks: [],
 };
 
 function getAppRoot() {
@@ -335,44 +336,101 @@ function orderLabel(order) {
 }
 
 const SERVICES_MARKER = "[services]";
+const EXTRA_WORKS_MARKER = "[extra_works]";
 
 function normalizeServiceName(value = "") {
   return String(value || "").trim().replace(/\s+/g, " ");
 }
 
-function parseServicesFromNote(note = "") {
+function normalizeExtraWork(item = {}) {
+  return {
+    type: normalizeServiceName(item?.type || ""),
+    details: normalizeServiceName(item?.details || ""),
+  };
+}
+
+function formatExtraWorkLine(item = {}) {
+  const normalized = normalizeExtraWork(item);
+  if (!normalized.type) return "";
+  return normalized.details ? `${normalized.type} :: ${normalized.details}` : normalized.type;
+}
+
+function parseExtraWorkLine(line = "") {
+  const cleaned = normalizeServiceName(String(line || "").replace(/^[-•*]\s*/, ""));
+  if (!cleaned) return null;
+
+  const [typeRaw, ...detailsParts] = cleaned.split("::");
+  const type = normalizeServiceName(typeRaw || "");
+  const details = normalizeServiceName(detailsParts.join("::") || "");
+  if (!type) return null;
+  return { type, details };
+}
+
+function parseOrderMetaFromNote(note = "") {
   const source = String(note || "");
   const lines = source.split("\n");
-  const markerIndex = lines.findIndex((line) => line.trim().toLowerCase() === SERVICES_MARKER);
+  const serviceMarkerIndex = lines.findIndex((line) => line.trim().toLowerCase() === SERVICES_MARKER);
+  const extraMarkerIndex = lines.findIndex((line) => line.trim().toLowerCase() === EXTRA_WORKS_MARKER);
+  const markerIndexes = [serviceMarkerIndex, extraMarkerIndex].filter((index) => index >= 0);
+  const firstMarkerIndex = markerIndexes.length ? Math.min(...markerIndexes) : -1;
 
-  if (markerIndex === -1) {
-    return { services: [], cleanNote: source.trim() };
-  }
+  const parseMarkerLines = (markerIndex) => {
+    if (markerIndex === -1) return [];
+    const nextIndexes = markerIndexes.filter((idx) => idx > markerIndex);
+    const endIndex = nextIndexes.length ? Math.min(...nextIndexes) : lines.length;
+    return lines.slice(markerIndex + 1, endIndex);
+  };
 
-  const bodyLines = lines.slice(markerIndex + 1);
-  const services = bodyLines
+  const services = parseMarkerLines(serviceMarkerIndex)
     .map((line) => line.replace(/^[-•*]\s*/, ""))
     .map(normalizeServiceName)
     .filter(Boolean);
 
-  const cleanNote = lines.slice(0, markerIndex).join("\n").trim();
-  return { services, cleanNote };
+  const extraWorks = parseMarkerLines(extraMarkerIndex)
+    .map(parseExtraWorkLine)
+    .filter(Boolean);
+
+  const cleanNote = (firstMarkerIndex === -1 ? lines : lines.slice(0, firstMarkerIndex)).join("\n").trim();
+
+  return { services, extraWorks, cleanNote };
 }
 
-function composeNoteWithServices(note = "", services = []) {
+function parseServicesFromNote(note = "") {
+  const parsed = parseOrderMetaFromNote(note);
+  return { services: parsed.services, cleanNote: parsed.cleanNote };
+}
+
+function composeNoteWithOrderMeta(note = "", services = [], extraWorks = []) {
   const cleanNote = String(note || "").trim();
   const normalizedServices = (services || [])
     .map(normalizeServiceName)
     .filter(Boolean);
+  const normalizedExtraWorks = (extraWorks || [])
+    .map(normalizeExtraWork)
+    .filter((item) => item.type);
+  const blocks = [];
 
-  if (!normalizedServices.length) return cleanNote || null;
+  if (normalizedServices.length) {
+    blocks.push([
+      SERVICES_MARKER,
+      ...normalizedServices.map((service) => `- ${service}`),
+    ].join("\n"));
+  }
 
-  const servicesBlock = [
-    SERVICES_MARKER,
-    ...normalizedServices.map((service) => `- ${service}`),
-  ].join("\n");
+  if (normalizedExtraWorks.length) {
+    blocks.push([
+      EXTRA_WORKS_MARKER,
+      ...normalizedExtraWorks.map((item) => `- ${formatExtraWorkLine(item)}`),
+    ].join("\n"));
+  }
 
-  return cleanNote ? `${cleanNote}\n\n${servicesBlock}` : servicesBlock;
+  if (!blocks.length) return cleanNote || null;
+  const metaBlock = blocks.join("\n\n");
+  return cleanNote ? `${cleanNote}\n\n${metaBlock}` : metaBlock;
+}
+
+function composeNoteWithServices(note = "", services = []) {
+  return composeNoteWithOrderMeta(note, services, []);
 }
 
 function collectServiceSuggestions() {
@@ -461,6 +519,90 @@ function bindServicesEditor(initialServices = []) {
       if (event.key === "Enter") {
         event.preventDefault();
         addOrderService();
+      }
+    });
+  }
+}
+
+function renderExtraWorksList() {
+  const listRoot = document.getElementById("extra_works_list");
+  if (!listRoot) return;
+
+  const items = Array.isArray(state.orderExtraWorks) ? state.orderExtraWorks : [];
+  if (!items.length) {
+    listRoot.innerHTML = `<div style="opacity:.72; font-size:13px; padding:10px 12px; border-radius:12px; border:1px dashed rgba(167,139,250,.34); color:#a5b4d4;">Допработы не добавлены</div>`;
+    return;
+  }
+
+  listRoot.innerHTML = items.map((item, index) => `
+    <div style="
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      padding:9px 11px;
+      border:1px solid rgba(167,139,250,.2);
+      border-radius:12px;
+      margin-bottom:8px;
+      background:rgba(15,20,36,.78);
+    ">
+      <div style="font-size:14px;">
+        <div style="font-weight:700;">${escapeHtml(item.type || "—")}</div>
+        ${item.details ? `<div style="font-size:12px; color:#cbd5e1; margin-top:2px;">${escapeHtml(item.details)}</div>` : ""}
+      </div>
+      <button
+        onclick="removeOrderExtraWork(${index})"
+        style="padding:6px 8px; border-radius:8px; border:1px solid rgba(239,68,68,.35); background:rgba(239,68,68,.15); color:#fecaca;"
+      >Удалить</button>
+    </div>
+  `).join("");
+}
+
+function addOrderExtraWork() {
+  const typeInput = document.getElementById("extra_work_type");
+  const detailsInput = document.getElementById("extra_work_details");
+  if (!typeInput || !detailsInput) return;
+
+  const type = normalizeServiceName(typeInput.value);
+  const details = normalizeServiceName(detailsInput.value);
+  if (!type) return;
+
+  state.orderExtraWorks = [...(state.orderExtraWorks || []), { type, details }];
+  renderExtraWorksList();
+  typeInput.value = "";
+  detailsInput.value = "";
+}
+
+function removeOrderExtraWork(index) {
+  state.orderExtraWorks = (state.orderExtraWorks || []).filter((_, i) => i !== Number(index));
+  renderExtraWorksList();
+}
+
+function bindExtraWorksEditor(initialItems = []) {
+  state.orderExtraWorks = Array.isArray(initialItems)
+    ? initialItems.map(normalizeExtraWork).filter((item) => item.type)
+    : [];
+
+  renderExtraWorksList();
+
+  const typeInput = document.getElementById("extra_work_type");
+  const detailsInput = document.getElementById("extra_work_details");
+  const addBtn = document.getElementById("extra_work_add_btn");
+
+  if (addBtn) addBtn.addEventListener("click", addOrderExtraWork);
+  if (typeInput) {
+    typeInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        addOrderExtraWork();
+      }
+    });
+  }
+  if (detailsInput) {
+    detailsInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        addOrderExtraWork();
       }
     });
   }
@@ -2329,9 +2471,10 @@ async function openOrder(id) {
     const materials = (Array.isArray(order.materials) ? order.materials : [])
       .map((row) => normalizeOrderMaterial(row, order.currency || "USD"));
     const materialsSubtotal = materials.reduce((sum, row) => sum + asNumber(row.total_cost, 0), 0);
-    const parsedServices = parseServicesFromNote(order?.note || "");
-    const services = parsedServices.services || [];
-    const cleanNote = parsedServices.cleanNote || "";
+    const parsedMeta = parseOrderMetaFromNote(order?.note || "");
+    const services = parsedMeta.services || [];
+    const extraWorks = parsedMeta.extraWorks || [];
+    const cleanNote = parsedMeta.cleanNote || "";
     const payments = parsePayments(order);
     const mediaUrls = collectMediaUrls(order);
 
@@ -2417,6 +2560,16 @@ async function openOrder(id) {
           </div>
         `).join("")
         : `<div style="padding:10px; border-radius:10px; border:1px dashed rgba(148,163,184,.35); color:#94a3b8; font-size:13px;">Услуги пока не добавлены</div>`
+      )}
+
+      ${sectionCard("ДОПРАБОТЫ", extraWorks.length
+        ? extraWorks.map((item) => `
+          <div style="padding:9px 10px; border-radius:10px; border:1px solid rgba(148,163,184,.2); margin-bottom:7px;">
+            <div style="font-size:14px; font-weight:700;">${escapeHtml(item.type || "—")}</div>
+            ${item.details ? `<div style="font-size:12px; color:#cbd5e1; margin-top:2px;">${escapeHtml(item.details)}</div>` : ""}
+          </div>
+        `).join("")
+        : `<div style="padding:10px; border-radius:10px; border:1px dashed rgba(148,163,184,.35); color:#94a3b8; font-size:13px;">Допработы не добавлены</div>`
       )}
 
       ${sectionCard("МАТЕРИАЛЫ", `
@@ -2556,7 +2709,7 @@ async function openCreateOrder(order = null) {
   const isEdit = !!order;
   await ensureOrdersLoadedForSuggestions();
   const serviceSuggestions = collectServiceSuggestions();
-  const parsedNote = parseServicesFromNote(order?.note || "");
+  const parsedMeta = parseOrderMetaFromNote(order?.note || "");
 
   openModal(`
     <h3 style="margin-top:0;">${isEdit ? "Редактировать заказ" : "Новый заказ"}</h3>
@@ -2625,6 +2778,24 @@ async function openCreateOrder(order = null) {
       </datalist>
 
       <div id="services_list"></div>
+    </div>
+
+    <div style="
+      background:#020617;
+      padding:12px;
+      border-radius:12px;
+      margin-bottom:12px;
+      border:1px solid #1f2937;
+    ">
+      <div style="font-weight:600; margin-bottom:10px;">✨ Допработы</div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:8px; margin-bottom:8px;">
+        <input id="extra_work_type" placeholder="Тип: покраска / полировка" style="width:100%;">
+        <input id="extra_work_details" placeholder="Детали: что делаем" style="width:100%;">
+        <button id="extra_work_add_btn" style="padding:10px 12px; border-radius:10px; border:1px solid #374151; background:#1f2937; color:#fff;">Добавить</button>
+      </div>
+
+      <div id="extra_works_list"></div>
     </div>
 
     ${isEdit ? `
@@ -2801,7 +2972,7 @@ async function openCreateOrder(order = null) {
       document.getElementById("paid").value = String(order.paid ?? 0);
     }
     document.getElementById("currency").value = order.currency || "USD";
-    document.getElementById("order_note").value = parsedNote.cleanNote || "";
+    document.getElementById("order_note").value = parsedMeta.cleanNote || "";
 
     if (isEdit && order.media_url) {
       const root = document.getElementById("order_media_preview");
@@ -2818,7 +2989,8 @@ async function openCreateOrder(order = null) {
     }
   }
 
-  bindServicesEditor(parsedNote.services);
+  bindServicesEditor(parsedMeta.services);
+  bindExtraWorksEditor(parsedMeta.extraWorks);
   recalcOrderForm();
 }
 
@@ -3094,7 +3266,8 @@ async function createOrder() {
   const currency = document.getElementById("currency")?.value || "USD";
   const baseNote = document.getElementById("order_note")?.value.trim() || null;
   const services = (state.orderServices || []).map(normalizeServiceName).filter(Boolean);
-  const note = composeNoteWithServices(baseNote, services);
+  const extraWorks = (state.orderExtraWorks || []).map(normalizeExtraWork).filter((item) => item.type);
+  const note = composeNoteWithOrderMeta(baseNote, services, extraWorks);
 
   if (!client_name) {
     safeAlert("Укажи имя клиента");
