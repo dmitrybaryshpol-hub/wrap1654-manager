@@ -35,6 +35,7 @@ const state = {
 
   editingOrderId: null,
   orderServices: [],
+  orderExtraExpenses: [],
 };
 
 function getAppRoot() {
@@ -335,21 +336,29 @@ function orderLabel(order) {
 }
 
 const SERVICES_MARKER = "[services]";
+const EXTRA_EXPENSES_MARKER = "[extra_expenses]";
 
 function normalizeServiceName(value = "") {
   return String(value || "").trim().replace(/\s+/g, " ");
 }
 
+function findNoteMarkerIndex(lines = [], marker = "") {
+  return lines.findIndex((line) => String(line || "").trim().toLowerCase() === String(marker || "").toLowerCase());
+}
+
 function parseServicesFromNote(note = "") {
   const source = String(note || "");
   const lines = source.split("\n");
-  const markerIndex = lines.findIndex((line) => line.trim().toLowerCase() === SERVICES_MARKER);
+  const markerIndex = findNoteMarkerIndex(lines, SERVICES_MARKER);
 
   if (markerIndex === -1) {
-    return { services: [], cleanNote: source.trim() };
+    const parsedExtra = parseAdditionalExpensesFromNote(source);
+    return { services: [], cleanNote: parsedExtra.cleanNote };
   }
 
-  const bodyLines = lines.slice(markerIndex + 1);
+  const bodyLines = lines
+    .slice(markerIndex + 1)
+    .filter((line) => !String(line || "").trim().startsWith("["));
   const services = bodyLines
     .map((line) => line.replace(/^[-•*]\s*/, ""))
     .map(normalizeServiceName)
@@ -359,20 +368,62 @@ function parseServicesFromNote(note = "") {
   return { services, cleanNote };
 }
 
-function composeNoteWithServices(note = "", services = []) {
+function parseAdditionalExpensesFromNote(note = "") {
+  const source = String(note || "");
+  const lines = source.split("\n");
+  const markerIndex = findNoteMarkerIndex(lines, EXTRA_EXPENSES_MARKER);
+
+  if (markerIndex === -1) {
+    return { expenses: [], cleanNote: source.trim() };
+  }
+
+  const bodyLines = lines
+    .slice(markerIndex + 1)
+    .filter((line) => !String(line || "").trim().startsWith("["));
+
+  const expenses = bodyLines
+    .map((line) => line.replace(/^[-•*]\s*/, "").trim())
+    .map((line) => {
+      const [namePart, amountPart] = String(line || "").split("|");
+      const name = String(namePart || "").trim();
+      const amount = asNumber(String(amountPart || "").replace(",", "."), 0);
+      if (!name || amount <= 0) return null;
+      return { name, amount };
+    })
+    .filter(Boolean);
+
+  const cleanNote = lines.slice(0, markerIndex).join("\n").trim();
+  return { expenses, cleanNote };
+}
+
+function composeNoteWithServicesAndExpenses(note = "", services = [], expenses = []) {
   const cleanNote = String(note || "").trim();
   const normalizedServices = (services || [])
     .map(normalizeServiceName)
     .filter(Boolean);
+  const normalizedExpenses = (expenses || [])
+    .map((item) => ({
+      name: normalizeServiceName(item?.name || ""),
+      amount: asNumber(item?.amount, 0),
+    }))
+    .filter((item) => item.name && item.amount > 0);
 
-  if (!normalizedServices.length) return cleanNote || null;
+  if (!normalizedServices.length && !normalizedExpenses.length) return cleanNote || null;
 
-  const servicesBlock = [
+  const blocks = [[
     SERVICES_MARKER,
     ...normalizedServices.map((service) => `- ${service}`),
-  ].join("\n");
+  ].join("\n")];
 
-  return cleanNote ? `${cleanNote}\n\n${servicesBlock}` : servicesBlock;
+  if (normalizedExpenses.length) {
+    blocks.push([
+      EXTRA_EXPENSES_MARKER,
+      ...normalizedExpenses.map((item) => `- ${item.name} | ${item.amount}`),
+    ].join("\n"));
+  }
+
+  const fullBlock = blocks.filter(Boolean).join("\n\n");
+  return cleanNote ? `${cleanNote}\n\n${fullBlock}` : fullBlock;
 }
 
 function collectServiceSuggestions() {
@@ -443,6 +494,79 @@ function addOrderService() {
 function removeOrderService(index) {
   state.orderServices = (state.orderServices || []).filter((_, i) => i !== Number(index));
   renderServicesList();
+}
+
+function normalizeExtraExpense(item = {}) {
+  return {
+    name: normalizeServiceName(item?.name || ""),
+    amount: Math.max(0, asNumber(item?.amount, 0)),
+  };
+}
+
+function renderOrderExtraExpenses() {
+  const listRoot = document.getElementById("extra_expenses_list");
+  const sumEl = document.getElementById("extra_expenses_sum");
+  if (!listRoot) return;
+
+  const expenses = (state.orderExtraExpenses || [])
+    .map(normalizeExtraExpense)
+    .filter((x) => x.name && x.amount > 0);
+  const total = expenses.reduce((sum, x) => sum + x.amount, 0);
+  if (sumEl) sumEl.textContent = `${formatMoney(total)} ₴`;
+
+  if (!expenses.length) {
+    listRoot.innerHTML = `<div style="opacity:.72; font-size:13px; padding:10px 12px; border-radius:12px; border:1px dashed rgba(148,163,184,.34); color:#a5b4d4;">Доп. расходов пока нет</div>`;
+    return;
+  }
+
+  listRoot.innerHTML = expenses.map((item, index) => `
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 11px; border:1px solid rgba(148,163,184,.22); border-radius:12px; margin-bottom:8px; background:rgba(15,20,36,.78);">
+      <div style="font-size:14px;">${escapeHtml(item.name)} — <b>${formatMoney(item.amount)} ₴</b></div>
+      <button onclick="removeOrderExtraExpense(${index})" style="padding:6px 8px; border-radius:8px; border:1px solid rgba(239,68,68,.35); background:rgba(239,68,68,.15); color:#fecaca;">Удалить</button>
+    </div>
+  `).join("");
+}
+
+function addOrderExtraExpense() {
+  const typeInput = document.getElementById("extra_expense_type");
+  const amountInput = document.getElementById("extra_expense_amount");
+  if (!typeInput || !amountInput) return;
+
+  const name = normalizeServiceName(typeInput.value);
+  const amount = Math.max(0, asNumber(amountInput.value, 0));
+  if (!name || amount <= 0) return;
+
+  state.orderExtraExpenses = [...(state.orderExtraExpenses || []), { name, amount }];
+  typeInput.value = "";
+  amountInput.value = "";
+  renderOrderExtraExpenses();
+  recalcOrderForm();
+}
+
+function removeOrderExtraExpense(index) {
+  state.orderExtraExpenses = (state.orderExtraExpenses || []).filter((_, i) => i !== Number(index));
+  renderOrderExtraExpenses();
+  recalcOrderForm();
+}
+
+function bindOrderExtraExpenses(initialExpenses = []) {
+  state.orderExtraExpenses = Array.isArray(initialExpenses)
+    ? initialExpenses.map(normalizeExtraExpense).filter((x) => x.name && x.amount > 0)
+    : [];
+
+  renderOrderExtraExpenses();
+
+  const addBtn = document.getElementById("extra_expense_add_btn");
+  const amountInput = document.getElementById("extra_expense_amount");
+  if (addBtn) addBtn.addEventListener("click", addOrderExtraExpense);
+  if (amountInput) {
+    amountInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        addOrderExtraExpense();
+      }
+    });
+  }
 }
 
 function bindServicesEditor(initialServices = []) {
@@ -2557,6 +2681,7 @@ async function openCreateOrder(order = null) {
   await ensureOrdersLoadedForSuggestions();
   const serviceSuggestions = collectServiceSuggestions();
   const parsedNote = parseServicesFromNote(order?.note || "");
+  const parsedExtraExpenses = parseAdditionalExpensesFromNote(order?.note || "");
 
   openModal(`
     <h3 style="margin-top:0;">${isEdit ? "Редактировать заказ" : "Новый заказ"}</h3>
@@ -2625,6 +2750,17 @@ async function openCreateOrder(order = null) {
       </datalist>
 
       <div id="services_list"></div>
+    </div>
+
+    <div style="background:#020617; padding:12px; border-radius:12px; margin-bottom:12px; border:1px solid #1f2937;">
+      <div style="font-weight:600; margin-bottom:10px;">🧾 Дополнительные расходы</div>
+      <div style="display:flex; gap:8px; margin-bottom:8px;">
+        <input id="extra_expense_type" placeholder="Тип доработки (напр. Полировка фар)" style="width:100%;">
+        <input id="extra_expense_amount" type="number" step="0.01" min="0" placeholder="Сумма" style="width:130px;">
+        <button id="extra_expense_add_btn" style="padding:10px 12px; border-radius:10px; border:1px solid #374151; background:#1f2937; color:#fff;">Добавить</button>
+      </div>
+      <div style="font-size:12px; color:#94a3b8; margin-bottom:8px;">Сумма доп. расходов: <b id="extra_expenses_sum">0 ₴</b></div>
+      <div id="extra_expenses_list"></div>
     </div>
 
     ${isEdit ? `
@@ -2707,8 +2843,9 @@ async function openCreateOrder(order = null) {
       margin-bottom:12px;
       border:1px solid #1f2937;
     ">
-      <label style="font-size:12px; opacity:.6;">Итоговая сумма</label>
+      <label style="font-size:12px; opacity:.6;">Базовая сумма (без доп. расходов)</label>
       <input id="total" type="number" value="0" style="width:100%;">
+      <div style="font-size:12px; color:#94a3b8; margin-top:8px;">Итог с доп. расходами: <b id="total_with_expenses">0 ₴</b></div>
     </div>
 
     <div style="
@@ -2819,6 +2956,7 @@ async function openCreateOrder(order = null) {
   }
 
   bindServicesEditor(parsedNote.services);
+  bindOrderExtraExpenses(parsedExtraExpenses.expenses);
   recalcOrderForm();
 }
 
@@ -2940,10 +3078,12 @@ function recalcOrderForm() {
   const otherCostEl = document.getElementById("other_cost");
   const paidEl = document.getElementById("paid");
   const prepaidEl = document.getElementById("prepaid");
+  const totalWithExpensesEl = document.getElementById("total_with_expenses");
+  const expensesTotal = (state.orderExtraExpenses || []).reduce((sum, item) => sum + asNumber(item?.amount, 0), 0);
 
   const subtotal = asNumber(subtotalEl?.value, 0);
   const discount = asNumber(discountEl?.value, 0);
-  let total = asNumber(totalEl?.value, 0);
+  let baseTotal = asNumber(totalEl?.value, 0);
 
   const materialCost = asNumber(materialCostEl?.value, 0);
   const laborCost = asNumber(laborCostEl?.value, 0);
@@ -2952,11 +3092,12 @@ function recalcOrderForm() {
   const paid = paidEl ? asNumber(paidEl.value, 0) : asNumber(prepaidEl?.value, 0);
   const prepaid = asNumber(prepaidEl?.value, 0);
 
-  if (!total && subtotal > 0) {
-    total = Math.max(subtotal - discount, 0);
-    if (totalEl) totalEl.value = String(total);
+  if (!baseTotal && subtotal > 0) {
+    baseTotal = Math.max(subtotal - discount, 0);
+    if (totalEl) totalEl.value = String(baseTotal);
   }
 
+  const total = baseTotal + expensesTotal;
   const totalCost = materialCost + laborCost + otherCost;
   const profit = total - totalCost;
   const due = Math.max(total - paid, 0);
@@ -2967,6 +3108,7 @@ function recalcOrderForm() {
 
   if (totalCostField) totalCostField.value = String(totalCost);
   if (dueField) dueField.value = String(due);
+  if (totalWithExpensesEl) totalWithExpensesEl.textContent = `${formatMoney(total)} ₴`;
 
   if (profitField) {
     profitField.value = String(profit);
@@ -3060,10 +3202,15 @@ async function createOrder() {
   const start_date = document.getElementById("start_date")?.value || null;
   const end_date = document.getElementById("end_date")?.value || null;
 
-  const total = asNumber(document.getElementById("total")?.value, 0);
+  const baseTotal = asNumber(document.getElementById("total")?.value, 0);
+  const extraExpenses = (state.orderExtraExpenses || [])
+    .map(normalizeExtraExpense)
+    .filter((item) => item.name && item.amount > 0);
+  const extraExpensesSum = extraExpenses.reduce((sum, item) => sum + item.amount, 0);
+  const total = baseTotal + extraExpensesSum;
   const subtotal = isEdit
     ? asNumber(document.getElementById("subtotal")?.value, 0)
-    : total;
+    : baseTotal;
   const discount = isEdit
     ? asNumber(document.getElementById("discount")?.value, 0)
     : 0;
@@ -3094,7 +3241,7 @@ async function createOrder() {
   const currency = document.getElementById("currency")?.value || "USD";
   const baseNote = document.getElementById("order_note")?.value.trim() || null;
   const services = (state.orderServices || []).map(normalizeServiceName).filter(Boolean);
-  const note = composeNoteWithServices(baseNote, services);
+  const note = composeNoteWithServicesAndExpenses(baseNote, services, extraExpenses);
 
   if (!client_name) {
     safeAlert("Укажи имя клиента");
@@ -4357,6 +4504,7 @@ window.setPaidPreset = setPaidPreset;
 window.setOrdersStatusFilter = setOrdersStatusFilter;
 window.addOrderService = addOrderService;
 window.removeOrderService = removeOrderService;
+window.removeOrderExtraExpense = removeOrderExtraExpense;
 window.openOrder = openOrder;
 window.startEditOrder = startEditOrder;
 window.handleDeleteOrder = handleDeleteOrder;
