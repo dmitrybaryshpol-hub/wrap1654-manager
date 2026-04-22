@@ -35,7 +35,6 @@ const state = {
 
   editingOrderId: null,
   orderServices: [],
-  orderExtraWorks: [],
 };
 
 function getAppRoot() {
@@ -342,6 +341,42 @@ function normalizeServiceName(value = "") {
   return String(value || "").trim().replace(/\s+/g, " ");
 }
 
+function toNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function normalizeServiceItem(item) {
+  if (typeof item === "string") {
+    const legacyName = normalizeServiceName(item);
+    return legacyName ? { name: legacyName, amount: 0, cost: 0 } : null;
+  }
+
+  if (!item || typeof item !== "object") return null;
+
+  const name = normalizeServiceName(item.name || item.title || item.service || "");
+  if (!name) return null;
+
+  return {
+    name,
+    amount: toNumber(item.amount),
+    cost: toNumber(item.cost),
+  };
+}
+
+function normalizeServices(services = []) {
+  if (!Array.isArray(services)) return [];
+  return services.map(normalizeServiceItem).filter(Boolean);
+}
+
+function calcServiceTotals(services = []) {
+  const normalized = normalizeServices(services);
+  const subtotal = normalized.reduce((sum, service) => sum + toNumber(service.amount), 0);
+  const service_cost_total = normalized.reduce((sum, service) => sum + toNumber(service.cost), 0);
+  const service_profit = subtotal - service_cost_total;
+  return { subtotal, service_cost_total, service_profit };
+}
+
 function normalizeExtraWork(item = {}) {
   return {
     type: normalizeServiceName(item?.type || ""),
@@ -366,6 +401,31 @@ function parseExtraWorkLine(line = "") {
   return { type, details };
 }
 
+function formatServiceLine(item = {}) {
+  const normalized = normalizeServiceItem(item);
+  if (!normalized) return "";
+  return `${normalized.name} :: ${toNumber(normalized.amount)} :: ${toNumber(normalized.cost)}`;
+}
+
+function parseServiceLine(line = "") {
+  const cleaned = normalizeServiceName(String(line || "").replace(/^[-•*]\s*/, ""));
+  if (!cleaned) return null;
+
+  const [nameRaw, amountRaw, costRaw] = cleaned.split("::").map((part) => part.trim());
+  if (!nameRaw) return null;
+
+  const hasStructuredMoney = amountRaw !== undefined || costRaw !== undefined;
+  if (!hasStructuredMoney) {
+    return normalizeServiceItem({ name: nameRaw, amount: 0, cost: 0 });
+  }
+
+  return normalizeServiceItem({
+    name: nameRaw,
+    amount: toNumber(amountRaw),
+    cost: toNumber(costRaw),
+  });
+}
+
 function parseOrderMetaFromNote(note = "") {
   const source = String(note || "");
   const lines = source.split("\n");
@@ -382,8 +442,7 @@ function parseOrderMetaFromNote(note = "") {
   };
 
   const services = parseMarkerLines(serviceMarkerIndex)
-    .map((line) => line.replace(/^[-•*]\s*/, ""))
-    .map(normalizeServiceName)
+    .map(parseServiceLine)
     .filter(Boolean);
 
   const extraWorks = parseMarkerLines(extraMarkerIndex)
@@ -402,25 +461,13 @@ function parseServicesFromNote(note = "") {
 
 function composeNoteWithOrderMeta(note = "", services = [], extraWorks = []) {
   const cleanNote = String(note || "").trim();
-  const normalizedServices = (services || [])
-    .map(normalizeServiceName)
-    .filter(Boolean);
-  const normalizedExtraWorks = (extraWorks || [])
-    .map(normalizeExtraWork)
-    .filter((item) => item.type);
+  const normalizedServices = normalizeServices(services);
   const blocks = [];
 
   if (normalizedServices.length) {
     blocks.push([
       SERVICES_MARKER,
-      ...normalizedServices.map((service) => `- ${service}`),
-    ].join("\n"));
-  }
-
-  if (normalizedExtraWorks.length) {
-    blocks.push([
-      EXTRA_WORKS_MARKER,
-      ...normalizedExtraWorks.map((item) => `- ${formatExtraWorkLine(item)}`),
+      ...normalizedServices.map((service) => `- ${formatServiceLine(service)}`),
     ].join("\n"));
   }
 
@@ -436,8 +483,11 @@ function composeNoteWithServices(note = "", services = []) {
 function collectServiceSuggestions() {
   const all = new Set();
   (state.orders || []).forEach((order) => {
-    const parsed = parseServicesFromNote(order?.note || "");
-    parsed.services.forEach((service) => all.add(service));
+    const parsed = parseOrderMetaFromNote(order?.note || "");
+    const normalized = normalizeServices(order?.services);
+    const fromNote = normalizeServices(parsed.services);
+    const combined = normalized.length ? normalized : fromNote;
+    combined.forEach((service) => all.add(service.name));
   });
   return Array.from(all).sort((a, b) => a.localeCompare(b, "uk"));
 }
@@ -462,10 +512,13 @@ function renderServicesList() {
     return;
   }
 
-  listRoot.innerHTML = services.map((service, index) => `
+  listRoot.innerHTML = services.map((service, index) => {
+    const amount = toNumber(service.amount);
+    const cost = toNumber(service.cost);
+    const profit = amount - cost;
+    return `
     <div style="
       display:flex;
-      align-items:center;
       justify-content:space-between;
       gap:8px;
       padding:9px 11px;
@@ -474,28 +527,47 @@ function renderServicesList() {
       margin-bottom:8px;
       background:rgba(15,20,36,.78);
     ">
-      <div style="font-size:14px;">${escapeHtml(service)}</div>
+      <div style="font-size:14px;">
+        <div style="font-weight:700; margin-bottom:2px;">${escapeHtml(service.name || "—")}</div>
+        <div style="font-size:12px; color:#cbd5e1;">Доход: ${formatMoney(amount)} грн</div>
+        <div style="font-size:12px; color:#cbd5e1;">Расход: ${formatMoney(cost)} грн</div>
+        <div style="font-size:12px; color:${profit >= 0 ? "#86efac" : "#fca5a5"};">Прибыль: ${formatMoney(profit)} грн</div>
+      </div>
       <button
         onclick="removeOrderService(${index})"
         style="padding:6px 8px; border-radius:8px; border:1px solid rgba(239,68,68,.35); background:rgba(239,68,68,.15); color:#fecaca;"
       >Удалить</button>
     </div>
-  `).join("");
+  `;
+  }).join("");
+
+  recalcOrderForm();
 }
 
 function addOrderService() {
-  const input = document.getElementById("service_input");
-  if (!input) return;
+  const nameInput = document.getElementById("service_input");
+  const amountInput = document.getElementById("service_amount_input");
+  const costInput = document.getElementById("service_cost_input");
+  if (!nameInput || !amountInput || !costInput) return;
 
-  const value = normalizeServiceName(input.value);
+  const value = normalizeServiceName(nameInput.value);
   if (!value) return;
 
-  const hasSame = (state.orderServices || []).some((s) => s.toLowerCase() === value.toLowerCase());
+  const hasSame = (state.orderServices || []).some((s) => String(s.name || "").toLowerCase() === value.toLowerCase());
   if (!hasSame) {
-    state.orderServices = [...(state.orderServices || []), value];
+    state.orderServices = [
+      ...(state.orderServices || []),
+      {
+        name: value,
+        amount: toNumber(amountInput.value),
+        cost: toNumber(costInput.value),
+      },
+    ];
     renderServicesList();
   }
-  input.value = "";
+  nameInput.value = "";
+  amountInput.value = "0";
+  costInput.value = "0";
 }
 
 function removeOrderService(index) {
@@ -504,13 +576,13 @@ function removeOrderService(index) {
 }
 
 function bindServicesEditor(initialServices = []) {
-  state.orderServices = Array.isArray(initialServices)
-    ? initialServices.map(normalizeServiceName).filter(Boolean)
-    : [];
+  state.orderServices = normalizeServices(initialServices);
 
   renderServicesList();
 
   const input = document.getElementById("service_input");
+  const amountInput = document.getElementById("service_amount_input");
+  const costInput = document.getElementById("service_cost_input");
   const addBtn = document.getElementById("service_add_btn");
 
   if (addBtn) addBtn.addEventListener("click", addOrderService);
@@ -522,90 +594,15 @@ function bindServicesEditor(initialServices = []) {
       }
     });
   }
-}
-
-function renderExtraWorksList() {
-  const listRoot = document.getElementById("extra_works_list");
-  if (!listRoot) return;
-
-  const items = Array.isArray(state.orderExtraWorks) ? state.orderExtraWorks : [];
-  if (!items.length) {
-    listRoot.innerHTML = `<div style="opacity:.72; font-size:13px; padding:10px 12px; border-radius:12px; border:1px dashed rgba(167,139,250,.34); color:#a5b4d4;">Допработы не добавлены</div>`;
-    return;
-  }
-
-  listRoot.innerHTML = items.map((item, index) => `
-    <div style="
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:8px;
-      padding:9px 11px;
-      border:1px solid rgba(167,139,250,.2);
-      border-radius:12px;
-      margin-bottom:8px;
-      background:rgba(15,20,36,.78);
-    ">
-      <div style="font-size:14px;">
-        <div style="font-weight:700;">${escapeHtml(item.type || "—")}</div>
-        ${item.details ? `<div style="font-size:12px; color:#cbd5e1; margin-top:2px;">${escapeHtml(item.details)}</div>` : ""}
-      </div>
-      <button
-        onclick="removeOrderExtraWork(${index})"
-        style="padding:6px 8px; border-radius:8px; border:1px solid rgba(239,68,68,.35); background:rgba(239,68,68,.15); color:#fecaca;"
-      >Удалить</button>
-    </div>
-  `).join("");
-}
-
-function addOrderExtraWork() {
-  const typeInput = document.getElementById("extra_work_type");
-  const detailsInput = document.getElementById("extra_work_details");
-  if (!typeInput || !detailsInput) return;
-
-  const type = normalizeServiceName(typeInput.value);
-  const details = normalizeServiceName(detailsInput.value);
-  if (!type) return;
-
-  state.orderExtraWorks = [...(state.orderExtraWorks || []), { type, details }];
-  renderExtraWorksList();
-  typeInput.value = "";
-  detailsInput.value = "";
-}
-
-function removeOrderExtraWork(index) {
-  state.orderExtraWorks = (state.orderExtraWorks || []).filter((_, i) => i !== Number(index));
-  renderExtraWorksList();
-}
-
-function bindExtraWorksEditor(initialItems = []) {
-  state.orderExtraWorks = Array.isArray(initialItems)
-    ? initialItems.map(normalizeExtraWork).filter((item) => item.type)
-    : [];
-
-  renderExtraWorksList();
-
-  const typeInput = document.getElementById("extra_work_type");
-  const detailsInput = document.getElementById("extra_work_details");
-  const addBtn = document.getElementById("extra_work_add_btn");
-
-  if (addBtn) addBtn.addEventListener("click", addOrderExtraWork);
-  if (typeInput) {
-    typeInput.addEventListener("keydown", (event) => {
+  [amountInput, costInput].forEach((el) => {
+    if (!el) return;
+    el.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
-        addOrderExtraWork();
+        addOrderService();
       }
     });
-  }
-  if (detailsInput) {
-    detailsInput.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        addOrderExtraWork();
-      }
-    });
-  }
+  });
 }
 
 function renderLayout() {
@@ -2472,8 +2469,17 @@ async function openOrder(id) {
       .map((row) => normalizeOrderMaterial(row, order.currency || "USD"));
     const materialsSubtotal = materials.reduce((sum, row) => sum + asNumber(row.total_cost, 0), 0);
     const parsedMeta = parseOrderMetaFromNote(order?.note || "");
-    const services = parsedMeta.services || [];
-    const extraWorks = parsedMeta.extraWorks || [];
+    const servicesFromOrder = normalizeServices(order?.services);
+    const servicesFromNote = normalizeServices(parsedMeta.services);
+    const extraWorks = normalizeServices((parsedMeta.extraWorks || []).map((item) => ({
+      name: formatExtraWorkLine(item),
+      amount: 0,
+      cost: 0,
+    })));
+    const services = servicesFromOrder.length
+      ? servicesFromOrder
+      : normalizeServices([...servicesFromNote, ...extraWorks]);
+    const serviceTotals = calcServiceTotals(services);
     const cleanNote = parsedMeta.cleanNote || "";
     const payments = parsePayments(order);
     const mediaUrls = collectMediaUrls(order);
@@ -2550,26 +2556,22 @@ async function openOrder(id) {
           <div style="padding:9px; border-radius:12px; border:1px solid rgba(239,68,68,.35); background:rgba(239,68,68,.08);"><div style="font-size:11px; color:#fca5a5;">К оплате</div><div style="font-size:17px; font-weight:800; color:#fecaca;">${formatMoney(order.due || 0)} ${cur}</div></div>
           <div style="padding:9px; border-radius:12px; border:1px solid rgba(148,163,184,.18);"><div style="font-size:11px; color:#94a3b8;">Себестоимость</div><div style="font-size:17px; font-weight:800;">${formatMoney(order.total_cost || 0)} ${cur}</div></div>
           <div style="padding:9px; border-radius:12px; border:1px solid ${asNumber(order.profit, 0) >= 0 ? "rgba(34,197,94,.35)" : "rgba(239,68,68,.35)"}; background:${asNumber(order.profit, 0) >= 0 ? "rgba(34,197,94,.08)" : "rgba(239,68,68,.08)"};"><div style="font-size:11px; color:${asNumber(order.profit, 0) >= 0 ? "#86efac" : "#fca5a5"};">Прибыль</div><div style="font-size:17px; font-weight:800; color:${asNumber(order.profit, 0) >= 0 ? "#bbf7d0" : "#fecaca"};">${formatMoney(order.profit || 0)} ${cur}</div></div>
+          <div style="padding:9px; border-radius:12px; border:1px solid rgba(148,163,184,.18);"><div style="font-size:11px; color:#94a3b8;">Доход по услугам</div><div style="font-size:17px; font-weight:800;">${formatMoney(serviceTotals.subtotal)} грн</div></div>
+          <div style="padding:9px; border-radius:12px; border:1px solid rgba(148,163,184,.18);"><div style="font-size:11px; color:#94a3b8;">Расход по услугам</div><div style="font-size:17px; font-weight:800;">${formatMoney(serviceTotals.service_cost_total)} грн</div></div>
+          <div style="padding:9px; border-radius:12px; border:1px solid ${serviceTotals.service_profit >= 0 ? "rgba(34,197,94,.35)" : "rgba(239,68,68,.35)"}; background:${serviceTotals.service_profit >= 0 ? "rgba(34,197,94,.08)" : "rgba(239,68,68,.08)"};"><div style="font-size:11px; color:${serviceTotals.service_profit >= 0 ? "#86efac" : "#fca5a5"};">Прибыль по услугам</div><div style="font-size:17px; font-weight:800; color:${serviceTotals.service_profit >= 0 ? "#bbf7d0" : "#fecaca"};">${formatMoney(serviceTotals.service_profit)} грн</div></div>
         </div>
       `)}
 
       ${sectionCard("УСЛУГИ", services.length
         ? services.map((service) => `
           <div style="padding:9px 10px; border-radius:10px; border:1px solid rgba(148,163,184,.2); margin-bottom:7px; font-size:14px;">
-            ${escapeHtml(service)}
+            <div style="font-weight:700;">${escapeHtml(service.name || "—")}</div>
+            <div style="font-size:12px; color:#cbd5e1; margin-top:2px;">Доход: ${formatMoney(service.amount)} грн</div>
+            <div style="font-size:12px; color:#cbd5e1;">Расход: ${formatMoney(service.cost)} грн</div>
+            <div style="font-size:12px; color:${toNumber(service.amount) - toNumber(service.cost) >= 0 ? "#86efac" : "#fca5a5"};">Прибыль: ${formatMoney(toNumber(service.amount) - toNumber(service.cost))} грн</div>
           </div>
         `).join("")
         : `<div style="padding:10px; border-radius:10px; border:1px dashed rgba(148,163,184,.35); color:#94a3b8; font-size:13px;">Услуги пока не добавлены</div>`
-      )}
-
-      ${sectionCard("ДОПРАБОТЫ", extraWorks.length
-        ? extraWorks.map((item) => `
-          <div style="padding:9px 10px; border-radius:10px; border:1px solid rgba(148,163,184,.2); margin-bottom:7px;">
-            <div style="font-size:14px; font-weight:700;">${escapeHtml(item.type || "—")}</div>
-            ${item.details ? `<div style="font-size:12px; color:#cbd5e1; margin-top:2px;">${escapeHtml(item.details)}</div>` : ""}
-          </div>
-        `).join("")
-        : `<div style="padding:10px; border-radius:10px; border:1px dashed rgba(148,163,184,.35); color:#94a3b8; font-size:13px;">Допработы не добавлены</div>`
       )}
 
       ${sectionCard("МАТЕРИАЛЫ", `
@@ -2710,6 +2712,15 @@ async function openCreateOrder(order = null) {
   await ensureOrdersLoadedForSuggestions();
   const serviceSuggestions = collectServiceSuggestions();
   const parsedMeta = parseOrderMetaFromNote(order?.note || "");
+  const extraWorksAsServices = (parsedMeta.extraWorks || []).map((item) => ({
+    name: formatExtraWorkLine(item),
+    amount: 0,
+    cost: 0,
+  }));
+  const normalizedServices = normalizeServices(order?.services);
+  const servicesForEditor = normalizedServices.length
+    ? normalizedServices
+    : normalizeServices([...(parsedMeta.services || []), ...extraWorksAsServices]);
 
   openModal(`
     <h3 style="margin-top:0;">${isEdit ? "Редактировать заказ" : "Новый заказ"}</h3>
@@ -2769,8 +2780,10 @@ async function openCreateOrder(order = null) {
     ">
       <div style="font-weight:600; margin-bottom:10px;">🧰 Услуги</div>
 
-      <div style="display:flex; gap:8px; margin-bottom:8px;">
+      <div style="display:grid; grid-template-columns:1.3fr 1fr 1fr auto; gap:8px; margin-bottom:8px;">
         <input id="service_input" list="service_suggestions" placeholder="Например: Полная оклейка" style="width:100%;">
+        <input id="service_amount_input" type="number" value="0" placeholder="Доход, грн" style="width:100%;">
+        <input id="service_cost_input" type="number" value="0" placeholder="Расход, грн" style="width:100%;">
         <button id="service_add_btn" style="padding:10px 12px; border-radius:10px; border:1px solid #374151; background:#1f2937; color:#fff;">Добавить</button>
       </div>
       <datalist id="service_suggestions">
@@ -2778,24 +2791,6 @@ async function openCreateOrder(order = null) {
       </datalist>
 
       <div id="services_list"></div>
-    </div>
-
-    <div style="
-      background:#020617;
-      padding:12px;
-      border-radius:12px;
-      margin-bottom:12px;
-      border:1px solid #1f2937;
-    ">
-      <div style="font-weight:600; margin-bottom:10px;">✨ Допработы</div>
-
-      <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:8px; margin-bottom:8px;">
-        <input id="extra_work_type" placeholder="Тип: покраска / полировка" style="width:100%;">
-        <input id="extra_work_details" placeholder="Детали: что делаем" style="width:100%;">
-        <button id="extra_work_add_btn" style="padding:10px 12px; border-radius:10px; border:1px solid #374151; background:#1f2937; color:#fff;">Добавить</button>
-      </div>
-
-      <div id="extra_works_list"></div>
     </div>
 
     ${isEdit ? `
@@ -2808,8 +2803,12 @@ async function openCreateOrder(order = null) {
       ">
         <div style="font-weight:600; margin-bottom:10px;">💰 Доход</div>
 
-        <label style="font-size:12px; opacity:.6;">Subtotal</label>
-        <input id="subtotal" type="number" value="0" style="width:100%; margin-bottom:8px;">
+        <label style="font-size:12px; opacity:.6;">Доход по услугам</label>
+        <input id="subtotal" type="number" value="0" readonly style="width:100%; margin-bottom:8px;">
+        <label style="font-size:12px; opacity:.6;">Расход по услугам</label>
+        <input id="service_cost_total" type="number" value="0" readonly style="width:100%; margin-bottom:8px;">
+        <label style="font-size:12px; opacity:.6;">Прибыль по услугам</label>
+        <input id="service_profit" type="number" value="0" readonly style="width:100%; margin-bottom:8px;">
 
         <label style="font-size:12px; opacity:.6;">Скидка</label>
         <input id="discount" type="number" value="0" style="width:100%; margin-bottom:8px;">
@@ -2961,7 +2960,10 @@ async function openCreateOrder(order = null) {
     document.getElementById("end_date").value = order.end_date || "";
     document.getElementById("total").value = String(order.total ?? 0);
     if (isEdit) {
-      document.getElementById("subtotal").value = String(order.subtotal ?? 0);
+      const serviceTotals = calcServiceTotals(servicesForEditor);
+      document.getElementById("subtotal").value = String(serviceTotals.subtotal);
+      document.getElementById("service_cost_total").value = String(serviceTotals.service_cost_total);
+      document.getElementById("service_profit").value = String(serviceTotals.service_profit);
       document.getElementById("discount").value = String(order.discount ?? 0);
       document.getElementById("material_cost").value = String(order.material_cost ?? 0);
       document.getElementById("labor_cost").value = String(order.labor_cost ?? 0);
@@ -2989,8 +2991,7 @@ async function openCreateOrder(order = null) {
     }
   }
 
-  bindServicesEditor(parsedMeta.services);
-  bindExtraWorksEditor(parsedMeta.extraWorks);
+  bindServicesEditor(servicesForEditor);
   recalcOrderForm();
 }
 
@@ -3104,7 +3105,10 @@ function bindOrderMediaPreview(existingUrls = []) {
   });
 }
 function recalcOrderForm() {
+  const serviceTotals = calcServiceTotals(state.orderServices || []);
   const subtotalEl = document.getElementById("subtotal");
+  const serviceCostTotalEl = document.getElementById("service_cost_total");
+  const serviceProfitEl = document.getElementById("service_profit");
   const discountEl = document.getElementById("discount");
   const totalEl = document.getElementById("total");
   const materialCostEl = document.getElementById("material_cost");
@@ -3113,7 +3117,10 @@ function recalcOrderForm() {
   const paidEl = document.getElementById("paid");
   const prepaidEl = document.getElementById("prepaid");
 
-  const subtotal = asNumber(subtotalEl?.value, 0);
+  const subtotal = serviceTotals.subtotal;
+  if (subtotalEl) subtotalEl.value = String(subtotal);
+  if (serviceCostTotalEl) serviceCostTotalEl.value = String(serviceTotals.service_cost_total);
+  if (serviceProfitEl) serviceProfitEl.value = String(serviceTotals.service_profit);
   const discount = asNumber(discountEl?.value, 0);
   let total = asNumber(totalEl?.value, 0);
 
@@ -3129,7 +3136,7 @@ function recalcOrderForm() {
     if (totalEl) totalEl.value = String(total);
   }
 
-  const totalCost = materialCost + laborCost + otherCost;
+  const totalCost = materialCost + laborCost + otherCost + serviceTotals.service_cost_total;
   const profit = total - totalCost;
   const due = Math.max(total - paid, 0);
 
@@ -3233,9 +3240,9 @@ async function createOrder() {
   const end_date = document.getElementById("end_date")?.value || null;
 
   const total = asNumber(document.getElementById("total")?.value, 0);
-  const subtotal = isEdit
-    ? asNumber(document.getElementById("subtotal")?.value, 0)
-    : total;
+  const services = normalizeServices(state.orderServices || []);
+  const serviceTotals = calcServiceTotals(services);
+  const subtotal = serviceTotals.subtotal;
   const discount = isEdit
     ? asNumber(document.getElementById("discount")?.value, 0)
     : 0;
@@ -3252,7 +3259,7 @@ async function createOrder() {
 
   const total_cost = isEdit
     ? asNumber(document.getElementById("total_cost")?.value, 0)
-    : material_cost + labor_cost + other_cost;
+    : material_cost + labor_cost + other_cost + serviceTotals.service_cost_total;
   const profit = isEdit
     ? asNumber(document.getElementById("profit")?.value, 0)
     : total - total_cost;
@@ -3265,9 +3272,7 @@ async function createOrder() {
 
   const currency = document.getElementById("currency")?.value || "USD";
   const baseNote = document.getElementById("order_note")?.value.trim() || null;
-  const services = (state.orderServices || []).map(normalizeServiceName).filter(Boolean);
-  const extraWorks = (state.orderExtraWorks || []).map(normalizeExtraWork).filter((item) => item.type);
-  const note = composeNoteWithOrderMeta(baseNote, services, extraWorks);
+  const note = composeNoteWithOrderMeta(baseNote, services, []);
 
   if (!client_name) {
     safeAlert("Укажи имя клиента");
@@ -3329,6 +3334,7 @@ async function createOrder() {
       paid,
       due,
       currency,
+      services,
       note,
       media_urls,
       media_url: media_urls[0] || media_url || null,
